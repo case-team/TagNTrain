@@ -3,20 +3,19 @@ sys.path.append('..')
 from utils.TrainingUtils import *
 #import energyflow as ef
 #from energyflow.utils import data_split, pixelate, standardize, to_categorical, zero_center
-import sklearn as sk
 
 
-fin = "/eos/cms/store/group/phys_b2g/CASE/h5_files/2017/BB_files_images/BB_images_batch0.h5"
-plot_dir = "../plots/"
-model_dir = "../models/"
-model_name  = "supervised_CNN.h5"
+parser = OptionParser()
+parser = OptionParser(usage="usage: %prog analyzer outputfile [options] \nrun with --help to get list of options")
+parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input file for training.")
+parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
+parser.add_option("-o", "--model_name", default='supervised_CNN.h5', help="What to name the model")
+parser.add_option("--num_epoch", type = 'int', default=30, help="How many epochs to train for")
+parser.add_option("--num_data", type='int', default=200000, help="How many events to use for training (before filtering)")
 
-draw_images = False
-
-num_data = 200000
+parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
 
 signal = 1
-data = prepare_dataset(fin, signal_idx = signal)
 
 
 val_frac = 0.1
@@ -40,22 +39,21 @@ else:
     print("Training supervised cnn on sub-leading jet! label = j2")
 
 
-
-hf_in = h5py.File(fin, "r")
+data = prepare_dataset(options.fin, signal_idx = signal)
 
 if(use_both):
-    j1s = data['j1_images'][:num_data]
-    j2s = data['j2_images'][:num_data]
+    j1s = data['j1_images'][:options.num_data]
+    j2s = data['j2_images'][:options.num_data]
     images = np.stack((j1s,j2s), axis = -1)
 else:
-    images = data[j_label+'images'][:num_data]
+    images = data[j_label+'images'][:options.num_data]
     images = np.expand_dims(images, axis=-1)
 
-Y = data['label'][:num_data]
+Y = data['label'][:options.num_data]
 
 
 
-(X_train, X_val, Y_train, Y_val) = sk.model_selection.train_test_split(images, Y, test_size = val_frac)
+(X_train, X_val, Y_train, Y_val) = train_test_split(images, Y, test_size = val_frac)
 
 if(standardize):
     X_train, X_val, X_test = standardize(*zero_center(X_train, X_val, X_test))
@@ -75,16 +73,16 @@ cnn.compile(optimizer=myoptimizer,loss='binary_crossentropy',
 
 # train model
 history = cnn.fit(X_train, Y_train,
-          epochs=num_epoch,
+          epochs=options.num_epoch,
           batch_size=batch_size,
           validation_data=(X_val, Y_val),
          callbacks = [roc],
-          verbose=1)
+          verbose=2)
 
 # get predictions on test data
 #print(Y_predict_test)
 
 #make_roc_curve([Y_predict_test], Y_test,  save = True, fname=plot_dir+ j_label+ "supervised_roc.png")
 
-cnn.save(model_dir+j_label+ model_name)
+cnn.save(options.model_name)
 

@@ -1,26 +1,29 @@
 from __future__ import print_function, division
-import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from matplotlib import cm
+from .model_defs import * 
+from .PlotUtils import *
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 import h5py
 from sklearn.metrics import roc_curve, auc, roc_auc_score
 from scipy.stats import entropy
-from .model_defs import * 
 from sklearn.utils import shuffle as sk_shuffle
-from keras import optimizers, callbacks
+from keras import optimizers, callbacks, losses
 from keras.callbacks import Callback
 
-fig_size = (12,9)
 class RocCallback(Callback):
-    def __init__(self,training_data,validation_data):
+    def __init__(self,training_data,validation_data, extra_label = ""):
+        self.extra_label = extra_label
         self.x = training_data[0]
         self.y = training_data[1]
         self.x_val = validation_data[0]
         self.y_val = validation_data[1]
+        self.skip_val = self.skip_train = False
+        if(np.mean(self.y_val) < 1e-5):
+            print("Not enough signal in validation set, will skip auc")
+            self.skip_val = True
+        if(np.mean(self.y) < 1e-5):
+            print("Not enough signal in train set, will skip auc")
+            self.skip_train = True
 
 
     def on_train_begin(self, logs={}):
@@ -33,11 +36,14 @@ class RocCallback(Callback):
         return
 
     def on_epoch_end(self, epoch, logs={}):
-        y_pred_train = self.model.predict_proba(self.x)
-        roc_train = roc_auc_score(self.y, y_pred_train)
-        y_pred_val = self.model.predict_proba(self.x_val)
-        roc_val = roc_auc_score(self.y_val, y_pred_val)
-        print('\rroc-auc_train: %s - roc-auc_val: %s' % (str(round(roc_train,4)),str(round(roc_val,4))),end=100*' '+'\n')
+        roc_train = roc_val = 0.
+        if(not self.skip_train):
+            y_pred_train = self.model.predict_proba(self.x)
+            roc_train = roc_auc_score(self.y, y_pred_train)
+        if(not self.skip_val):
+            y_pred_val = self.model.predict_proba(self.x_val)
+            roc_val = roc_auc_score(self.y_val, y_pred_val)
+        print('\r%s roc-auc_train: %s - roc-auc_val: %s' % (self.extra_label, str(round(roc_train,4)),str(round(roc_val,4))),end=100*' '+'\n')
         return
 
     def on_batch_begin(self, batch, logs={}):
@@ -109,45 +115,29 @@ def sample_split(*args, **kwargs):
 
 
 
-#Normalize all variables to have zero mean and unit variance
-#when using this function pandas will warn you that it is ambiguous whether clean_events is working 
-#with a view or a copy of the original object, but you should be ok with either
-# eg events = clean_events(events)
-def clean_events_v2(events):
-
-    #first col is signal bit and 2nd is dijet mass
-    feats = events[:,2:]
-    #something went wrong with the j2 tau ratios, max it at 10
-    idxs = feats[:,9] > 10.
-    feats[idxs,9] = 10.
-    feats = feats  - feats.mean(axis=0)
-    feats = feats / feats.std(axis=0)
-    return feats
-
-def prepare_dataset(fin, signal_idx =1, keys = ['j1_images', 'j2_images', 'mjj'], sig_frac = -1.):
+#helper to read h5py mock-datasets
+def prepare_dataset(fin, signal_idx =1, keys = ['j1_images', 'j2_images', 'mjj'], sig_frac = -1., start = 0, stop = -1):
+    print("Loading file %s \n" % fin)
+    if(stop > 0): print("Selecting events %i to %i \n" % (start, stop))
     data = dict()
     f = h5py.File(fin, "r")
-    raw_labels = f['truth_label'][()]
-    n_imgs = f['j1_images'].shape[0]
+    if(stop == -1): stop = f['truth_label'].shape[0]
+    raw_labels = f['truth_label'][start: stop]
+    n_imgs = stop - start
     labels = np.zeros_like(raw_labels)
     labels[raw_labels == signal_idx] = 1
     mask = np.squeeze((raw_labels <= 0) | (raw_labels == signal_idx))
-    #TODO: Fix this
-    mask[n_imgs:] = 0
     if(sig_frac > 0.): 
         mask0 = get_signal_mask_rand(labels, sig_frac)
         mask = mask & mask0
 
     for key in keys:
         if(key == 'mjj'):
-            data['mjj'] = f["event_info"][()][mask,0]
-        elif('image' in key): #TODO fix
-            mask_img = mask[:n_imgs]
-            data[key] = f[key][()][mask_img]
+            data['mjj'] = f["event_info"][start:stop][mask,0]
         else:
-            data[key] = f[key][()][mask]
+            data[key] = f[key][start:stop][mask]
     data['label'] = labels[mask]
-    print(np.mean(data['label']))
+    print("Signal fraction is %.4f  "  % np.mean(data['label']))
     f.close()
     return data
 
@@ -175,107 +165,6 @@ def get_signal_mask_rand(events, sig_frac, seed=12345):
     keep_idxs = (events.reshape(num_events) == 0) | (rands > drop_frac)
     return keep_idxs
 
-def plot_training(hist, fname =""):
-    #plot trianing and validation loss
-
-    loss = hist['loss']
-
-    epochs = range(1, len(loss) + 1)
-    colors = ['b', 'g', 'grey', 'r']
-    idx=0
-
-    plt.figure(figsize=fig_size)
-    for label,loss_hist in hist.items():
-        if(len(loss_hist) > 0): plt.plot(epochs, loss_hist, colors[idx], label=label)
-        idx +=1
-    plt.title('Training and validation loss')
-    plt.yscale("log")
-    plt.xlabel('Steps')
-    plt.ylabel('Loss')
-    plt.legend()
-    if(fname != ""): plt.savefig(fname)
-    #else: 
-        #plt.show(block=False)
-
-
-def make_roc_curve(classifiers, y_true, colors = None, logy=False, labels = None, save=False, fname=""):
-    plt.figure(figsize=fig_size)
-
-    for idx,scores in enumerate(classifiers):
-
-        fpr, tpr, thresholds = roc_curve(y_true, scores)
-        roc_auc = auc(fpr, tpr)
-        ys = fpr
-        if(logy): 
-            #guard against division by 0
-            fpr = np.clip(fpr, 1e-8, 1.)
-            ys = 1./fpr
-
-        lbl = 'auc'
-        clr = 'navy'
-        if(labels != None): lbl = labels[idx]
-        if(colors != None): clr = colors[idx]
-        print(lbl, " ", roc_auc)
-        plt.plot(tpr, ys, lw=2, color=clr, label='%s = %.3f' % (lbl, roc_auc))
-
-
-
-    plt.xlim([0, 1.0])
-    plt.xlabel('Signal Efficiency')
-    if(logy): 
-        plt.ylim([1., 1e4])
-        plt.yscale('log')
-        plt.ylabel('QCD Rejection Rate')
-    else: 
-        plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
-        plt.xlabel('QCD Efficiency')
-        plt.ylim([0, 1.0])
-
-    plt.legend(loc="lower right")
-    if(save): 
-        print("Saving roc plot to %s" % fname)
-        plt.savefig(fname)
-    #else: 
-        #plt.show(block=False)
-
-def make_histogram(entries, labels, colors, xaxis_label, title, num_bins, normalize = False, stacked = False, save=False, h_type = 'step', 
-        h_range = None, fontsize = 16, fname="", yaxis_label = ""):
-    alpha = 1.
-    if(stacked): 
-        h_type = 'barstacked'
-        alpha = 0.2
-    fig = plt.figure(figsize=fig_size)
-    plt.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, density = normalize, histtype=h_type)
-    plt.xlabel(xaxis_label, fontsize =fontsize)
-    plt.tick_params(axis='x', labelsize=fontsize)
-    if(yaxis_label != ""):
-        plt.ylabel(yaxis_label, fontsize=fontsize)
-        plt.tick_params(axis='y', labelsize=fontsize)
-    plt.title(title, fontsize=fontsize)
-    plt.legend(loc='upper right', fontsize = fontsize)
-    if(save): plt.savefig(fname)
-    #else: plt.show(block=False)
-    return fig
-
-def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, weights = None, fname=""):
-    h_type= 'step'
-    alpha = 1.
-    fig, (ax1, ax2) = plt.subplots(nrows=2)
-    ns, bins, patches  = ax1.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, 
-            density = normalize, weights = weights, histtype=h_type)
-    max_rw = 5.
-    ax1.legend(loc='upper right')
-    n0 = np.clip(ns[0], 1e-8, None)
-    n1 = np.clip(ns[1], 1e-8, None)
-    ratio =  n0/ n1
-    ratio = np.clip(ratio, 1./max_rw, max_rw)
-    ax2.scatter(bins[:-1], ratio, alpha=alpha)
-    ax2.set_ylabel("Ratio")
-    ax2.set_xlabel(axis_label)
-
-    if(save): plt.savefig(fname)
-
-    return bins, ratio
 
 
 #taken from https://stackoverflow.com/questions/47731935/using-multiple-validation-sets-with-keras
@@ -333,7 +222,7 @@ class AdditionalValidationSets(tf.keras.callbacks.Callback):
                 if i == 0:
                     valuename = validation_set_name + '_loss'
                 else:
-                    valuename = validation_set_name + '_' + self.model.metrics[i-1]._name
+                    valuename = validation_set_name + '_' + self.model.metrics[i-1]
                 print("%s   %.4f " % (valuename, result))
                 self.history.setdefault(valuename, []).append(result)
             print("\n")
