@@ -15,6 +15,7 @@ parser.add_option("-l", "--plot_label", default="", help="what to call the plots
 parser.add_option("--num_data", type='int', default=-1)
 parser.add_option("--data_start", type='int', default=0)
 parser.add_option("-s", "--signal", type='int', default=1, help="Which signal type to use ")
+parser.add_option("--sig_frac",  type='float', default=-1., help="Filter signal to this amount (negative to do nothing)")
 
 
 (options, args) = parser.parse_args()
@@ -35,7 +36,6 @@ data_start = options.data_start
 use_or = False
 use_j = 0
 
-sig_frac = -1.
 sample_standardize = False
 
 mjj_window = 500.
@@ -55,15 +55,16 @@ if(options.model_name != ""):
     keys = ['j1_images', 'j2_images', 'jet_kinematics']
 else: 
     keys = ['jet_kinematics']
-data = prepare_dataset(fin, signal_idx = options.signal, sig_frac = sig_frac, keys = keys, start = data_start, stop = data_start + num_data )
+data = DataReader(fin, signal_idx = options.signal, sig_frac = options.sig_frac, keys = keys, start = data_start, stop = data_start + num_data )
+data.read()
 Y = data['label'].reshape(-1)
 mjj = data['jet_kinematics'][:,0]
 j1_m = data['jet_kinematics'][:,5]
 j2_m = data['jet_kinematics'][:,9]
 
 if(options.model_name != ""):
-    j1_images = np.expand_dims(data['j1_images'], axis = -1)
-    j2_images = np.expand_dims(data['j2_images'], axis = -1)
+    j1_images = data['j1_images']
+    j2_images = data['j2_images']
 
     if(sample_standardize):
         j2_images = standardize(*zero_center(j2_images, np.zeros_like(j2_images)))[0]

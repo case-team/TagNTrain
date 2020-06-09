@@ -4,7 +4,7 @@ from utils.TrainingUtils import *
 #from rootconvert import to_root
 import h5py
 
-fin = "../BB_test_Wprime.h5"
+fin = "../data/BB_test_Wprime.h5"
 
 plot_dir = "../plots/"
 
@@ -14,7 +14,7 @@ plot_name = "roc_Wprime_test.png"
 
 #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets)
 f_models = ["autoencoder.h5", "TNT0.h5"]
-labels = ["autoencoder", "TNT"]
+labels = ["Initial Classifier (autoencoder) ", "Tag N' Train Classifier"]
 model_type = [1, 0] 
 colors = ["g", "gray", "b", "r","m","c", "skyblue", "yellow"]
 
@@ -31,9 +31,10 @@ n_points = 200.
 logy= True
 
 
-data = prepare_dataset(fin, signal_idx = signal, sig_frac = sig_frac, start = data_start, stop = data_start + num_data )
-j1_images = np.expand_dims(data['j1_images'], axis = -1)
-j2_images = np.expand_dims(data['j2_images'], axis = -1)
+data = DataReader(fin, signal_idx = signal, sig_frac = sig_frac, start = data_start, stop = data_start + num_data )
+data.read()
+j1_images = data['j1_images']
+j2_images = data['j2_images']
 Y = data['label']
 j1_dense_inputs = None
 j2_dense_inputs = None
@@ -114,7 +115,7 @@ for i in range(len(labels)):
         ys = 1./temp
     else:
         ys = bkg_effs[i]
-    plt.plot(sig_effs[i], ys, lw=2, color=colors[i], label=labels[i] + (" (%.3f)" % aucs[i]))
+    plt.plot(sig_effs[i], ys, lw=2, color=colors[i], label=labels[i] + (" (AUC = %.3f)" % aucs[i]))
 #plt.plot(fpr_cwola, tpr_cwola, lw=2, color="purple", label="CWOLA = %.3f" %(auc_cwola))
 #plt.plot(tnt_bkg_eff, tnt_sig_eff, lw=2, color="r", label="TNT Dense = %.3f"%(auc(tnt_bkg_eff,tnt_sig_eff)))
 #plt.plot(sup_bkg_eff, sup_sig_eff, lw=2, color="g", label="Sup. Dense = %.3f"%(auc(sup_bkg_eff,sup_sig_eff)))

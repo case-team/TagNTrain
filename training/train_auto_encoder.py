@@ -50,14 +50,12 @@ img_key = j_label + "images"
 
 data = prepare_dataset(options.fin, signal_idx = signal, keys = [img_key], sig_frac = sig_frac, start = 0,stop = options.num_data )
 
-images = data[img_key]
-images = np.expand_dims(images, axis=-1)
 
 Y = data['label']
 
 
 
-(X_train, X_val, Y_train, Y_val) = train_test_split(images, Y, test_size = val_frac)
+(X_train, X_val, Y_train, Y_val) = train_test_split(data[img_key], Y, test_size = val_frac)
 
 if(sample_standardize):
     X_train, X_val, X_test = standardize(*zero_center(X_train, X_val, X_test))
@@ -87,22 +85,25 @@ history = model.fit(X_train, X_train,
           callbacks = cbs,
           verbose=2)
 
+
+print("Saving model to : ", options.model_name)
 model.save(options.model_name)
 # get predictions on test data
-X_test = X_val
-Y_test = Y_val
-X_reco_test = model.predict(X_test, batch_size=1000)
-X_reco_loss_test = np.mean(np.square(X_test - X_reco_test), axis = (1,2))
 
-test_sig_events = (Y_test == 1.)
-test_bkg_events = (Y_test == 0.)
-
-scores = [X_reco_loss_test[test_bkg_events], X_reco_loss_test[test_sig_events]]
-labels = ['background', 'signal']
-colors = ['b', 'r']
-save_figs = True
-make_histogram(scores, labels, colors, 'AutoEncoder Loss', "", 20,
-               normalize = True, save = save_figs, fname=options.plot_dir+j_label+"reco_loss.png")
-
-make_roc_curve([X_reco_loss_test], Y_test,  save = True, fname=options.plot_dir+j_label+"auto_encoder_roc.png")
-
+#X_test = X_val
+#Y_test = Y_val
+#X_reco_test = model.predict(X_test, batch_size=1000)
+#X_reco_loss_test = np.mean(np.square(X_test - X_reco_test), axis = (1,2))
+#
+#test_sig_events = (Y_test == 1.)
+#test_bkg_events = (Y_test == 0.)
+#
+#scores = [X_reco_loss_test[test_bkg_events], X_reco_loss_test[test_sig_events]]
+#labels = ['background', 'signal']
+#colors = ['b', 'r']
+#save_figs = True
+#make_histogram(scores, labels, colors, 'AutoEncoder Loss', "", 20,
+#               normalize = True, save = save_figs, fname=options.plot_dir+j_label+"reco_loss.png")
+#
+#make_roc_curve([X_reco_loss_test], Y_test,  save = True, fname=options.plot_dir+j_label+"auto_encoder_roc.png")
+#

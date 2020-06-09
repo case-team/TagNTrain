@@ -1,9 +1,9 @@
 from __future__ import print_function, division
 from .model_defs import * 
 from .PlotUtils import *
+from .DataReader import *
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-import h5py
 from sklearn.metrics import roc_curve, auc, roc_auc_score
 from scipy.stats import entropy
 from sklearn.utils import shuffle as sk_shuffle
@@ -115,55 +115,7 @@ def sample_split(*args, **kwargs):
 
 
 
-#helper to read h5py mock-datasets
-def prepare_dataset(fin, signal_idx =1, keys = ['j1_images', 'j2_images', 'mjj'], sig_frac = -1., start = 0, stop = -1):
-    print("Loading file %s \n" % fin)
-    if(stop > 0): print("Selecting events %i to %i \n" % (start, stop))
-    data = dict()
-    f = h5py.File(fin, "r")
-    if(stop == -1): stop = f['truth_label'].shape[0]
-    raw_labels = f['truth_label'][start: stop]
-    n_imgs = stop - start
-    labels = np.zeros_like(raw_labels)
-    labels[raw_labels == signal_idx] = 1
-    mask = np.squeeze((raw_labels <= 0) | (raw_labels == signal_idx))
-    if(sig_frac > 0.): 
-        mask0 = get_signal_mask_rand(labels, sig_frac)
-        mask = mask & mask0
 
-    for key in keys:
-        if(key == 'mjj'):
-            data['mjj'] = f["event_info"][start:stop][mask,0]
-        else:
-            data[key] = f[key][start:stop][mask]
-    data['label'] = labels[mask]
-    print("Signal fraction is %.4f  "  % np.mean(data['label']))
-    f.close()
-    return data
-
-#create a mask that removes signal events to enforce a given fraction
-#removes signal from later events (should shuffle after)
-def get_signal_mask(events, sig_frac):
-
-    num_events = events.shape[0]
-    cur_frac =  np.mean(events)
-    keep_frac = (sig_frac/cur_frac)
-    progs = np.cumsum(events)/(num_events * cur_frac)
-    keep_idxs = (events.reshape(num_events) == 0) | (progs < keep_frac)
-    return keep_idxs
-
-
-#create a mask that removes signal events to enforce a given fraction
-#Keeps signal randomly distributed but has more noise
-def get_signal_mask_rand(events, sig_frac, seed=12345):
-
-    np.random.seed(seed)
-    num_events = events.shape[0]
-    cur_frac =  np.mean(events)
-    drop_frac = (1. - (1./cur_frac) * sig_frac)
-    rands = np.random.random(num_events)
-    keep_idxs = (events.reshape(num_events) == 0) | (rands > drop_frac)
-    return keep_idxs
 
 
 

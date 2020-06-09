@@ -34,8 +34,7 @@ parser.add_option("--mjj_high", type='int', default = 3700, help="High mjj cut v
 parser.add_option("--sig_cut", type='int', default = 80,  help="What classifier percentile to use to define sig-rich region")
 parser.add_option("--bkg_cut", type='int', default = 40,  help="What classifier percentile to use to define bkg-rich region")
 
-parser.add_option("--filt_sig", default = False, action = "store_true", help="Reduce the amount of signal in the dataset")
-parser.add_option("-s", "--sig_frac", type = 'float', default = 0.01,  help="Reduce signal to this amount (default is 0.01)")
+parser.add_option("-s", "--sig_frac", type = 'float', default = -1.,  help="Reduce signal to this amount (< 0 means don't filter)")
 parser.add_option("--no_end_str", default = False, action = "store_true",  help="Don't do automatic end string based on signal frac")
 
 
@@ -50,9 +49,7 @@ val_frac = 0.1
 batch_size = 200
 sample_standardize = False
 
-sig_frac = -1.
 signal = 1
-if(options.filt_sig): sig_frac = options.sig_frac
 
 
 #################################################################
@@ -60,6 +57,20 @@ end_str = ".h5"
 
 if(options.use_dense): network_type = "dense"
 else: network_type = "CNN"
+
+#which images to train on and which to use for labelling
+if(options.training_j == 1):
+    j_label = "j1_"
+    opp_j_label = "j2_"
+    print("training classifier for j1 using j2 for labeling")
+
+elif (options.training_j ==2):
+    j_label = "j2_"
+    opp_j_label = "j1_"
+    print("training classifier for j2 using j1 for labeling")
+else:
+    print("Training jet not 1 or 2! Exiting")
+    exit(1)
 
 if(options.labeler_name == ""):
     if(options.tnt_iter == 0):
@@ -96,27 +107,28 @@ print("Will train using %i events, starting at event %i" % (options.num_data, da
 
 
 
-#which images to train on and which to use for labelling
-if(options.training_j == 1):
-    j_label = "j1_"
-    opp_j_label = "j2_"
-    print("training classifier for j1 using j2 for labeling")
 
-elif (options.training_j ==2):
-    j_label = "j2_"
-    opp_j_label = "j1_"
-    print("training classifier for j2 using j1 for labeling")
-else:
-    print("Training jet not 1 or 2! Exiting")
-    exit(1)
+keep_low = keep_high = -1.
+
+if(options.mjj_cut):
+    window_size = (options.mjj_high - options.mjj_low)/2.
+    keep_low = options.mjj_low - window_size
+    keep_high = options.mjj_high + window_size
+    print("Requiring mjj window from %.0f to %.0f \n" % (options.mjj_low, options.mjj_high))
 
 
-data = prepare_dataset(options.fin, signal_idx = signal, sig_frac = sig_fra,start = data_start, stop = data_start + options.num_data )
+
+
+import time
+t1 = time.time()
+data = DataReader(options.fin, signal_idx = signal, sig_frac = options.sig_frac, start = data_start, stop = data_start + options.num_data, m_low = keep_low, m_high = keep_high )
+data.read()
+#data = prepare_dataset(options.fin, signal_idx = signal, sig_frac = options.sig_frac,start = data_start, stop = data_start + options.num_data )
+t2 = time.time()
+print("load time  %s " % (t2 -t1))
 
 X = data[j_label+'images']
-X = np.expand_dims(X, axis=-1)
 L = data[opp_j_label+'images']
-L = np.expand_dims(L, axis=-1)
 
 Y = data['label']
 mjj = data['mjj']
@@ -124,7 +136,7 @@ mjj = data['mjj']
 
 
 
-mjj_window = ((mjj > options.mjj_low) & (mjj < options.mjj_high)).reshape(-1)
+mjj_window = ((mjj > options.mjj_low) & (mjj < options.mjj_high))
 
 
 if(sample_standardize):
@@ -185,26 +197,10 @@ bkg_region_cut = np.percentile(L_labeler_scores, options.bkg_cut)
 
 print_signal_fractions(Y_true, Y_lab)
 if(options.mjj_cut):
-    #remove sig-like events not in mjj window
-    print("Requiring mjj window from %.0f to %.0f \n" % (options.mjj_low, options.mjj_high))
-    mjj_window_sig = ((mjj > options.mjj_low) & (mjj < options.mjj_high)).reshape(-1)
-    if(options.mjj_cut_sideband):
-        #use sidebands for bkg samples
-        window_size = 300.
-        print("Requiring sideband window of size %.0f around signal window for backgrounds \n" % window_size)
-        mjj_window_bkg = ((mjj > (options.mjj_low - window_size)) &  (mjj < (options.mjj_high + window_size)))
-        keep_events =  (mjj_window_bkg & (Y_lab < 0.1)) | (mjj_window_sig & (Y_lab > 0.9))
-    else:
-        print(mjj_window_sig.shape, Y_lab.shape)
-        keep_events =  (Y_lab < 0.1) | (mjj_window_sig & (Y_lab > 0.9))
-
-
-    X = X[keep_events]
-    Y_lab = Y_lab[keep_events]
-    Y_true = Y_true[keep_events]
-
-
-    print("New sig fracs are:  ")
+    outside_mjj_window = ((mjj < options.mjj_low) | (mjj > options.mjj_high))
+    #TODO: Is this optimal? Should I filter these events out of the training set instead?
+    Y_lab[outside_mjj_window] = 0
+    print("After mass cut new sig fracs are:  ")
     print_signal_fractions(Y_true, Y_lab)
 
 (X_train, X_val, 
