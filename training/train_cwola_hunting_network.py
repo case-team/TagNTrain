@@ -50,8 +50,8 @@ signal = 1
 
 
 
-val_frac = 0.1
-batch_size = 200
+val_frac = 0.0
+batch_size = 256
 
 
 
@@ -87,11 +87,13 @@ if(not options.use_dense):
     keys = ['mjj']
     keys.append(x_key)
     t1 = time.time()
-    data = DataReader(options.fin, keys = keys, signal_idx = signal, sig_frac = options.sig_frac, start = data_start, stop = options.num_data, m_low = keep_low, m_high = keep_high )
+    data = DataReader(options.fin, keys = keys, signal_idx = signal, sig_frac = options.sig_frac, start = data_start, stop = options.num_data, 
+            m_low = keep_low, m_high = keep_high, val_frac = val_frac )
     data.read()
     data.make_Y_mjj(options.mjj_low, options.mjj_high)
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
+
 
 
 
@@ -106,7 +108,7 @@ print_signal_fractions(data['label'], data['Y_mjj'])
 
 
 
-myoptimizer = optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
+myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 my_model = CNN(cnn_shape)
 my_model.summary()
 my_model.compile(optimizer=myoptimizer,loss='binary_crossentropy',
@@ -129,12 +131,20 @@ print("Will save model to : ", f_model)
 
 
 # train model
-history = my_model.fit(data.gen(x_key,'Y_mjj'),
-          epochs=options.num_epoch,
-          batch_size=batch_size,
-          #validation_data=(X_val, Y_val),
-          #callbacks = cbs,
-          verbose=2)
+t_data = data.gen(x_key,'Y_mjj', batch_size = batch_size)
+v_data = None
+if(val_frac > 0.): 
+    v_data = data.gen('val_'+x_key,'val_label', batch_size = batch_size)
+
+print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal))
+#print(np.mean(data['val_label']))
+#print(np.mean(data['label']))
+
+history = my_model.fit(t_data, 
+        epochs = options.num_epoch, 
+        validation_data = v_data,
+        #callbacks = cbs,
+        verbose = 2 )
 
 plot_training(history.history, plot_dir + j_label + "training_history.png")
 print("Saving model to : ", f_model)

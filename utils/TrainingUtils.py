@@ -7,10 +7,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, roc_auc_score
 from scipy.stats import entropy
 from sklearn.utils import shuffle as sk_shuffle
-from keras import optimizers, callbacks, losses
-from keras.callbacks import Callback
 
-class RocCallback(Callback):
+class RocCallback(tf.keras.callbacks.Callback):
     def __init__(self,training_data,validation_data, extra_label = ""):
         self.extra_label = extra_label
         self.x = training_data[0]
