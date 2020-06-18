@@ -1,8 +1,8 @@
 import sys
 sys.path.append('..')
 from utils.TrainingUtils import *
-#import energyflow as ef
-#from energyflow.utils import data_split, pixelate, standardize, to_categorical, zero_center
+from optparse import OptionParser
+from optparse import OptionGroup
 
 
 parser = OptionParser()
@@ -11,78 +11,82 @@ parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input fi
 parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
 parser.add_option("-o", "--model_name", default='supervised_CNN.h5', help="What to name the model")
 parser.add_option("--num_epoch", type = 'int', default=30, help="How many epochs to train for")
+parser.add_option("--data_start", type = 'int', default=0, help="What event to start with")
 parser.add_option("--num_data", type='int', default=200000, help="How many events to use for training (before filtering)")
 
+parser.add_option("--large", default = False, action = "store_true", help="Use larger NN archetecture")
+parser.add_option("--use_one", default = False, action = "store_true", help="Make a classifier for one jet instead of both")
 parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
+parser.add_option("--sig_idx", type = 'int', default = 1,  help="What index of signal to use")
 
-signal = 1
-
+(options, args) = parser.parse_args()
 
 val_frac = 0.1
-num_epoch = 20
-batch_size = 200
-
-use_j1 = False
-use_both = True
-standardize =False
+batch_size = 256
 
 
-if(use_both):
+if(not options.use_one):
     j_label = "jj_"
-    print("Training supervised cnn on both jets! label = jj")
-
-elif(use_j1):
+    x_key = 'jj_images'
+    cnn_shape = (32,32,2)
+    print("training classifier for both jets")
+elif(options.training_j == 1):
     j_label = "j1_"
-    print("Training supervised cnn on leading jet! label = j1")
-else:
+    x_key = 'j1_images'
+    cnn_shape = (32,32,1)
+    print("training classifier for j1")
+
+elif (options.training_j ==2):
     j_label = "j2_"
-    print("Training supervised cnn on sub-leading jet! label = j2")
-
-
-data = prepare_dataset(options.fin, signal_idx = signal)
-
-if(use_both):
-    j1s = data['j1_images'][:options.num_data]
-    j2s = data['j2_images'][:options.num_data]
-    images = np.stack((j1s,j2s), axis = -1)
+    x_key = 'j2_images'
+    cnn_shape = (32,32,1)
+    print("training classifier for j2")
 else:
-    images = data[j_label+'images'][:options.num_data]
-    images = np.expand_dims(images, axis=-1)
-
-Y = data['label'][:options.num_data]
+    print("Training jet not 1 or 2! Exiting")
+    exit(1)
 
 
+import time
+keys = [x_key]
+t1 = time.time()
+data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, start = options.data_start, stop = options.data_start + options.num_data, 
+        val_frac = val_frac )
+data.read()
+t2 = time.time()
+print("load time  %s " % (t2 -t1))
 
-(X_train, X_val, Y_train, Y_val) = train_test_split(images, Y, test_size = val_frac)
+print("Signal frac is %.3f \n" % (np.mean(data['label'])))
 
-if(standardize):
-    X_train, X_val, X_test = standardize(*zero_center(X_train, X_val, X_test))
+if(options.large):
+    my_model = CNN_large(cnn_shape)
+else:
+    my_model = CNN(cnn_shape)
+my_model.summary()
 
-print(X_train.shape)
+myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
+early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='min')
+#roc = RocCallback(training_data=(X_train, Y_train), validation_data=(X_val, Y_val))
 
+cbs = [tf.keras.callbacks.History(), early_stop]
 
-cnn = CNN(X_train[0].shape)
-cnn.summary()
-
-myoptimizer = optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
-#early_stop = callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto', restore_best_weights=True)
-roc = RocCallback(training_data=(X_train, Y_train), validation_data=(X_val, Y_val))
-cnn.compile(optimizer=myoptimizer,loss='binary_crossentropy',
+my_model.compile(optimizer=myoptimizer,loss='binary_crossentropy',
           metrics = ['accuracy'],
         )
 
-# train model
-history = cnn.fit(X_train, Y_train,
-          epochs=options.num_epoch,
-          batch_size=batch_size,
-          validation_data=(X_val, Y_val),
-         callbacks = [roc],
-          verbose=2)
 
-# get predictions on test data
-#print(Y_predict_test)
+t_data = data.gen(x_key,'label', batch_size = batch_size)
+v_data = None
+if(val_frac > 0.): 
+    v_data = data.gen('val_'+x_key,'val_label', batch_size = batch_size)
 
-#make_roc_curve([Y_predict_test], Y_test,  save = True, fname=plot_dir+ j_label+ "supervised_roc.png")
+print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal))
 
-cnn.save(options.model_name)
+history = my_model.fit(t_data, 
+        epochs = options.num_epoch, 
+        validation_data = v_data,
+        callbacks = cbs,
+        verbose = 2 )
+
+my_model.save(options.model_name)
+
 

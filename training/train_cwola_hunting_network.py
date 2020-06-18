@@ -13,7 +13,8 @@ parser.add_option("--plot_dir", default='../plots/', help="Directory to output p
 parser.add_option("--model_dir", default='../models/', help="Directory to read in and output models")
 parser.add_option("-o", "--model_name", default='cwbh.h5', help="What to name the model")
 parser.add_option("--num_epoch", type = 'int', default=30, help="How many epochs to train for")
-parser.add_option("--num_data", type = 'int', default=200000, help="How many epochs to train for")
+parser.add_option("--data_start", type = 'int', default=0, help="What event to start with")
+parser.add_option("--num_data", type = 'int', default=200000, help="How many events to train on")
 
 parser.add_option("--use_one", default = False, action = "store_true", help="Make a classifier for one jet instead of both")
 parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
@@ -21,6 +22,8 @@ parser.add_option("--use_dense", default = False, action = "store_true", help="M
 parser.add_option("--mjj_low", type='int', default = 3300,  help="Low mjj cut value")
 parser.add_option("--mjj_high", type='int', default = 3700, help="High mjj cut value")
 
+parser.add_option("--large", default = False, action = "store_true", help="Use larger NN archetecture")
+parser.add_option("--sig_idx", type = 'int', default = 1,  help="What index of signal to use")
 parser.add_option("-s", "--sig_frac", type = 'float', default = -1.,  help="Reduce signal to this amount (< 0 to not filter )")
 
 
@@ -35,7 +38,6 @@ model_dir = options.model_dir
 
 model_name = options.model_name
 
-sample_standardize = False
 
 
 
@@ -44,9 +46,6 @@ sample_standardize = False
 #################################################################
 
 
-data_start = 0
-
-signal = 1
 
 
 
@@ -87,7 +86,7 @@ if(not options.use_dense):
     keys = ['mjj']
     keys.append(x_key)
     t1 = time.time()
-    data = DataReader(options.fin, keys = keys, signal_idx = signal, sig_frac = options.sig_frac, start = data_start, stop = options.num_data, 
+    data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
             m_low = keep_low, m_high = keep_high, val_frac = val_frac )
     data.read()
     data.make_Y_mjj(options.mjj_low, options.mjj_high)

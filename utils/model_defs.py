@@ -40,22 +40,37 @@ def dense_net(input_shape, drop_rate = 0.2):
 
 def CNN(input_shape):
     model = tf.keras.models.Sequential()
-    model.add(tf.keras.layers.Conv2D(32, (3, 3), padding='same',
-                     input_shape=input_shape))
-    model.add(tf.keras.layers.Activation('relu'))
-    model.add(tf.keras.layers.Conv2D(8, (3, 3)))
-    model.add(tf.keras.layers.Activation('relu'))
-    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2)))
 
-    model.add(tf.keras.layers.Conv2D(8, (3, 3), padding='same'))
-    model.add(tf.keras.layers.Activation('relu'))
-    model.add(tf.keras.layers.Conv2D(4, (3, 3)))
-    model.add(tf.keras.layers.Activation('relu'))
-    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2)))
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Conv2D(32, (4, 4), input_shape=input_shape, activation ='relu', padding='same'))
+    model.add(tf.keras.layers.Conv2D(16, (4, 4), activation = 'relu', padding='same'))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2), padding = 'same'))
+
+    model.add(tf.keras.layers.Conv2D(8, (3, 3), activation = 'relu', padding='same'))
+    model.add(tf.keras.layers.Conv2D(4, (3, 3), activation = 'relu', padding='same'))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2), padding = 'same'))
 
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(16))
-    model.add(tf.keras.layers.Activation('relu'))
+    model.add(tf.keras.layers.Dense(32, activation = 'relu'))
+    model.add(tf.keras.layers.Dense(16, activation = 'relu'))
+    model.add(tf.keras.layers.Dense(1))
+    model.add(tf.keras.layers.Activation('sigmoid'))
+    return model
+
+def CNN_large(input_shape):
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Conv2D(64, (4, 4), input_shape=input_shape, activation = 'relu', padding='same'))
+    model.add(tf.keras.layers.Conv2D(32, (4, 4), activation = 'relu', padding='same'))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2), padding = 'same'))
+
+    model.add(tf.keras.layers.Conv2D(32, (3, 3), activation = 'relu', padding='same'))
+    model.add(tf.keras.layers.Conv2D(16, (3, 3), activation = 'relu', padding='same'))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2), padding='same'))
+
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dense(256, activation = 'relu'))
+    model.add(tf.keras.layers.Dense(128, activation = 'relu'))
+    model.add(tf.keras.layers.Dense(16, activation = 'relu'))
     model.add(tf.keras.layers.Dense(1))
     model.add(tf.keras.layers.Activation('sigmoid'))
     return model
@@ -83,6 +98,42 @@ def auto_encoder(input_shape, compressed_size=6):
     model.add(tf.keras.layers.Conv2D(4, (3, 3), padding='same', activation='relu'))
     model.add(tf.keras.layers.UpSampling2D((2,2)))
     model.add(tf.keras.layers.Conv2D(16, (3, 3), padding='same', activation='relu'))
+    model.add(tf.keras.layers.UpSampling2D((2,2)))
+    model.add(tf.keras.layers.Conv2D(1, (3, 3), padding='same'))
+    model.add(tf.keras.layers.Reshape((1,npix*npix)))
+    
+    model.add(tf.keras.layers.Activation('softmax'))
+    model.add(tf.keras.layers.Reshape((npix,npix,1)))
+
+    return model
+
+def auto_encoder_large(input_shape, compressed_size=6):
+    npix = input_shape[0]
+    mini_size = npix//8
+
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Conv2D(32, (3, 3), padding='same',input_shape=input_shape, activation ='relu'))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2), padding='same'))
+
+    model.add(tf.keras.layers.Conv2D(32, (3, 3), padding='same', activation='relu'))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2), padding='same'))
+    model.add(tf.keras.layers.Conv2D(32, (3, 3), padding='same', activation='relu'))
+    model.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2), padding='same'))
+
+    model.add(tf.keras.layers.Flatten())
+    model.add(tf.keras.layers.Dense(128, activation = 'relu'))
+
+    #compressed layer
+    model.add(tf.keras.layers.Dense(compressed_size, activation='relu'))
+    model.add(tf.keras.layers.Dense(128, activation = 'relu'))
+    model.add(tf.keras.layers.Dense((mini_size*mini_size) * 32, activation = 'relu'))
+
+    model.add(tf.keras.layers.Reshape((mini_size,mini_size,32)))
+    model.add(tf.keras.layers.Conv2D(32, (3, 3), padding='same', activation='relu'))
+    model.add(tf.keras.layers.UpSampling2D((2,2)))
+    model.add(tf.keras.layers.Conv2D(32, (3, 3), padding='same', activation='relu'))
+    model.add(tf.keras.layers.UpSampling2D((2,2)))
+    model.add(tf.keras.layers.Conv2D(32, (3, 3), padding='same', activation='relu'))
     model.add(tf.keras.layers.UpSampling2D((2,2)))
     model.add(tf.keras.layers.Conv2D(1, (3, 3), padding='same'))
     model.add(tf.keras.layers.Reshape((1,npix*npix)))

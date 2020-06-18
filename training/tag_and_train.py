@@ -35,7 +35,7 @@ parser.add_option("--sig_cut", type='int', default = 80,  help="What classifier 
 parser.add_option("--bkg_cut", type='int', default = 40,  help="What classifier percentile to use to define bkg-rich region")
 
 parser.add_option("-s", "--sig_frac", type = 'float', default = -1.,  help="Reduce signal to this amount (< 0 means don't filter)")
-parser.add_option("--no_end_str", default = False, action = "store_true",  help="Don't do automatic end string based on signal frac")
+parser.add_option("--sig_idx", type = 'int', default = 1,  help="What index of signal to use")
 
 
 (options, args) = parser.parse_args()
@@ -45,15 +45,11 @@ plot_dir = options.plot_dir
 model_dir = options.model_dir
 
 
-val_frac = 0.1
-batch_size = 200
-sample_standardize = False
-
-signal = 1
+val_frac = 0.0
+batch_size = 256
 
 
 #################################################################
-end_str = ".h5"
 
 if(options.use_dense): network_type = "dense"
 else: network_type = "CNN"
@@ -73,22 +69,12 @@ else:
     exit(1)
 
 if(options.labeler_name == ""):
-    if(options.tnt_iter == 0):
-        if(not options.start_cwbh):
-            print("In interation 0. Using autoencoder as starting network")
-            labeler_name = "auto_encoder" + end_str
-        else :
-            print("In interation 0. Using cwola bumphunt as starting network")
-            labeler_name = "cwbh_dense" + end_str
-    else:
-        labeler_name = "TNT" + str(options.tnt_iter - 1) + "_" + network_type +  end_str
-    f_labeler = model_dir + opp_j_label + labeler_name
-else:
-    f_labeler = options.labeler_name
+    print("Must provide labeler name!")
+    exit(1)
 
 
 if(options.model_name == ""):
-    model_name = "TNT" + str(options.tnt_iter) + "_" + network_type + end_str
+    model_name = "TNT" + str(options.tnt_iter) + "_" + network_type + ".h5"
     f_model = model_dir+ j_label+ model_name
 else:
     f_model = options.model_name
@@ -120,62 +106,39 @@ if(options.mjj_cut):
 
 
 import time
+keys = ['mjj', 'j1_images', 'j2_images']
 t1 = time.time()
-data = DataReader(options.fin, signal_idx = signal, sig_frac = options.sig_frac, start = data_start, stop = data_start + options.num_data, m_low = keep_low, m_high = keep_high )
+data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = data_start, stop = data_start + options.num_data, 
+        m_low = keep_low, m_high = keep_high, val_frac = val_frac )
 data.read()
-#data = prepare_dataset(options.fin, signal_idx = signal, sig_frac = options.sig_frac,start = data_start, stop = data_start + options.num_data )
+data.make_Y_mjj(options.mjj_low, options.mjj_high)
 t2 = time.time()
 print("load time  %s " % (t2 -t1))
 
-X = data[j_label+'images']
-L = data[opp_j_label+'images']
-
-Y = data['label']
-mjj = data['mjj']
-
-
-
-
-mjj_window = ((mjj > options.mjj_low) & (mjj < options.mjj_high))
-
-
-if(sample_standardize):
-    X = standardize(*zero_center(X))[0]
-    L = standardize(*zero_center(L))[0]
-
-
-#save memory
-del data    
 
 
 
 
 
 
-labeler_plot = plot_dir+ opp_j_label +  plot_prefix + "_labeler_regions.png"
-pt_plot = plot_dir + j_label + plot_prefix + "pt_dists.png"
-pt_rw_plot = plot_dir + j_label + plot_prefix + "pt_rw_dists.png"
-training_plot = plot_dir + j_label + plot_prefix + "training_history.png"
 
 
-print("Loading labeling model from %s " % f_labeler)
-labeler = load_model(f_labeler)
+#labeler_plot = plot_dir+ opp_j_label +  plot_prefix + "_labeler_regions.png"
+#pt_plot = plot_dir + j_label + plot_prefix + "pt_dists.png"
+#pt_rw_plot = plot_dir + j_label + plot_prefix + "pt_rw_dists.png"
 
-L_pred = labeler.predict(L, batch_size = 500)
 
-print("Using model %s as labeler \n" % f_labeler)
-if(len(L_pred.shape) > 2 ): #autoencoder
-    L_labeler_scores = np.mean(np.square(L_pred - L), axis = (1,2)).reshape(-1)
+print("Loading labeling model from %s " % options.labeler_name)
+labeler = tf.keras.models.load_model(options.labeler_name)
 
-else: 
-    L_labeler_scores = L_pred.reshape(-1)
+labeler_scores = data.labeler_scores(labeler, opp_j_label + "images")
 
 
 print("Sig-rich region defined > %i percentile" %options.sig_cut)
 print("Bkg-rich region defined < %i percentile" %options.bkg_cut)
 
-sig_region_cut = np.percentile(L_labeler_scores, options.sig_cut)
-bkg_region_cut = np.percentile(L_labeler_scores, options.bkg_cut)
+sig_region_cut = np.percentile(labeler_scores, options.sig_cut)
+bkg_region_cut = np.percentile(labeler_scores, options.bkg_cut)
 
 #make plot of labeler scores and where cuts are
 #train_sig_events = (Y > 0.9).reshape(-1)
@@ -192,9 +155,6 @@ bkg_region_cut = np.percentile(L_labeler_scores, options.bkg_cut)
 
 
 
-(X, Y_true, mjj), Y_lab = sample_split(X, Y, mjj, cut_var = L_labeler_scores, sig_high = True, sig_cut = sig_region_cut, bkg_cut = bkg_region_cut)
-
-
 print_signal_fractions(Y_true, Y_lab)
 if(options.mjj_cut):
     outside_mjj_window = ((mjj < options.mjj_low) | (mjj > options.mjj_high))
@@ -203,23 +163,16 @@ if(options.mjj_cut):
     print("After mass cut new sig fracs are:  ")
     print_signal_fractions(Y_true, Y_lab)
 
-(X_train, X_val, 
-        Y_true_train, Y_true_val,
-        Y_lab_train, Y_lab_val) = train_test_split(X, Y_true, Y_lab, test_size=val_frac)
-
-evt_weights = np.ones(X_train.shape[0])
 
 
 
 
 
-
-myoptimizer = optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
+myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
 if(model_start == ""):
     print("Creating new model ")
-    if(options.use_dense): my_model = dense_net(X_train.shape[1])
-    else: my_model = CNN(X_train[0].shape)
+    my_model = CNN(cnn_shape)
 
     my_model.summary()
     my_model.compile(optimizer=myoptimizer,loss='binary_crossentropy',
@@ -227,28 +180,33 @@ if(model_start == ""):
             )
 else:
     print("Starting with model from %s " % model_start)
-    my_model = load_model(model_dir + j_label + model_start)
+    my_model = tf.keras.models.load_model(model_dir + j_label + model_start)
 
 
 
-additional_val = AdditionalValidationSets([(X_val, Y_true_val, "Val_true_sig")], batch_size = 500)
-roc1 = RocCallback(training_data=(X_train, Y_true_train), validation_data=(X_val, Y_true_val), extra_label = "true: ")
-roc2 = RocCallback(training_data=(X_train, Y_lab_train), validation_data=(X_val, Y_lab_val), extra_label = "labeled: ")
+#additional_val = AdditionalValidationSets([(X_val, Y_true_val, "Val_true_sig")], batch_size = 500)
+#roc1 = RocCallback(training_data=(X_train, Y_true_train), validation_data=(X_val, Y_true_val), extra_label = "true: ")
+#roc2 = RocCallback(training_data=(X_train, Y_lab_train), validation_data=(X_val, Y_lab_val), extra_label = "labeled: ")
 
-cbs = [callbacks.History(), additional_val, roc1, roc2] 
-
+#cbs = [callbacks.History(), additional_val, roc1, roc2] 
 
 
 
 
 # train model
-history = my_model.fit(X_train, Y_lab_train,
-          epochs=options.num_epoch,
-          batch_size=batch_size,
-          validation_data=(X_val, Y_lab_val),
-          callbacks = cbs,
-          verbose=2)
+t_data = data.gen(x_key,'Y_TNT', batch_size = batch_size)
+v_data = None
+if(val_frac > 0.): 
+    v_data = data.gen('val_'+x_key,'val_label', batch_size = batch_size)
+
+print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal))
+history = my_model.fit(t_data, 
+        epochs = options.num_epoch, 
+        validation_data = v_data,
+        #callbacks = cbs,
+        verbose = 2 )
 
 print("Saving model to : ", f_model)
 my_model.save(f_model)
+training_plot = plot_dir + j_label + plot_prefix + "training_history.png"
 plot_training(history.history, fname = training_plot)

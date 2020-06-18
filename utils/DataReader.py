@@ -3,6 +3,7 @@ import numpy as np
 import math
 import tensorflow as tf 
 import copy
+import os
 
 def expandable_shape(d_shape):
     c_shape = list(d_shape)
@@ -43,13 +44,18 @@ class MyGenerator(tf.keras.utils.Sequence):
         #print("Epoch end")
 
     def __getitem__(self, i):
-        return self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size]
+        if(self.key2 != None):
+            return self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size]
+        else:
+            return self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size]
+
 
 
 
 
 
 class DataReader:
+    DR_count = 0
     def __init__(self, f_name, signal_idx =1, keys = ['j1_images', 'j2_images', 'mjj'], sig_frac = -1., start = 0, stop = -1, m_low = -1., m_high = -1., val_frac = 0.):
         self.f_name = f_name
         self.signal_idx = signal_idx
@@ -70,7 +76,9 @@ class DataReader:
 
         self.ready = False
 
-        self.f_storage = h5py.File("DReader_temp.h5", "w")
+        self.my_DR_idx = DataReader.DR_count
+        self.f_storage = h5py.File("DReader%i_temp.h5" % DataReader.DR_count, "w")
+        DataReader.DR_count += 1
 
 
     def read(self):
@@ -104,8 +112,9 @@ class DataReader:
 
             #only keep some events
             mask = np.squeeze((raw_labels <= 0) | (raw_labels == self.signal_idx)) 
-            if(self.sig_frac > 0.): 
-                print("Filtering signal from %.4f to %.4f " %(np.mean(labels), self.sig_frac))
+            cur_sig = np.mean(labels)
+            if(self.sig_frac > 0. and cur_sig > self.sig_frac): 
+                print("Filtering signal from %.4f to %.4f " %(cur_sig, self.sig_frac))
                 mask_sig = get_signal_mask_rand(labels, self.sig_frac)
                 mask = mask & mask_sig
             if(self.m_low > 0. and self.m_high >0.):
@@ -224,15 +233,34 @@ class DataReader:
 
 
         h5_gen = MyGenerator(self.f_storage, n_objs, batch_size, key1, key2)
-        n_batches = int(math.ceil(float(n_objs)/batch_size))
-
-
-
         return h5_gen
+
+    def labeler_scores(self, model, key, chunk_size = 10000):
+        
+        n_objs = self.f_storage[key].shape[0]
+        n_chunks = int(np.ceil(n_objs / chunk_size))
+        results = np.array([])
+        for i in range(n_chunks):
+            imgs = self.f_storage[key][chunk_size*i:(i+1)*chunk_size]
+            preds = model.predict(imgs, batch_size = 512)
+
+
+            if(len(preds.shape) > 2 ): #autoencoder
+                scores = np.mean(np.square(imgs - preds), axis = (1,2)).reshape(-1)
+
+            else: 
+                scores = preds.reshape(-1)
+
+            results = np.append(results, scores)
+
+
+        return results
+
 
     def __del__(self):
         if(self.ready):
-            os.system("rm %s" % 'DReader_temp.h5')
+            DataReader.DR_count -= 1
+            os.system("rm %s" % 'DReader%i_temp.h5' % self.my_DR_idx)
 
     
         
@@ -260,6 +288,9 @@ def get_signal_mask_rand(events, sig_frac, seed=12345):
     np.random.seed(seed)
     num_events = events.shape[0]
     cur_frac =  np.mean(events)
+    if(cur_frac <= sig_frac):
+        return np.ones_like(events)
+
     drop_frac = (1. - (1./cur_frac) * sig_frac)
     rands = np.random.random(num_events)
     keep_idxs = (events.reshape(num_events) == 0) | (rands > drop_frac)
