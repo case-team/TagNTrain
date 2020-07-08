@@ -20,6 +20,7 @@ parser.add_option("--iter", dest = "tnt_iter", type = 'int', default=0,
         help="What iteration of  the tag & train algorithm this is (Start = 0).")
 parser.add_option("--evt_offset", type='int', default=0, help="Offset to set which events to use for training")
 parser.add_option("--num_data", type='int', default=200000, help="How many events to use for training (before filtering)")
+parser.add_option("--data_start", type = 'int', default=-1, help="What event to start with")
 parser.add_option("--num_epoch", type = 'int', default=40, help="How many epochs to train for")
 
 parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
@@ -27,8 +28,7 @@ parser.add_option("--use_dense", default = False, action = "store_true", help="M
 parser.add_option("--retrain", default = False, action = "store_true", help="Rather than initializing a new classifier, retrain an existing one")
 parser.add_option("--reweight", default = False, action = "store_true", help="Reweight events in background region to match pT distribution of sig region")
 parser.add_option("--start_cwbh", default = False, action = "store_true", help="In iteration 0, use cwola bumphunt network as initial labeler rather than autoencoder")
-parser.add_option("--mjj_cut", default = False, action = "store_true", help="Require sig-like events to be in mass window")
-parser.add_option("--mjj_cut_sideband", default = False, action = "store_true", help="Require bkg-like events to be in mass sidebands")
+parser.add_option("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
 parser.add_option("--mjj_low", type='int', default = 3300,  help="Low mjj cut value")
 parser.add_option("--mjj_high", type='int', default = 3700, help="High mjj cut value")
 parser.add_option("--sig_cut", type='int', default = 80,  help="What classifier percentile to use to define sig-rich region")
@@ -47,6 +47,7 @@ model_dir = options.model_dir
 
 val_frac = 0.0
 batch_size = 256
+cnn_shape = (32,32,1)
 
 
 #################################################################
@@ -87,7 +88,9 @@ else:
 plot_prefix = "TNT" + str(options.tnt_iter) + "_" + network_type 
 
 #start with different data not to overlap training sets
-data_start = options.evt_offset + options.num_data * (options.tnt_iter + 1)
+data_start = options.data_start
+if(data_start < 0):
+    data_start = options.evt_offset + options.num_data * (options.tnt_iter + 1)
 print("TNT iter is ", options.tnt_iter)
 print("Will train using %i events, starting at event %i" % (options.num_data, data_start))
 
@@ -96,7 +99,7 @@ print("Will train using %i events, starting at event %i" % (options.num_data, da
 
 keep_low = keep_high = -1.
 
-if(options.mjj_cut):
+if(not options.no_mjj_cut):
     window_size = (options.mjj_high - options.mjj_low)/2.
     keep_low = options.mjj_low - window_size
     keep_high = options.mjj_high + window_size
@@ -118,11 +121,6 @@ print("load time  %s " % (t2 -t1))
 
 
 
-
-
-
-
-
 #labeler_plot = plot_dir+ opp_j_label +  plot_prefix + "_labeler_regions.png"
 #pt_plot = plot_dir + j_label + plot_prefix + "pt_dists.png"
 #pt_rw_plot = plot_dir + j_label + plot_prefix + "pt_rw_dists.png"
@@ -140,28 +138,13 @@ print("Bkg-rich region defined < %i percentile" %options.bkg_cut)
 sig_region_cut = np.percentile(labeler_scores, options.sig_cut)
 bkg_region_cut = np.percentile(labeler_scores, options.bkg_cut)
 
-#make plot of labeler scores and where cuts are
-#train_sig_events = (Y > 0.9).reshape(-1)
-#train_bkg_events = (Y < 0.1).reshape(-1)
-#
-#scores = [L_labeler_scores[train_bkg_events], L_labeler_scores[train_sig_events]]
-#labels = ['Background', 'Signal']
-#colors = ['b', 'r']
-#make_histogram(scores, labels, colors, 'Labeler Score', "", 100,
-#               normalize = True, save = False)
-#plt.axvline(linewidth=2, x=sig_region_cut, color ='black')
-#plt.axvline(linewidth=2, x=bkg_region_cut, color = 'black')
-#plt.savefig(labeler_plot)
+print("cut high %.3e, cut low %.3e " % (sig_region_cut, bkg_region_cut))
+
+data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores)
 
 
 
-print_signal_fractions(Y_true, Y_lab)
-if(options.mjj_cut):
-    outside_mjj_window = ((mjj < options.mjj_low) | (mjj > options.mjj_high))
-    #TODO: Is this optimal? Should I filter these events out of the training set instead?
-    Y_lab[outside_mjj_window] = 0
-    print("After mass cut new sig fracs are:  ")
-    print_signal_fractions(Y_true, Y_lab)
+print_signal_fractions(data['label'], data['Y_TNT'])
 
 
 
@@ -190,10 +173,13 @@ else:
 
 #cbs = [callbacks.History(), additional_val, roc1, roc2] 
 
+early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5, verbose=1, mode='min')
+cbs = [tf.keras.callbacks.History(), early_stop]
 
 
 
 # train model
+x_key = j_label + 'images'
 t_data = data.gen(x_key,'Y_TNT', batch_size = batch_size)
 v_data = None
 if(val_frac > 0.): 
@@ -203,7 +189,7 @@ print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal
 history = my_model.fit(t_data, 
         epochs = options.num_epoch, 
         validation_data = v_data,
-        #callbacks = cbs,
+        callbacks = cbs,
         verbose = 2 )
 
 print("Saving model to : ", f_model)

@@ -2,6 +2,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import cm
+from sklearn.metrics import roc_curve,auc
 import numpy as np
 
 fig_size = (12,9)
@@ -135,3 +136,14 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
         print("saving fig %s" %fname)
 
     return bins, ratio
+
+def draw_jet_image(image, title, fname = "", do_log = False):
+    fontsize = 20
+    image = np.clip(np.squeeze(image).astype('float'), 1e-8, None)
+    if(do_log): image = np.log(image)
+    fig = plt.figure(figsize=fig_size)
+    plt.imshow(image, cmap = 'Blues', interpolation = 'nearest')
+    plt.title(title, fontsize = fontsize)
+    if(fname != ""):
+        plt.savefig(fname)
+

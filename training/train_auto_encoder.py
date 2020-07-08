@@ -12,10 +12,13 @@ parser = OptionParser(usage="usage: %prog analyzer outputfile [options] \nrun wi
 parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input file for training.")
 parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
 parser.add_option("-o", "--model_name", default='auto_encoder.h5', help="What to name the model")
-parser.add_option("--num_epoch", type = 'int', default=30, help="How many epochs to train for")
+parser.add_option("--num_epoch", type = 'int', default=100, help="How many epochs to train for")
 parser.add_option("--data_start", type='int', default=0, help="Starting event")
 parser.add_option("--num_data", type='int', default=200000, help="How many events to use for training (before filtering)")
 parser.add_option("--model_start", default="", help="Starting point for model (empty string for new model)")
+parser.add_option("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
+parser.add_option("--mjj_low", type='int', default = 3300,  help="Low mjj cut value")
+parser.add_option("--mjj_high", type='int', default = 3700, help="High mjj cut value")
 
 parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
 
@@ -46,16 +49,32 @@ else:
     print("Training jet not 1 or 2! Exiting")
     exit(1)
 
+if(not options.no_mjj_cut):
+    window_size = (options.mjj_high - options.mjj_low)/2.
+    keep_low = options.mjj_low - window_size
+    keep_high = options.mjj_high + window_size
+    print("Requiring mjj window from %.0f to %.0f \n" % (options.mjj_low, options.mjj_high))
+
 
 import time
-keys  = [x_key]
+keys  = [x_key, 'mjj']
 t1 = time.time()
 data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-         val_frac = val_frac )
+         val_frac = val_frac, m_high = keep_high, m_low = keep_low)
 data.read()
 t2 = time.time()
 print("load time  %s " % (t2 -t1))
 
+mjj = data['mjj']
+mjj_cut = (mjj < options.mjj_low) | (mjj > options.mjj_high)
+data.apply_mask(mjj_cut)
+
+if(val_frac > 0.):
+    val_mjj = data['val_mjj']
+    val_mjj_cut = (val_mjj < options.mjj_low) | (val_mjj > options.mjj_high)
+    data.apply_mask(val_mjj_cut, to_training = False)
+
+mjj_cut = data['mjj']
 
 
 print("Signal frac is %.3f \n" % (np.mean(data['label'])))
@@ -71,7 +90,7 @@ else:
     my_model = load_model(options.model_start)
 
 
-early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='min', baseline=None)
+early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=1e-6, patience=5, verbose=1, mode='min', baseline=None)
 cbs = [tf.keras.callbacks.History(), early_stop]
 
 

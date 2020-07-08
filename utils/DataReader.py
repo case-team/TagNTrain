@@ -18,7 +18,7 @@ def append_h5(f, name, data):
     f[name][prev_size:] = data
 
 class MyGenerator(tf.keras.utils.Sequence):
-    def __init__(self, f, n, batch_size, key1, key2):
+    def __init__(self, f, n, batch_size, key1, key2, mask = None):
         self.f = f
         self.n = n
         self.batch_size = batch_size
@@ -27,6 +27,7 @@ class MyGenerator(tf.keras.utils.Sequence):
 
         self.key1 = key1
         self.key2 = key2
+        self.mask = mask
 
     def __next__(self):
         if self.idx >= self.n_batches:
@@ -44,10 +45,11 @@ class MyGenerator(tf.keras.utils.Sequence):
         #print("Epoch end")
 
     def __getitem__(self, i):
-        if(self.key2 != None):
+        if(self.mask is not None and self.mask.shape[0] == 0):
             return self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size]
         else:
-            return self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size]
+            mask_local = self.mask[self.batch_size*i:(i+1)*self.batch_size]
+            return self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size][mask_local], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size][mask_local]
 
 
 
@@ -56,16 +58,19 @@ class MyGenerator(tf.keras.utils.Sequence):
 
 class DataReader:
     DR_count = 0
-    def __init__(self, f_name, signal_idx =1, keys = ['j1_images', 'j2_images', 'mjj'], sig_frac = -1., start = 0, stop = -1, m_low = -1., m_high = -1., val_frac = 0.):
+    def __init__(self, f_name, signal_idx =1, keys = None, sig_frac = -1., start = 0, stop = -1, m_low = -1., m_high = -1., val_frac = 0.):
+        if(keys == None):
+            self.keys = ['j1_images', 'j2_images', 'mjj']
+        else:
+            self.keys = copy.copy(keys)
         self.f_name = f_name
         self.signal_idx = signal_idx
-        self.keys = keys
         self.sig_frac = sig_frac
         self.start = start
         self.stop = stop
         self.val_frac = val_frac
         f = h5py.File(f_name, "r")
-        if(self.stop == -1): self.stop = f['truth_label'].shape[0]
+        if(self.stop == -1): self.stop = f['event_info'].shape[0]
         f.close()
         self.nEvents_file = self.stop - self.start
         self.m_low = m_low
@@ -79,6 +84,9 @@ class DataReader:
         self.my_DR_idx = DataReader.DR_count
         self.f_storage = h5py.File("DReader%i_temp.h5" % DataReader.DR_count, "w")
         DataReader.DR_count += 1
+
+        self.mask = np.array([])
+        self.val_mask = np.array([])
 
 
     def read(self):
@@ -108,13 +116,17 @@ class DataReader:
             #fill this chunk
             raw_labels = f['truth_label'][cstart: cstop]
             labels = np.zeros_like(raw_labels)
-            labels[raw_labels == self.signal_idx] = 1
+            if(self.signal_idx > 0):
+                labels[raw_labels == self.signal_idx] = 1
+                mask = np.squeeze((raw_labels <= 0) | (raw_labels == self.signal_idx)) 
+            else:
+                mask = np.squeeze(raw_labels >= -999999)
 
             #only keep some events
-            mask = np.squeeze((raw_labels <= 0) | (raw_labels == self.signal_idx)) 
             cur_sig = np.mean(labels)
-            if(self.sig_frac > 0. and cur_sig > self.sig_frac): 
-                print("Filtering signal from %.4f to %.4f " %(cur_sig, self.sig_frac))
+            do_filter = self.sig_frac > 0. and cur_sig > self.sig_frac
+            print("Signal fraction is %.4f and we want %.4f: Filter %i" %(cur_sig, self.sig_frac, do_filter))
+            if(do_filter): 
                 mask_sig = get_signal_mask_rand(labels, self.sig_frac)
                 mask = mask & mask_sig
             if(self.m_low > 0. and self.m_high >0.):
@@ -175,8 +187,8 @@ class DataReader:
                     self.f_storage.create_dataset(key, data = tdata, chunks = True, maxshape = c_shape)
                     if(self.val_frac > 0.): self.f_storage.create_dataset("val_"+key, data = vdata, chunks = True, maxshape = c_shape)
                 else:
-                    append_h5(self.f_storage, key, data)
-                    if(self.val_frac > 0.): append_h5(self.f_storage, "val_"+key, data)
+                    append_h5(self.f_storage, key, tdata)
+                    if(self.val_frac > 0.): append_h5(self.f_storage, "val_"+key, vdata)
 
 
         f.close()
@@ -204,6 +216,32 @@ class DataReader:
             del mjj, mjj_window
 
 
+    def make_Y_TNT(self, sig_region_cut = 0.9, bkg_region_cut = 0.2, cut_var = np.array([]), sig_high = True):
+
+        if(cut_var.size == 0):
+            raise TypeError('Must supply cut_var argument!')
+
+        #sig_high is whether signal lives at > cut value or < cut value
+        if(sig_high):
+            sig_cut = cut_var > sig_region_cut
+            bkg_cut = cut_var < bkg_region_cut
+        else:
+            sig_cut = cut_var < sig_region_cut
+            bkg_cut = cut_var > bkg_region_cut
+
+
+
+        keep_mask = sig_cut | bkg_cut
+
+        Y_TNT = np.zeros_like(cut_var)
+
+        Y_TNT[bkg_cut] = 0
+        Y_TNT[sig_cut] = 1
+        self.f_storage.create_dataset('Y_TNT', data = Y_TNT)
+
+        self.keys.append("Y_TNT")
+        self.apply_mask(keep_mask)
+
 
     def __getitem__(self, key):
         if(not self.ready):
@@ -212,8 +250,15 @@ class DataReader:
         if(key not in self.keys):
             print("Key %s not in list of preloaded keys!" % key, self.keys)
             exit(1)
+        if('val' in key):
+            mask_ = self.val_mask
+        else:
+            mask_ = self.mask
 
-        return self.f_storage[key][()]
+        if(mask_.shape[0] == 0):
+            return self.f_storage[key][()]
+        else:
+            return self.f_storage[key][()][mask_]
 
     def gen(self, key1, key2, batch_size = 256):
         if(not self.ready):
@@ -231,8 +276,13 @@ class DataReader:
         if(n_objs != n_objs2):
             print("Mismatched datasets size ?? Key %s has size %i, key %s has size %i " %(key1, n_objs, key2, n_objs))
 
+        if('val' in key1):
+            mask_ = self.val_mask
+        else:
+            mask_ = self.mask
 
-        h5_gen = MyGenerator(self.f_storage, n_objs, batch_size, key1, key2)
+
+        h5_gen = MyGenerator(self.f_storage, n_objs, batch_size, key1, key2, mask = mask_)
         return h5_gen
 
     def labeler_scores(self, model, key, chunk_size = 10000):
@@ -240,8 +290,16 @@ class DataReader:
         n_objs = self.f_storage[key].shape[0]
         n_chunks = int(np.ceil(n_objs / chunk_size))
         results = np.array([])
+        if('val' in key):
+            mask_ = self.val_mask
+        else:
+            mask_ = self.mask
+
         for i in range(n_chunks):
             imgs = self.f_storage[key][chunk_size*i:(i+1)*chunk_size]
+            if(mask_.shape[0] != 0):
+                local_mask = mask_[chunk_size*i:(i+1)*chunk_size]
+                imgs = imgs[mask_]
             preds = model.predict(imgs, batch_size = 512)
 
 
@@ -256,10 +314,37 @@ class DataReader:
 
         return results
 
+    #apply a mask to the dataset
+    def apply_mask(self, mask, to_training = True):
+        if(to_training):
+            if(mask.shape[0] != self.nTrain):
+                print("Error: Mask shape and number of training events incompatable", mask.shape, self.nTrain)
+                exit(1)
+
+            if(self.mask.shape[0] == 0):
+                self.mask = mask
+            else:
+                self.mask = self.mask & mask
+            filter_frac = np.mean(mask)
+            self.nTrain = int(self.nTrain * filter_frac)
+        else: #to val
+            if(mask.shape[0] != self.nVal):
+                print("Error: Mask shape and number of validation events incompatable", mask.shape, self.nVal)
+                exit(1)
+
+            if(self.val_mask.shape[0] == 0):
+                self.val_mask = mask
+            else:
+                self.val_mask = self.val_mask & mask
+            filter_frac = np.mean(mask)
+            self.nVal = int(self.nVal * filter_frac)
+
+    
+
+
 
     def __del__(self):
         if(self.ready):
-            DataReader.DR_count -= 1
             os.system("rm %s" % 'DReader%i_temp.h5' % self.my_DR_idx)
 
     

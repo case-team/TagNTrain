@@ -14,6 +14,8 @@ parser.add_option("--model_type", type='int', default=0, help="0 CNN (one jet), 
 parser.add_option("-l", "--plot_label", default="", help="what to call the plots")
 parser.add_option("--num_data", type='int', default=-1)
 parser.add_option("--data_start", type='int', default=0)
+parser.add_option("--mjj_low", type='int', default = -1,  help="Low mjj cut value")
+parser.add_option("--mjj_high", type='int', default = -1, help="High mjj cut value")
 parser.add_option("-s", "--signal", type='int', default=1, help="Which signal type to use ")
 parser.add_option("--sig_frac",  type='float', default=-1., help="Filter signal to this amount (negative to do nothing)")
 
@@ -66,9 +68,6 @@ if(options.model_name != ""):
     j1_images = data['j1_images']
     j2_images = data['j2_images']
 
-    if(sample_standardize):
-        j2_images = standardize(*zero_center(j2_images, np.zeros_like(j2_images)))[0]
-        j1_images = standardize(*zero_center(j1_images, np.zeros_like(j1_images)))[0]
 
 batch_size = 1000
 
@@ -107,15 +106,24 @@ make_outline_hist([mjj[bkg_events]],  mjj[sig_events], labels, ['b','r'], 'Dijet
 
 
 mjj_sig = np.mean(mjj[sig_events])
-m_low = mjj_sig - mjj_window/2.
-m_high = mjj_sig + mjj_window/2.
+m_low = options.mjj_low
+m_high = options.mjj_high
+if(m_low< 0):
+    m_low = mjj_sig - mjj_window/2.
+if(m_high< 0):
+    m_high = mjj_sig + mjj_window/2.
+
 in_window = (mjj > m_low) & (mjj < m_high)
 S = mjj[sig_events & in_window].shape[0]
 B = mjj[bkg_events & in_window].shape[0]
 
+overall_S = mjj[sig_events].shape[0]
+overall_B = mjj[bkg_events].shape[0]
+
 print("Mean signal mjj is %.0f" % mjj_sig);
 print("Before selection: %i signal events and %i bkg events in mjj window" % (S,B))
-print("S/B %.3f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
+print("S/B %f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
+print("Sig frac (overall) %f " % (float(overall_S)/overall_B))
 
 
 

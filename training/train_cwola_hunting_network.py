@@ -108,7 +108,11 @@ print_signal_fractions(data['label'], data['Y_mjj'])
 
 
 myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
-my_model = CNN(cnn_shape)
+if(not options.large):
+    my_model = CNN(cnn_shape)
+else:
+    my_model = CNN_large(cnn_shape)
+
 my_model.summary()
 my_model.compile(optimizer=myoptimizer,loss='binary_crossentropy',
         metrics = ['accuracy'])
@@ -124,6 +128,9 @@ print("Will save model to : ", f_model)
 
 #roc = RocCallback(training_data=(X_train, Y_train), validation_data=(X_val, Y_val))
 #cbs = [callbacks.History(), additional_val, roc] 
+
+early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5, verbose=1, mode='min')
+cbs = [tf.keras.callbacks.History(), early_stop]
 
 
 
@@ -142,7 +149,7 @@ print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal
 history = my_model.fit(t_data, 
         epochs = options.num_epoch, 
         validation_data = v_data,
-        #callbacks = cbs,
+        callbacks = cbs,
         verbose = 2 )
 
 plot_training(history.history, plot_dir + j_label + "training_history.png")
