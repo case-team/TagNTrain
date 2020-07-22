@@ -89,7 +89,7 @@ def mse_loss_manual(inputs,outputs):
     inputs = inputs.reshape(inputs.shape[0],-1) # flatten to tensor of n events, each of size 1024 (32x32)
     outputs = outputs.reshape(outputs.shape[0],-1)
     reconstruction_loss = np.mean( np.square(outputs-inputs), axis=-1)
-    reconstruction_loss *= co.config['image_size'] * co.config['image_size'] # mse returns mean sqr err, so multiply by n
+    reconstruction_loss *= config['image_size'] * config['image_size'] # mse returns mean sqr err, so multiply by n
     return np.array(reconstruction_loss)
 
 
@@ -103,7 +103,7 @@ def kl_loss_manual(z_mean,z_log_var):
 def compute_loss_of_prediction_mse_kl(input, predicted, z_mean, z_log_var):
     reco_losses = mse_loss_manual(input, predicted)
     kl_losses = kl_loss_manual(z_mean, z_log_var)
-    total_losses = reco_losses + co.config['beta'] * kl_losses # custom loss = mse_loss + l * kl_loss
+    total_losses = reco_losses + config['beta'] * kl_losses # custom loss = mse_loss + l * kl_loss
     return [ total_losses, reco_losses, kl_losses ]
 
 
@@ -117,5 +117,5 @@ def threeD_loss_manual(inputs, outputs):
 def compute_loss_of_prediction_3D_kl(input, predicted, z_mean, z_log_var):
     reco_losses = threeD_loss_manual(input, predicted)
     kl_losses = kl_loss_manual(z_mean, z_log_var)
-    total_losses = reco_losses + co.config['beta'] * kl_losses
+    total_losses = reco_losses + config['beta'] * kl_losses
     return [total_losses, reco_losses, kl_losses]

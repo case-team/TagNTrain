@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 from .model_defs import * 
+from .losses import *
 from .PlotUtils import *
 from .DataReader import *
 import tensorflow as tf

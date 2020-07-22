@@ -11,7 +11,7 @@ parser = OptionParser()
 parser = OptionParser(usage="usage: %prog analyzer outputfile [options] \nrun with --help to get list of options")
 parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input file for training.")
 parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
-parser.add_option("-o", "--model_name", default='auto_encoder.h5', help="What to name the model")
+parser.add_option("-o", "--model_name", default='vae_test', help="What to name the model")
 parser.add_option("--num_epoch", type = 'int', default=100, help="How many epochs to train for")
 parser.add_option("--data_start", type='int', default=0, help="Starting event")
 parser.add_option("--num_data", type='int', default=200000, help="How many events to use for training (before filtering)")
@@ -83,11 +83,14 @@ print("Signal frac is %.3f \n" % (np.mean(data['label'])))
 
 if(options.model_start == ""):
     print("Creating new model ")
-    my_model = VAE(0, input_shape = cnn_shape)
+    my_model = VAE(0, input_shape = cnn_shape, model_dir = options.model_name)
     my_model.build()
     my_model.model.summary()
 else:
     print("Loading model not yet implemented" % model_start)
+    my_model = VAE(0, input_shape = cnn_shape, model_dir = options.model_name)
+    my_model.load()
+    my_model.model.summary()
     exit(1)
 
 
@@ -109,4 +112,5 @@ history = my_model.fit(t_data,
 
 
 print("Saving model to : ", options.model_name)
-my_model.model.save(options.model_name)
+os.system("mkdir %s" % options.model_name)
+my_model.save_model()
