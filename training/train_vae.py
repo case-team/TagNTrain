@@ -83,17 +83,13 @@ print("Signal frac is %.3f \n" % (np.mean(data['label'])))
 
 if(options.model_start == ""):
     print("Creating new model ")
-    my_model = auto_encoder(cnn_shape)
-    my_model.summary()
-    myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
-    my_model.compile(optimizer=myoptimizer,loss= tf.keras.losses.mean_squared_error)
+    my_model = VAE(0, input_shape = cnn_shape)
+    my_model.build()
+    my_model.model.summary()
 else:
-    print("Starting with model from %s " % model_start)
-    my_model = load_model(options.model_start)
+    print("Loading model not yet implemented" % model_start)
+    exit(1)
 
-
-early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=1e-6, patience=5, verbose=1, mode='min', baseline=None)
-cbs = [tf.keras.callbacks.History(), early_stop]
 
 
 # train model
@@ -103,15 +99,14 @@ if(val_frac > 0.):
     v_data = data.gen('val_'+x_key,'val_'+x_key, batch_size = batch_size)
 
 print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal))
-#print(np.mean(data['val_label']))
-#print(np.mean(data['label']))
+
+
 
 history = my_model.fit(t_data, 
         epochs = options.num_epoch, 
         validation_data = v_data,
-        callbacks = cbs,
         verbose = 2 )
 
 
 print("Saving model to : ", options.model_name)
-my_model.save(options.model_name)
+my_model.model.save(options.model_name)

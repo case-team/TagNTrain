@@ -1,4 +1,5 @@
 import tensorflow as tf
+from .vae_model import *
 #from tensorflow.keras.layers import Dense, tf.keras.layers.Conv2D, tf.keras.layers.MaxPooling2D, Dropout, Input, Flatten, tf.keras.layers.Activation, Reshape, UpSampling2D
 #from tensorflow.keras.models import Model, Sequential, load_model
 
@@ -74,6 +75,8 @@ def CNN_large(input_shape):
     model.add(tf.keras.layers.Dense(1))
     model.add(tf.keras.layers.Activation('sigmoid'))
     return model
+
+
 
 def auto_encoder(input_shape, compressed_size=6):
     npix = input_shape[0]

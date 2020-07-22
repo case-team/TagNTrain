@@ -6,15 +6,17 @@ import h5py
 
 fin = "../data/BB_images_v1.h5"
 #f_sig = "../data/BulkGravToZZToZhadZhad_narrow_M-2500.h5" #1
-f_sig = "../data/WprimeToWZToWhadZhad_narrow_M-3500.h5" #2
-#f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
+#f_sig = "../data/WprimeToWZToWhadZhad_narrow_M-3500.h5" #2
+f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
 f_bkg = "../data/QCD_only.h5"
-j_label = "j1_"
-plot_name = "j1_s2_roc.png"
-sig_idx = 2
+j_label = "j2_"
+sig_idx = 3
+plot_name = "%ss%i_roc.png" %(j_label, sig_idx)
 
-m_low = 3150.
-m_high = 3850.
+m_low = 2250.
+m_high = 2750.
+#m_low = 3200.
+#m_high = 3800.
 
 single_file = False
 
@@ -23,8 +25,8 @@ model_dir = "../models/BB1_test_june/"
 
 #model type: 0 is CNN, 1 is autoencoder, 2 is dense network
 
-f_models = ["j1_autoencoder.h5",  "j1_autoencoder_s%i.h5", "j1_cwola_hunting_s%i.h5", "j1_TNT0_s%i.h5","j1_TNT0_s%i_v2.h5"]
-#f_models = ["j2_autoencoder.h5", "j2_autoencoder_s%i.h5", "j2_TNT0_s%i.h5", "j2_TNT1_s%i.h5"] #, "j1_cwola_hunting_s%i.h5"]
+#f_models = ["j1_autoencoder.h5",  "j1_autoencoder_s%i.h5", "j1_cwola_hunting_s%i.h5", "j1_TNT0_s%i.h5","j1_TNT0_s%i_v2.h5"]
+f_models = ["j2_autoencoder.h5",  "j2_autoencoder_s%i.h5", "j2_cwola_hunting_s%i.h5", "j2_TNT0_s%i.h5","j2_TNT0_s%i_v2.h5"]
 labels = ["Auto Encoder (train all)", "Auto Encoder (train sidebands)","CWoLa Hunting (One Jet)", "TNT (AE)", "TNT (CWoLa)"] #, "Cwola Hunting (1 Jet)"]
 model_type = [1, 1, 0, 0, 0, 0, 0, 0,0,0]
 

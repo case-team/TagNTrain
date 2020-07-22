@@ -216,7 +216,7 @@ class DataReader:
             del mjj, mjj_window
 
 
-    def make_Y_TNT(self, sig_region_cut = 0.9, bkg_region_cut = 0.2, cut_var = np.array([]), sig_high = True):
+    def make_Y_TNT(self, sig_region_cut = 0.9, bkg_region_cut = 0.2, cut_var = np.array([]), mjj_low = -999999., mjj_high = 9999999., sig_high = True):
 
         if(cut_var.size == 0):
             raise TypeError('Must supply cut_var argument!')
@@ -228,6 +228,18 @@ class DataReader:
         else:
             sig_cut = cut_var < sig_region_cut
             bkg_cut = cut_var > bkg_region_cut
+
+
+        if(mjj_low > 0. and mjj_high < 10000.):
+            mjj = self.f_storage['mjj'][()]
+            mjj_window = ((mjj > mjj_low) & (mjj < mjj_high))
+            mjj_sb = ((mjj < mjj_low) | (mjj > mjj_high))
+            sig_cut = sig_cut & mjj_window
+            bkg_cut = bkg_cut & mjj_sb
+
+        #mjj = self.f_storage['mjj'][()]
+        #sig_cut = ((mjj > mjj_low) & (mjj < mjj_high))
+
 
 
 
@@ -327,6 +339,7 @@ class DataReader:
                 self.mask = self.mask & mask
             filter_frac = np.mean(mask)
             self.nTrain = int(self.nTrain * filter_frac)
+            print("applied mask. Eff %.3f " % filter_frac)
         else: #to val
             if(mask.shape[0] != self.nVal):
                 print("Error: Mask shape and number of validation events incompatable", mask.shape, self.nVal)

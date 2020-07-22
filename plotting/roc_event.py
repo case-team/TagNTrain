@@ -5,13 +5,15 @@ import h5py
 
 fin = "../data/BB_images_v1.h5"
 #f_sig = "../data/BulkGravToZZToZhadZhad_narrow_M-2500.h5" #1
-#f_sig = "../data/WprimeToWZToWhadZhad_narrow_M-3500.h5" #2
-f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
+f_sig = "../data/WprimeToWZToWhadZhad_narrow_M-3500.h5" #2
+#f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
 f_bkg = "../data/QCD_only.h5"
-plot_name = "s3_evt_roc.png"
-sig_idx = 3
-m_low = 2250.
-m_high = 2750.
+plot_name = "s2_evt_roc.png"
+sig_idx = 2
+#m_low = 2250.
+#m_high = 2750.
+m_low = 3200
+m_high = 3700.
 
 
 single_file = False

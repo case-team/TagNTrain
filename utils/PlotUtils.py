@@ -147,3 +147,21 @@ def draw_jet_image(image, title, fname = "", do_log = False):
     if(fname != ""):
         plt.savefig(fname)
 
+def make_scatter_plot(x, y, color, axis_names, fname= ""  ):
+
+    fig, ax = plt.subplots()
+    alpha = 0.5
+    size = 0.4
+    ax.scatter(x,y, alpha = alpha, c = color, s=size)
+
+    correlation = np.corrcoef(x,y)[0,1]
+    text_str = r'$\rho_{x,y} $ = %.3f' % correlation
+    plt.annotate(text_str, xy = (0.05, 0.95), xycoords = 'axes fraction', fontsize=14)
+
+    ax.set_xlabel(axis_names[0], fontsize=14)
+    ax.set_ylabel(axis_names[1], fontsize=14)
+    plt.tick_params(axis='y', labelsize=12)
+    plt.tick_params(axis='x', labelsize=12)
+    if(fname != ""):
+        plt.savefig(fname)
+

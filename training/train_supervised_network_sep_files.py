@@ -75,9 +75,9 @@ my_model.summary()
 
 myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=1e-6, patience=10, verbose=1, mode='min')
-#roc = RocCallback(training_data=(X_train, Y_train), validation_data=(X_val, Y_val))
+roc = RocCallback(training_data=(X_train, Y_train), validation_data=(X_val, Y_val))
 
-cbs = [tf.keras.callbacks.History(), early_stop]
+cbs = [tf.keras.callbacks.History(), early_stop, roc]
 
 my_model.compile(optimizer=myoptimizer,loss='binary_crossentropy',
           metrics = ['accuracy'],

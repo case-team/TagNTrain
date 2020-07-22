@@ -45,7 +45,7 @@ plot_dir = options.plot_dir
 model_dir = options.model_dir
 
 
-val_frac = 0.0
+val_frac = 0.1
 batch_size = 256
 cnn_shape = (32,32,1)
 
@@ -114,7 +114,6 @@ t1 = time.time()
 data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = data_start, stop = data_start + options.num_data, 
         m_low = keep_low, m_high = keep_high, val_frac = val_frac )
 data.read()
-data.make_Y_mjj(options.mjj_low, options.mjj_high)
 t2 = time.time()
 print("load time  %s " % (t2 -t1))
 
@@ -140,7 +139,8 @@ bkg_region_cut = np.percentile(labeler_scores, options.bkg_cut)
 
 print("cut high %.3e, cut low %.3e " % (sig_region_cut, bkg_region_cut))
 
-data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores)
+data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high)
+#data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores)
 
 
 
@@ -168,10 +168,9 @@ else:
 
 
 #additional_val = AdditionalValidationSets([(X_val, Y_true_val, "Val_true_sig")], batch_size = 500)
-#roc1 = RocCallback(training_data=(X_train, Y_true_train), validation_data=(X_val, Y_true_val), extra_label = "true: ")
-#roc2 = RocCallback(training_data=(X_train, Y_lab_train), validation_data=(X_val, Y_lab_val), extra_label = "labeled: ")
 
 #cbs = [callbacks.History(), additional_val, roc1, roc2] 
+
 
 early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5, verbose=1, mode='min')
 cbs = [tf.keras.callbacks.History(), early_stop]
@@ -184,6 +183,8 @@ t_data = data.gen(x_key,'Y_TNT', batch_size = batch_size)
 v_data = None
 if(val_frac > 0.): 
     v_data = data.gen('val_'+x_key,'val_label', batch_size = batch_size)
+    roc = RocCallback(training_data=(np.zeros(100), np.zeros(100)), validation_data=(data['val_'+x_key], data['val_label']), extra_label = "true: ")
+    cbs.append(roc)
 
 print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal))
 history = my_model.fit(t_data, 
