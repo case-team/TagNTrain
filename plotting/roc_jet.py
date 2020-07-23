@@ -5,30 +5,30 @@ import h5py
 
 
 fin = "../data/BB_images_v1.h5"
-f_sig = "../data/BulkGravToZZToZhadZhad_narrow_M-2500.h5" #1
+#f_sig = "../data/BulkGravToZZToZhadZhad_narrow_M-2500.h5" #1
 #f_sig = "../data/WprimeToWZToWhadZhad_narrow_M-3500.h5" #2
-#f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
+f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
 f_bkg = "../data/QCD_only.h5"
-j_label = "j1_"
-sig_idx = 1
-plot_name = "%ss%i_roc_test.png" %(j_label, sig_idx)
+j_label = "j2_"
+sig_idx = 3
+plot_name = "%ss%i_roc.png" %(j_label, sig_idx)
 
 m_low = 2250.
 m_high = 2750.
-#m_low = 3200.
-#m_high = 3800.
+#m_low = 3150.
+#m_high = 3850.
 
 single_file = False
 
 plot_dir = "../plots/BB1_test_june/"
 model_dir = "../models/BB1_test_june/"
 
-#model type: 0 is CNN, 1 is autoencoder, 2 is dense network, 3 is VAE
+#model type: 0 is CNN, 1 is autoencoder, 2 is dense network, 5 is VAE
 
-f_models = ["j1_autoencoder.h5",  "j1_autoencoder_s%i.h5", "j1_cwola_hunting_s%i.h5", "j1_TNT0_s%i.h5","j1_TNT0_s%i_v2.h5", "../VAE_test/"]
-#f_models = ["j2_autoencoder.h5",  "j2_autoencoder_s%i.h5", "j2_cwola_hunting_s%i.h5", "j2_TNT0_s%i.h5","j2_TNT0_s%i_v2.h5", "../VAE_test/"]
-labels = ["Auto Encoder (train all)", "Auto Encoder (train sidebands)","CWoLa Hunting (One Jet)", "TNT (AE)", "TNT (CWoLa)", "VAE"] #, "Cwola Hunting (1 Jet)"]
-model_type = [1, 1, 0, 0, 0, 3]
+#f_models = ["j1_autoencoder.h5",  "j1_autoencoder_s%i.h5", "j1_vae/", "j1_vae_s%i/","j1_cwola_hunting_s%i.h5", "j1_TNT0_s%i.h5","j1_TNT0_s%i_v2.h5", ]
+f_models = ["j2_autoencoder.h5",  "j2_autoencoder_s%i.h5", "j2_vae/", "j2_vae_s%i/","j2_cwola_hunting_s%i.h5", "j2_TNT0_s%i.h5","j2_TNT0_s%i_v2.h5", ]
+labels = ["Auto Encoder (train all)", "Auto Encoder (train sidebands)", "VAE (train all)", "VAE (train sidebands)", "CWoLa Hunting (One Jet)", "TNT (AE)", "TNT (CWoLa)"] #, "Cwola Hunting (1 Jet)"]
+model_type = [1, 1, 5, 5, 0, 0, 0]
 
 
 colors = ["g", "b", "r", "gray", "purple", "pink", "orange", "m", "skyblue", "yellow"]
@@ -48,10 +48,10 @@ if(single_file):
 
 else:
     bkg_start = 1000000
-    n_bkg = 40000
+    n_bkg = 1000000
     sig_start = 20000
-    #sig_stop = -1
-    sig_stop = 25000
+    sig_stop = -1
+    #sig_stop = 25000
     d_bkg = DataReader(f_bkg, keys = keys, signal_idx = -1, start = bkg_start, stop = bkg_start + n_bkg, m_low = m_low, m_high = m_high )
     d_bkg.read()
     d_sig = DataReader(f_sig, keys = keys, signal_idx = -1, start = sig_start, stop = sig_stop, m_low = m_low, m_high = m_high )
@@ -69,7 +69,7 @@ sig_events = Y > 0.9
 model_scores = []
 for idx,f in enumerate(f_models):
     if('%' in f): f = f % sig_idx
-    if(model_type[idx] <3):
+    if(model_type[idx] <5):
         model = tf.keras.models.load_model(model_dir + f)
         print(idx, f, model_type[idx])
         if(model_type[idx] == 0): scores = model.predict(images, batch_size = 500)
@@ -88,7 +88,7 @@ for idx,f in enumerate(f_models):
         scores.reshape(-1)
     hist_scores = [scores[bkg_events], scores[sig_events]]
     make_histogram(hist_scores, hist_labels, hist_colors, 'Labeler Score', "", 100,
-            normalize = True, save = True, fname = plot_dir + f[:-3] +"_scores.png")
+            normalize = True, save = True, fname = plot_dir + f.replace('.h5', '').replace("/", "") +"_scores.png")
     model_scores.append(scores)
 
 

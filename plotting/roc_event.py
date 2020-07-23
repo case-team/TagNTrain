@@ -5,15 +5,15 @@ import h5py
 
 fin = "../data/BB_images_v1.h5"
 #f_sig = "../data/BulkGravToZZToZhadZhad_narrow_M-2500.h5" #1
-f_sig = "../data/WprimeToWZToWhadZhad_narrow_M-3500.h5" #2
-#f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
+#f_sig = "../data/WprimeToWZToWhadZhad_narrow_M-3500.h5" #2
+f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
 f_bkg = "../data/QCD_only.h5"
-plot_name = "s2_evt_roc.png"
-sig_idx = 2
-#m_low = 2250.
-#m_high = 2750.
-m_low = 3200
-m_high = 3700.
+sig_idx = 3
+plot_name = "s%i_evt_roc.png" % sig_idx
+m_low = 2250.
+m_high = 2750.
+#m_low = 3150
+#m_high = 3850.
 
 
 single_file = False
@@ -22,10 +22,10 @@ plot_dir = "../plots/BB1_test_june/"
 model_dir = "../models/BB1_test_june/"
 
 
-#model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets)
-f_models = ["jj_supervised_s%i.h5", "autoencoder.h5", "autoencoder_s%i.h5", "jj_cwola_hunting_s%i.h5", "cwola_hunting_s%i.h5", "TNT0_s%i.h5", "TNT0_s%i_v2.h5", ]
-labels = ["Supervised", "Autoencoder (train all)", "Autoencoder (train sidebands)", "CWoLa Hunting", "CWoLa Hunting (one-jet)", "TNT (AE)", "TNT (CWoLa)" ]
-model_type = [3, 1, 1, 3,  0,0,0] 
+#model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
+f_models = ["autoencoder.h5",  "autoencoder_s%i.h5", "vae/", "vae_s%i/","cwola_hunting_s%i.h5", "TNT0_s%i.h5","TNT0_s%i_v2.h5", "jj_cwola_hunting_s%i.h5", "jj_supervised_s%i.h5" ]
+labels = ["Autoencoder (train all)", "Autoencoder (train sidebands)", "VAE (train all)", "VAE (train sidebands)", "CWoLa Hunting (one-jet)", "TNT (AE)", "TNT (CWoLa)", "CWoLa Hunting", "Supervised" ]
+model_type = [1, 1, 5, 5, 0,0,0, 3, 3] 
 colors = ["g", "b", "r", "gray", "purple", "pink", "orange", "m", "skyblue", "yellow"]
 
 n_points = 200.
@@ -84,26 +84,37 @@ aucs = []
 for idx,f in enumerate(f_models):
     if('%' in f): f = f % sig_idx
     print(idx, f, model_type[idx])
-    if(model_type[idx]  <= 2): #classifier on each jet
-        if(len(f) != 2):
-            j1_model = tf.keras.models.load_model(model_dir + "j1_" + f)
-            j2_model = tf.keras.models.load_model(model_dir + "j2_" + f)
-        else:
-            j1_model = tf.keras.models.load_model(model_dir + f[0])
-            j2_model = tf.keras.models.load_model(model_dir + f[1])
+    if(model_type[idx]  <= 2 or model_type[idx] == 5): #classifier on each jet
+        if(model_type[idx] <= 2):
+            if(len(f) != 2):
+                j1_model = tf.keras.models.load_model(model_dir + "j1_" + f)
+                j2_model = tf.keras.models.load_model(model_dir + "j2_" + f)
+            else:
+                j1_model = tf.keras.models.load_model(model_dir + f[0])
+                j2_model = tf.keras.models.load_model(model_dir + f[1])
 
-        if(model_type[idx] == 0):  #CNN
-            j1_score = j1_model.predict(j1_images, batch_size = 500)
-            j2_score = j2_model.predict(j2_images, batch_size = 500)
-        elif(model_type[idx] == 2): #dense
-            j1_score = j1_model.predict(j1_dense_inputs, batch_size = 500)
-            j2_score = j2_model.predict(j2_dense_inputs, batch_size = 500)
+            if(model_type[idx] == 0):  #CNN
+                j1_score = j1_model.predict(j1_images, batch_size = 500)
+                j2_score = j2_model.predict(j2_images, batch_size = 500)
+            elif(model_type[idx] == 1): #autoencoder
+                j1_reco_images = j1_model.predict(j1_images, batch_size=500)
+                j1_score =  np.mean(np.square(j1_reco_images - j1_images), axis=(1,2))
+                j2_reco_images = j2_model.predict(j2_images, batch_size=500)
+                j2_score =  np.mean(np.square(j2_reco_images -  j2_images), axis=(1,2))
+            elif(model_type[idx] == 2): #dense
+                j1_score = j1_model.predict(j1_dense_inputs, batch_size = 500)
+                j2_score = j2_model.predict(j2_dense_inputs, batch_size = 500)
+        elif(model_type[idx] == 5): #VAE
+            j1_model = VAE(0, model_dir = model_dir + "j1_" +  f)
+            j1_model.load()
+            j1_reco_images, j1_z_mean, j1_z_log_var = j1_model.predict_with_latent(j1_images)
+            j1_score = compute_loss_of_prediction_mse_kl(j1_images, j1_reco_images, j1_z_mean, j1_z_log_var)[0]
+            j2_model = VAE(0, model_dir = model_dir + "j2_" +  f)
+            j2_model.load()
+            j2_reco_images, j2_z_mean, j2_z_log_var = j2_model.predict_with_latent(j2_images)
+            j2_score = compute_loss_of_prediction_mse_kl(j2_images, j2_reco_images, j2_z_mean, j2_z_log_var)[0]
 
-        else: #autoencoder
-            j1_reco_images = j1_model.predict(j1_images, batch_size=500)
-            j1_score =  np.mean(np.square(j1_reco_images - j1_images), axis=(1,2))
-            j2_reco_images = j2_model.predict(j2_images, batch_size=500)
-            j2_score =  np.mean(np.square(j2_reco_images -  j2_images), axis=(1,2))
+
         j1_score = j1_score.reshape(-1)
         j2_score = j2_score.reshape(-1)
         Y = Y.reshape(-1)
@@ -115,25 +126,23 @@ for idx,f in enumerate(f_models):
         aucs.append(auc(bkg_eff, sig_eff))
 
 
-    else: #classifier for both jets
-        if(model_type[idx] == 3): #CNN
-            jj_model = tf.keras.models.load_model(model_dir + f)
-            scores = jj_model.predict(jj_images, batch_size = 1000).reshape(-1)
-            bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, scores)
-            #print('bkg eff 10% ',f,np.percentile(scores,10),len(Y[(scores > np.percentile(scores,10)) & (Y==0)])/len(Y[Y==0]),bkg_eff)
-            sig_effs.append(sig_eff)
-            bkg_effs.append(bkg_eff)
-            aucs.append(auc(bkg_eff, sig_eff))
+    elif(model_type[idx] == 3): #CNN both jets
+        jj_model = tf.keras.models.load_model(model_dir + f)
+        scores = jj_model.predict(jj_images, batch_size = 1000).reshape(-1)
+        bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, scores)
+        #print('bkg eff 10% ',f,np.percentile(scores,10),len(Y[(scores > np.percentile(scores,10)) & (Y==0)])/len(Y[Y==0]),bkg_eff)
+        sig_effs.append(sig_eff)
+        bkg_effs.append(bkg_eff)
+        aucs.append(auc(bkg_eff, sig_eff))
 
-
-        if(model_type[idx] == 4): #Dense
-            jj_model = tf.keras.models.load_model(model_dir + "jj_" + f)
-            X = np.append(j1_dense_inputs, j2_dense_inputs, axis = -1)
-            scores = jj_model.predict(X, batch_size = 1000).reshape(-1)
-            bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, scores)
-            sig_effs.append(sig_eff)
-            bkg_effs.append(bkg_eff)
-            aucs.append(auc(bkg_eff, sig_eff))
+    elif(model_type[idx] == 4): #Dense both jets
+        jj_model = tf.keras.models.load_model(model_dir + "jj_" + f)
+        X = np.append(j1_dense_inputs, j2_dense_inputs, axis = -1)
+        scores = jj_model.predict(X, batch_size = 1000).reshape(-1)
+        bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, scores)
+        sig_effs.append(sig_eff)
+        bkg_effs.append(bkg_eff)
+        aucs.append(auc(bkg_eff, sig_eff))
 
             
 
