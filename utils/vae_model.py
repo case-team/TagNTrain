@@ -14,8 +14,8 @@ class VAE( object ):
         self.input_shape = input_shape
         self.batch_size = 256
         self.kernel_size = 3
-        self.filter_n = 6
-        self.z_size = 10
+        self.filter_n = 32
+        self.z_size = 6
         self.encoder = None
         self.decoder = None
         self.model = None
@@ -54,11 +54,10 @@ class VAE( object ):
 
         x = inputs
         for i in range(3):
-            x = tf.keras.layers.Conv2D(filters=self.filter_n, kernel_size=self.kernel_size, activation='relu', kernel_regularizer=self.regularizer)(x)
-            self.filter_n += 4
+            x = tf.keras.layers.Conv2D(filters=self.filter_n, kernel_size=self.kernel_size, activation='relu', padding = 'same', kernel_regularizer=self.regularizer)(x)
+            self.filter_n -= 8
+            x = tf.keras.layers.MaxPooling2D( pool_size = (2,2), padding = 'same' )( x )
 
-        x = tf.keras.layers.AveragePooling2D()(x)
-        # x = MaxPooling2D( )( x )
 
         # shape info needed to build decoder model
         self.shape_convolved = x.get_shape().as_list()
@@ -66,9 +65,8 @@ class VAE( object ):
         # 3 dense layers
         x = tf.keras.layers.Flatten()(x)
         self.size_convolved = x.get_shape().as_list()
-        x = tf.keras.layers.Dense(self.size_convolved[1] // 17, activation='relu',kernel_regularizer=self.regularizer)(x)  # reduce convolution output
-        x = tf.keras.layers.Dense(self.size_convolved[1] // 42, activation='relu',kernel_regularizer=self.regularizer)(x)  # reduce again
-        #x = Dense(8, activation='relu')(x)
+        x = tf.keras.layers.Dense(128, activation='relu',kernel_regularizer=self.regularizer)(x)  # reduce convolution output
+        x = tf.keras.layers.Dense(32, activation='relu',kernel_regularizer=self.regularizer)(x)  # reduce again
 
         # *****************************
         #         latent space
@@ -93,18 +91,18 @@ class VAE( object ):
     def build_decoder(self):
 
         latent_inputs = tf.keras.layers.Input(shape=(self.z_size,), name='z_sampling')
-        x = tf.keras.layers.Dense(self.size_convolved[1] // 42, activation='relu',kernel_regularizer=self.regularizer)(latent_inputs)  # inflate to input-shape/200
-        x = tf.keras.layers.Dense(self.size_convolved[1] // 17, activation='relu',kernel_regularizer=self.regularizer)(x)  # double size
+        x = tf.keras.layers.Dense(32, activation='relu',kernel_regularizer=self.regularizer)(latent_inputs)  # inflate to input-shape/200
+        x = tf.keras.layers.Dense(128, activation='relu',kernel_regularizer=self.regularizer)(x)  # double size
         x = tf.keras.layers.Dense(self.shape_convolved[1] * self.shape_convolved[2] * self.shape_convolved[3], activation='relu',kernel_regularizer=self.regularizer)(x)
         x = tf.keras.layers.Reshape((self.shape_convolved[1], self.shape_convolved[2], self.shape_convolved[3]))(x)
 
-        x = tf.keras.layers.UpSampling2D()(x)
 
         for i in range(3):
-            self.filter_n -= 4
-            x = tf.keras.layers.Conv2DTranspose(filters=self.filter_n, kernel_size=self.kernel_size, activation='relu',kernel_regularizer=self.regularizer)(x)
+            x = tf.keras.layers.UpSampling2D((2,2))(x)
+            self.filter_n += 8
+            x = tf.keras.layers.Conv2D(filters=self.filter_n, kernel_size=self.kernel_size, activation='relu', padding = 'same', kernel_regularizer=self.regularizer)(x)
 
-        outputs_decoder = tf.keras.layers.Conv2DTranspose(filters=1, kernel_size=self.kernel_size, activation='relu', kernel_regularizer=self.regularizer, padding='same', name='decoder_output')(x)
+        outputs_decoder = tf.keras.layers.Conv2D(filters=1, kernel_size=self.kernel_size, activation='relu', kernel_regularizer=self.regularizer, padding='same', name='decoder_output')(x)
 
         # instantiate decoder model
         decoder = tf.keras.Model(latent_inputs, outputs_decoder, name='decoder')
