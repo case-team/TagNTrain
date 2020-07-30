@@ -83,7 +83,7 @@ print("Signal frac is %.3f \n" % (np.mean(data['label'])))
 
 if(options.model_start == ""):
     print("Creating new model ")
-    my_model = auto_encoder(cnn_shape)
+    my_model = auto_encoder_large(cnn_shape)
     my_model.summary()
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
     my_model.compile(optimizer=myoptimizer,loss= tf.keras.losses.mean_squared_error)
@@ -92,7 +92,7 @@ else:
     my_model = load_model(options.model_start)
 
 
-early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=1e-6, patience=5, verbose=1, mode='min', baseline=None)
+early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1, mode='min', baseline=None)
 cbs = [tf.keras.callbacks.History(), early_stop]
 
 

@@ -11,7 +11,7 @@ f_sig = "../data/WkkToWRadionToWWW_M2500-R0-08.h5" #3
 f_bkg = "../data/QCD_only.h5"
 j_label = "j2_"
 sig_idx = 3
-plot_name = "%ss%i_roc.png" %(j_label, sig_idx)
+plot_name = "%ss%i_roc_v2.png" %(j_label, sig_idx)
 
 m_low = 2250.
 m_high = 2750.
@@ -25,10 +25,13 @@ model_dir = "../models/BB1_test_june/"
 
 #model type: 0 is CNN, 1 is autoencoder, 2 is dense network, 5 is VAE
 
-#f_models = ["j1_autoencoder.h5",  "j1_autoencoder_s%i.h5", "j1_vae/", "j1_vae_s%i/","j1_cwola_hunting_s%i.h5", "j1_TNT0_s%i.h5","j1_TNT0_s%i_v2.h5", ]
-f_models = ["j2_autoencoder.h5",  "j2_autoencoder_s%i.h5", "j2_vae/", "j2_vae_s%i/","j2_cwola_hunting_s%i.h5", "j2_TNT0_s%i.h5","j2_TNT0_s%i_v2.h5", ]
-labels = ["Auto Encoder (train all)", "Auto Encoder (train sidebands)", "VAE (train all)", "VAE (train sidebands)", "CWoLa Hunting (One Jet)", "TNT (AE)", "TNT (CWoLa)"] #, "Cwola Hunting (1 Jet)"]
-model_type = [1, 1, 5, 5, 0, 0, 0]
+#f_models = ["j1_autoencoder.h5",  "j1_autoencoder_v2_s%i.h5", "j1_vae/", "j1_vae_v2_s%i/","j1_cwola_hunting_s%i.h5", "j1_TNT0_s%i.h5","j1_TNT0_s%i_v2.h5", ]
+#f_models = ["j2_autoencoder.h5",  "j2_autoencoder_v2_s%i.h5", "j2_vae/", "j2_vae_v2_s%i/","j2_cwola_hunting_s%i.h5", "j2_TNT0_s%i.h5","j2_TNT0_s%i_v2.h5", ]
+#labels = ["Auto Encoder (train all)", "Auto Encoder V2 (train sidebands)", "VAE (train all)", "VAE V2 (train sidebands)", "CWoLa Hunting (One Jet)", "TNT (AE)", "TNT (CWoLa)"] #, "Cwola Hunting (1 Jet)"]
+#f_models = ["j1_autoencoder.h5",  "j1_autoencoder_s%i.h5", "j1_vae/", "j1_vae_s%i/", "j1_autoencoder_v2.h5",  "j1_autoencoder_v2_s%i.h5", "j1_vae_v2/", "j1_vae_v2_s%i/",]
+f_models = ["j2_autoencoder.h5",  "j2_autoencoder_s%i.h5", "j2_vae/", "j2_vae_s%i/", "j2_autoencoder_v2.h5",  "j2_autoencoder_v2_s%i.h5", "j2_vae_v2/", "j2_vae_v2_s%i/",]
+labels = ["AE (train all)", "AE (train sidebands)", "VAE (train all)", "VAE (train sidebands)", "AE V2 (train all)", "AE V2 (train sidebands)", "VAE V2 (train all)", "VAE V2 (train sidebands)"]
+model_type = [1, 1, 5, 5, 1,1,5,5]
 
 
 colors = ["g", "b", "r", "gray", "purple", "pink", "orange", "m", "skyblue", "yellow"]
@@ -51,6 +54,8 @@ else:
     n_bkg = 1000000
     sig_start = 20000
     sig_stop = -1
+    if(sig_idx == 1):
+        sig_stop = 30000
     #sig_stop = 25000
     d_bkg = DataReader(f_bkg, keys = keys, signal_idx = -1, start = bkg_start, stop = bkg_start + n_bkg, m_low = m_low, m_high = m_high )
     d_bkg.read()
