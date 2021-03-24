@@ -10,8 +10,9 @@ from scipy.stats import entropy
 from sklearn.utils import shuffle as sk_shuffle
 
 class RocCallback(tf.keras.callbacks.Callback):
-    def __init__(self,training_data,validation_data, extra_label = ""):
+    def __init__(self,training_data,validation_data, extra_label = "", freq = 5):
         self.extra_label = extra_label
+        self.freq = freq
         self.x = training_data[0]
         self.y = training_data[1]
         self.x_val = validation_data[0]
@@ -35,14 +36,26 @@ class RocCallback(tf.keras.callbacks.Callback):
         return
 
     def on_epoch_end(self, epoch, logs={}):
+        if(epoch % self.freq != 0):
+            return
         roc_train = roc_val = 0.
+        msg = "\r%s" % self.extra_label
         if(not self.skip_train):
             y_pred_train = self.model.predict_proba(self.x)
-            roc_train = roc_auc_score(self.y, y_pred_train)
+            mask = ~np.isnan(y_pred_train)
+            if(y_pred_train[mask].shape[0] > 1000):
+                roc_train = roc_auc_score(self.y[mask], y_pred_train[mask])
+                phrase = " roc-auc_train: %s" % str(round(roc_train,4))
+                msg += phrase
         if(not self.skip_val):
             y_pred_val = self.model.predict_proba(self.x_val)
-            roc_val = roc_auc_score(self.y_val, y_pred_val)
-        print('\r%s roc-auc_train: %s - roc-auc_val: %s' % (self.extra_label, str(round(roc_train,4)),str(round(roc_val,4))),end=100*' '+'\n')
+            mask = ~np.isnan(y_pred_val)
+            if(y_pred_val[mask].shape[0] > 1000):
+                roc_val = roc_auc_score(self.y_val[mask], y_pred_val[mask])
+                phrase = " roc-auc_val: %s" % str(round(roc_val,4))
+                msg += phrase
+        print(msg, end =100*' ' + '\n')
+        #print('\r%s roc-auc_train: %s - roc-auc_val: %s' % (self.extra_label, str(round(roc_train,4)),str(round(roc_val,4))),end=100*' '+'\n')
         return
 
     def on_batch_begin(self, batch, logs={}):
@@ -51,6 +64,19 @@ class RocCallback(tf.keras.callbacks.Callback):
     def on_batch_end(self, batch, logs={}):
         return
 
+
+def make_selection(j1_scores, j2_scores, percentile):
+# make a selection with a given efficiency using both scores (and)
+    n_points = 400
+    j1_threshs = [np.percentile(j1_scores,i) for i in np.arange(0., 100., 100./n_points)]
+    j2_threshs = [np.percentile(j2_scores,i) for i in np.arange(0., 100., 100./n_points)]
+
+    combined_effs = np.array([np.mean((j1_scores > j1_threshs[i]) & (j2_scores > j2_threshs[i])) for i in range(n_points)])
+    cut_idx = np.argwhere(combined_effs < (100. - percentile)/100.)[0][0]
+    mask = (j1_scores > j1_threshs[cut_idx]) & (j2_scores > j2_threshs[cut_idx])
+    print("Cut idx %i, eff %.3e, j1_cut %.3e, j2_cut %.3e " %(cut_idx, combined_effs[cut_idx], j1_threshs[cut_idx], j2_threshs[cut_idx]))
+    print(np.mean(mask))
+    return mask
 
 def print_signal_fractions(y_true, y):
     #compute true signal fraction in signal-rich region
@@ -177,3 +203,62 @@ class AdditionalValidationSets(tf.keras.callbacks.Callback):
                 print("%s   %.4f " % (valuename, result))
                 self.history.setdefault(valuename, []).append(result)
             print("\n")
+
+def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=None, j1_dense_inputs=None, j2_dense_inputs=None, batch_size = 512):
+
+    if(model_type <= 2):
+        if(len(model_name) != 2):
+            if('/' not in model_name):
+                j1_fname = model_dir + "j1_" + model_name
+                j2_fname = model_dir + "j2_" + model_name
+            else:
+                ins_idx = model_name.rfind('/')+1
+                j1_fname = model_dir + model_name[:ins_idx] + "j1_" + model_name[ins_idx:]
+                j2_fname = model_dir + model_name[:ins_idx] + "j2_" + model_name[ins_idx:]
+            print(j1_fname, j2_fname)
+            j1_model = tf.keras.models.load_model(j1_fname)
+            j2_model = tf.keras.models.load_model(j2_fname)
+        else:
+            j1_model = tf.keras.models.load_model(model_dir + model_name[0])
+            j2_model = tf.keras.models.load_model(model_dir + model_name[1])
+
+        if(model_type == 0):  #cnn
+            j1_score = j1_model.predict(j1_images, batch_size = batch_size)
+            j2_score = j2_model.predict(j2_images, batch_size = batch_size)
+        elif(model_type == 1): #autoencoder
+            j1_reco_images = j1_model.predict(j1_images, batch_size=batch_size)
+            j1_score =  np.mean(np.square(j1_reco_images - j1_images), axis=(1,2))
+            j2_reco_images = j2_model.predict(j2_images, batch_size=batch_size)
+            j2_score =  np.mean(np.square(j2_reco_images -  j2_images), axis=(1,2))
+        elif(model_type == 2): #dense
+            j1_score = j1_model.predict(j1_dense_inputs, batch_size = batch_size)
+            j2_score = j2_model.predict(j2_dense_inputs, batch_size = batch_size)
+    elif(model_type == 5): #vae
+        j1_model = vae(0, model_dir = model_dir + "j1_" +  model_name)
+        j1_model.load()
+        j1_reco_images, j1_z_mean, j1_z_log_var = j1_model.predict_with_latent(j1_images)
+        j1_score = compute_loss_of_prediction_mse_kl(j1_images, j1_reco_images, j1_z_mean, j1_z_log_var)[0]
+        j2_model = vae(0, model_dir = model_dir + "j2_" +  model_name)
+        j2_model.load()
+        j2_reco_images, j2_z_mean, j2_z_log_var = j2_model.predict_with_latent(j2_images)
+        j2_score = compute_loss_of_prediction_mse_kl(j2_images, j2_reco_images, j2_z_mean, j2_z_log_var)[0]
+    else:
+        print("Wrong model type for jet_scores")
+        return None
+
+    return j1_score.reshape(-1), j2_score.reshape(-1)
+
+def get_jj_scores(model_dir, model_name, model_type, jj_images = None, jj_dense_inputs = None, batch_size = 512):
+    if(model_type == 3): #CNN both jets
+        jj_model = tf.keras.models.load_model(model_dir + model_name)
+        scores = jj_model.predict(jj_images, batch_size = batch_size).reshape(-1)
+
+    elif(model_type == 4): #Dense both jets
+        jj_model = tf.keras.models.load_model(model_dir + model_name)
+        scores = jj_model.predict(jj_dense_inputs, batch_size = batch_size).reshape(-1)
+    else:
+        print("Wrong model type for jj scores!")
+        return None
+
+    return scores
+

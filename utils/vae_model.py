@@ -1,5 +1,5 @@
 import os
-import matplotlib.pyplot as plt
+from .PlotUtils import *
 import pathlib
 
 import tensorflow as tf

@@ -13,11 +13,15 @@ parser.add_option("--model_name", default='', help="Name of model to load")
 parser.add_option("--model_type", type='int', default=0, help="0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets)")
 parser.add_option("-l", "--plot_label", default="", help="what to call the plots")
 parser.add_option("--num_data", type='int', default=-1)
+parser.add_option("--batch_start", type='int', default=-1, help="Train over multiple batches of dataset. Starting batch")
+parser.add_option("--batch_stop", type='int', default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
 parser.add_option("--data_start", type='int', default=0)
 parser.add_option("--mjj_low", type='int', default = -1,  help="Low mjj cut value")
 parser.add_option("--mjj_high", type='int', default = -1, help="High mjj cut value")
 parser.add_option("-s", "--signal", type='int', default=1, help="Which signal type to use ")
 parser.add_option("--sig_frac",  type='float', default=-1., help="Filter signal to this amount (negative to do nothing)")
+parser.add_option("--mjj_sig", type='int', default = -1, help="Mjj value of signal (used for filtering in correct mass region)")
+parser.add_option("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays")
 
 
 (options, args) = parser.parse_args()
@@ -31,6 +35,11 @@ model_dir = options.model_dir
 model_name = options.model_name
 model_type = options.model_type
 plot_label = options.plot_label
+if( len(plot_label) == 0):
+    print("Must provide plot label (-l, --plot_label)")
+    exit(1)
+if(plot_label[-1] != '_'):
+    plot_label += '_'
 
 num_data = options.num_data
 data_start = options.data_start
@@ -57,7 +66,8 @@ if(options.model_name != ""):
     keys = ['j1_images', 'j2_images', 'jet_kinematics']
 else: 
     keys = ['jet_kinematics']
-data = DataReader(fin, signal_idx = options.signal, sig_frac = options.sig_frac, keys = keys, start = data_start, stop = data_start + num_data )
+data = DataReader(fin, signal_idx = options.signal, sig_frac = options.sig_frac, keys = keys, start = data_start, stop = data_start + num_data, hadronic_only = options.hadronic_only, 
+        batch_start = options.batch_start, batch_stop = options.batch_stop, m_sig = options.mjj_sig)
 data.read()
 Y = data['label'].reshape(-1)
 mjj = data['jet_kinematics'][:,0]
@@ -121,6 +131,7 @@ overall_S = mjj[sig_events].shape[0]
 overall_B = mjj[bkg_events].shape[0]
 
 print("Mean signal mjj is %.0f" % mjj_sig);
+print("Mjj window %f to %f " % (m_low, m_high))
 print("Before selection: %i signal events and %i bkg events in mjj window" % (S,B))
 print("S/B %f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
 print("Sig frac (overall) %f " % (float(overall_S)/overall_B))

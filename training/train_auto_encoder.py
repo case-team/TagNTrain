@@ -14,11 +14,15 @@ parser.add_option("--plot_dir", default='../plots/', help="Directory to output p
 parser.add_option("-o", "--model_name", default='auto_encoder.h5', help="What to name the model")
 parser.add_option("--num_epoch", type = 'int', default=100, help="How many epochs to train for")
 parser.add_option("--data_start", type='int', default=0, help="Starting event")
-parser.add_option("--num_data", type='int', default=200000, help="How many events to use for training (before filtering)")
+parser.add_option("--num_data", type='int', default=-1, help="How many events to use for training (before filtering)")
+parser.add_option("--batch_start", type='int', default=-1, help="Train over multiple batches of dataset. Starting batch")
+parser.add_option("--batch_stop", type='int', default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
 parser.add_option("--model_start", default="", help="Starting point for model (empty string for new model)")
 parser.add_option("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
-parser.add_option("--mjj_low", type='int', default = 3300,  help="Low mjj cut value")
-parser.add_option("--mjj_high", type='int', default = 3700, help="High mjj cut value")
+parser.add_option("--mjj_low", type='int', default = 2250,  help="Low mjj cut value")
+parser.add_option("--mjj_high", type='int', default = 2750, help="High mjj cut value")
+parser.add_option("--d_eta", type='float', default = -1, help="Delta eta cut")
+parser.add_option("--norm_img", default = '', help="h5 file with avg and std dev of image")
 
 parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
 
@@ -49,20 +53,29 @@ else:
     print("Training jet not 1 or 2! Exiting")
     exit(1)
 
+if(options.num_data == -1):
+    data_stop = -1
+else:
+    data_stop = options.data_start + options.num_data
+
 keep_low = -1.
 keep_high = -1.
 if(not options.no_mjj_cut):
     window_size = (options.mjj_high - options.mjj_low)/2.
     keep_low = options.mjj_low - window_size
     keep_high = options.mjj_high + window_size
-    print("Requiring mjj window from %.0f to %.0f \n" % (options.mjj_low, options.mjj_high))
+    print("Requiring mjj window from %.0f to %.0f \n" % (keep_low, keep_high))
+
 
 
 import time
 keys  = [x_key, 'mjj']
 t1 = time.time()
-data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-         val_frac = val_frac, m_high = keep_high, m_low = keep_low)
+data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = data_stop, 
+         val_frac = val_frac, m_high = keep_high, m_low = keep_low, batch_start = options.batch_start, batch_stop = options.batch_stop, norm_img = options.norm_img, 
+         eta_cut = options.d_eta)
+
+
 data.read()
 t2 = time.time()
 print("load time  %s " % (t2 -t1))
@@ -89,7 +102,7 @@ if(options.model_start == ""):
     my_model.compile(optimizer=myoptimizer,loss= tf.keras.losses.mean_squared_error)
 else:
     print("Starting with model from %s " % model_start)
-    my_model = load_model(options.model_start)
+    my_model = tf.keras.models.load_model(options.model_start)
 
 
 early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1, mode='min', baseline=None)
@@ -115,3 +128,4 @@ history = my_model.fit(t_data,
 
 print("Saving model to : ", options.model_name)
 my_model.save(options.model_name)
+data.cleanup()

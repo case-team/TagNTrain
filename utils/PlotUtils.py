@@ -2,10 +2,20 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import cm
+from matplotlib import gridspec
 from sklearn.metrics import roc_curve,auc
+import scipy.stats
 import numpy as np
 
 fig_size = (12,9)
+
+
+def print_image(a):
+    for i in range(a.shape[0]):
+        for j in range(a.shape[1]):
+            print("%5.3e" % a[i,j], end = ' ')
+        print("\n", end='')
+    print("\n")
 
 def plot_training(hist, fname =""):
     #plot trianing and validation loss
@@ -35,6 +45,8 @@ def plot_training(hist, fname =""):
 def make_roc_curve(classifiers, y_true, colors = None, logy=False, labels = None, save=False, fname=""):
     plt.figure(figsize=fig_size)
 
+    fs = 18
+    fs_leg = 16
     for idx,scores in enumerate(classifiers):
 
         fpr, tpr, thresholds = roc_curve(y_true, scores)
@@ -55,17 +67,17 @@ def make_roc_curve(classifiers, y_true, colors = None, logy=False, labels = None
 
 
     plt.xlim([0, 1.0])
-    plt.xlabel('Signal Efficiency')
+    plt.xlabel('Signal Efficiency', fontsize=fs)
     if(logy): 
         plt.ylim([1., 1e4])
         plt.yscale('log')
-        plt.ylabel('QCD Rejection Rate')
+        plt.ylabel('QCD Rejection Rate', fontsize=fs)
     else: 
         plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
-        plt.xlabel('QCD Efficiency')
+        plt.xlabel('QCD Efficiency', fontsize=fs)
         plt.ylim([0, 1.0])
 
-    plt.legend(loc="lower right")
+    plt.legend(loc="upper right", fontsize = fs_leg)
     if(save): 
         print("Saving roc plot to %s" % fname)
         plt.savefig(fname)
@@ -94,7 +106,32 @@ def make_histogram(entries, labels, colors, xaxis_label, title, num_bins, logy =
     #else: plt.show(block=False)
     return fig
 
-def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_bins, logy = False,  normalize = False, stacked = False, save=False, h_type = 'step', 
+def make_profile_hist(x,y, x_bins, xaxis_label="", yaxis_label="", fname = "", fontsize = 16, logy=False):
+
+    x_bins_ids = np.digitize(x, bins = x_bins)
+    bin_centers = 0.5 * (x_bins[:-1] + x_bins[1:])
+    bin_width = x_bins[1] - x_bins[0]
+    y_means = scipy.stats.binned_statistic(x, y, bins = x_bins, statistic = "mean").statistic
+    y_sem = scipy.stats.binned_statistic(x, y, bins = x_bins, statistic=scipy.stats.sem).statistic
+
+    fig = plt.figure(figsize=fig_size)
+    plt.errorbar(x=bin_centers, y=y_means, xerr=bin_width, yerr=y_sem, linestyle='none')
+
+    plt.xlabel(xaxis_label, fontsize =fontsize)
+    plt.tick_params(axis='x', labelsize=fontsize)
+    if(logy): plt.yscale('log')
+    if(yaxis_label != ""):
+        plt.ylabel(yaxis_label, fontsize=fontsize)
+        plt.tick_params(axis='y', labelsize=fontsize)
+    if(fname != ""): 
+        print("saving fig %s" %fname)
+        plt.savefig(fname)
+    #else: plt.show(block=False)
+    return fig
+
+
+
+def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_bins, logy = False,  normalize = False, save=False, h_type = 'step', 
         h_range = None, fontsize = 16, fname="", yaxis_label = ""):
     alpha = 1.
     n_stacks = len(stacks)
@@ -110,26 +147,32 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
     plt.title(title, fontsize=fontsize)
     plt.legend(loc='upper right', fontsize = fontsize)
     if(save): 
-        plt.savefig(fname)
         print("saving fig %s" %fname)
+        plt.savefig(fname)
     #else: plt.show(block=False)
     return fig
 
 def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, weights = None, fname=""):
     h_type= 'step'
     alpha = 1.
-    fig, (ax1, ax2) = plt.subplots(nrows=2)
-    ns, bins, patches  = ax1.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, 
+    fig = plt.figure(figsize = fig_size)
+    gs = gridspec.GridSpec(2,1, height_ratios = [3,1])
+    ax0 =  plt.subplot(gs[0])
+    ns, bins, patches  = ax0.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, 
             density = normalize, weights = weights, histtype=h_type)
+    plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
     max_rw = 5.
-    ax1.legend(loc='upper right')
+    ax0.legend(loc='upper right')
     n0 = np.clip(ns[0], 1e-8, None)
     n1 = np.clip(ns[1], 1e-8, None)
     ratio =  n0/ n1
     ratio = np.clip(ratio, 1./max_rw, max_rw)
-    ax2.scatter(bins[:-1], ratio, alpha=alpha)
-    ax2.set_ylabel("Ratio")
-    ax2.set_xlabel(axis_label)
+
+    ax1 = plt.subplot(gs[1])
+    ax1.scatter(bins[:-1], ratio, alpha=alpha)
+    plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
+    ax1.set_ylabel("Ratio")
+    ax1.set_xlabel(axis_label)
 
     if(save): 
         plt.savefig(fname)
