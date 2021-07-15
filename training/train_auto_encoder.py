@@ -4,36 +4,14 @@ from utils.TrainingUtils import *
 from optparse import OptionParser
 from optparse import OptionGroup
 
+parser = input_options()
+(options, args) = parser.parse_args()
 
-
-
-parser = OptionParser()
-parser = OptionParser(usage="usage: %prog analyzer outputfile [options] \nrun with --help to get list of options")
-parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input file for training.")
-parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
-parser.add_option("-o", "--model_name", default='auto_encoder.h5', help="What to name the model")
-parser.add_option("--num_epoch", type = 'int', default=100, help="How many epochs to train for")
-parser.add_option("--data_start", type='int', default=0, help="Starting event")
-parser.add_option("--num_data", type='int', default=-1, help="How many events to use for training (before filtering)")
-parser.add_option("--batch_start", type='int', default=-1, help="Train over multiple batches of dataset. Starting batch")
-parser.add_option("--batch_stop", type='int', default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
-parser.add_option("--model_start", default="", help="Starting point for model (empty string for new model)")
-parser.add_option("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
-parser.add_option("--mjj_low", type='int', default = 2250,  help="Low mjj cut value")
-parser.add_option("--mjj_high", type='int', default = 2750, help="High mjj cut value")
-parser.add_option("--d_eta", type='float', default = -1, help="Delta eta cut")
-parser.add_option("--norm_img", default = '', help="h5 file with avg and std dev of image")
-
-parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
-
-parser.add_option("--sig_idx", type = 'int', default = 1,  help="What index of signal to use")
-parser.add_option("-s", "--sig_frac", type = 'float', default = 0.01,  help="Reduce signal to this amount (default is 0.01)")
 
 (options, args) = parser.parse_args()
 
 
-val_frac = 0.1
-batch_size = 256
+
 
 
 
@@ -62,8 +40,11 @@ keep_low = -1.
 keep_high = -1.
 if(not options.no_mjj_cut):
     window_size = (options.mjj_high - options.mjj_low)/2.
-    keep_low = options.mjj_low - window_size
-    keep_high = options.mjj_high + window_size
+    window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
+    window_low_size = window_frac*options.mjj_low / (1 + window_frac)
+    window_high_size = window_frac*options.mjj_high / (1 - window_frac)
+    keep_low = options.mjj_low - window_low_size
+    keep_high = options.mjj_high + window_high_size
     print("Requiring mjj window from %.0f to %.0f \n" % (keep_low, keep_high))
 
 
@@ -71,61 +52,98 @@ if(not options.no_mjj_cut):
 import time
 keys  = [x_key, 'mjj']
 t1 = time.time()
-data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = data_stop, 
-         val_frac = val_frac, m_high = keep_high, m_low = keep_low, batch_start = options.batch_start, batch_stop = options.batch_stop, norm_img = options.norm_img, 
-         eta_cut = options.d_eta)
-
+data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
+        m_low = keep_low, m_high = keep_high, batch_start = options.batch_start, batch_stop = options.batch_stop , hadronic_only = options.hadronic_only, 
+        m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta, ptsort = options.ptsort, randsort = options.randsort)
 
 data.read()
-t2 = time.time()
-print("load time  %s " % (t2 -t1))
-
 mjj = data['mjj']
 mjj_cut = (mjj < options.mjj_low) | (mjj > options.mjj_high)
 data.apply_mask(mjj_cut)
 
-if(val_frac > 0.):
-    val_mjj = data['val_mjj']
+if(options.val_batch_start >0 and options.val_batch_stop > 0):
+    do_val = True
+    val_data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
+        m_low = keep_low, m_high = keep_high, batch_start = options.val_batch_start, batch_stop = options.val_batch_stop, 
+        m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta, ptsort = options.ptsort, randsort = options.randsort)
+    val_data.read()
+    val_mjj = val_data['mjj']
     val_mjj_cut = (val_mjj < options.mjj_low) | (val_mjj > options.mjj_high)
-    data.apply_mask(val_mjj_cut, to_training = False)
+    val_data.apply_mask(val_mjj_cut)
+else:
+    do_val = False
+    val_data = None
+
+
+t2 = time.time()
+print("load time  %s " % (t2 -t1))
+
+
 
 mjj_cut = data['mjj']
 
 
 print("Signal frac is %.3f \n" % (np.mean(data['label'])))
 
-if(options.model_start == ""):
-    print("Creating new model ")
-    my_model = auto_encoder_large(cnn_shape)
-    my_model.summary()
-    myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
-    my_model.compile(optimizer=myoptimizer,loss= tf.keras.losses.mean_squared_error)
-else:
-    print("Starting with model from %s " % model_start)
-    my_model = tf.keras.models.load_model(options.model_start)
 
 
-early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1, mode='min', baseline=None)
-cbs = [tf.keras.callbacks.History(), early_stop]
+cbs = [tf.keras.callbacks.History()]
+myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
 
 # train model
-t_data = data.gen(x_key,x_key, batch_size = batch_size)
+t_data = data.gen(x_key,x_key, batch_size = options.batch_size)
 v_data = None
-if(val_frac > 0.): 
-    v_data = data.gen('val_'+x_key,'val_'+x_key, batch_size = batch_size)
+if(do_val): 
+    nVal = val_data.nTrain
+    v_data = val_data.gen(x_key,x_key, batch_size = options.batch_size)
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1, mode='min', baseline=None)
+    cbs.append(early_stop)
+else:
+    nVal = 0
 
-print("Will train on %i events, validate on %i events" % (data.nTrain, data.nVal))
+print("Will train on %i events, validate on %i events" % (data.nTrain, nVal))
 #print(np.mean(data['val_label']))
 #print(np.mean(data['label']))
 
-history = my_model.fit(t_data, 
-        epochs = options.num_epoch, 
-        validation_data = v_data,
-        callbacks = cbs,
-        verbose = 2 )
+model_list = []
+histories = []
 
+print("Will train %i models" % options.num_models)
+for model_idx in range(options.num_models):
+    print("Creating model %i" % model_idx)
+    model = auto_encoder_large(cnn_shape)
+    model.compile(optimizer=myoptimizer,loss= tf.keras.losses.mean_squared_error)
+    if(model_idx == 0): model.summary()
+
+    history = model.fit(t_data, 
+            epochs = options.num_epoch, 
+            validation_data = v_data,
+            callbacks = cbs,
+            verbose = 2 )
+
+
+    histories.append(history)
+    model_list.append(model)
+
+
+if(options.num_models == 1):
+    best_model = model_list[0]
+else:
+    min_loss = 9999999
+    best_i = -1
+
+    for model_idx in range(options.num_models):
+        #preds = model_list[model_idx].predict(val_data[x_key])
+        #loss = np.mean(np.mean(np.square(val_data[x_key] - preds), axis = (1,2)).reshape(-1))
+        loss = histories[model_idx].history['val_loss'][-1]
+        print("Model %i,  val loss %.4f " % (model_idx, loss))
+        if(loss < min_loss):
+            min_loss = loss
+            best_i = model_idx
+    print("Selecting model %i " % best_i)
+    best_model = model_list[best_i]
 
 print("Saving model to : ", options.model_name)
-my_model.save(options.model_name)
+best_model.save(options.model_name)
 data.cleanup()

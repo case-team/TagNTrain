@@ -42,7 +42,7 @@ def plot_training(hist, fname =""):
         #plt.show(block=False)
 
 
-def make_roc_curve(classifiers, y_true, colors = None, logy=False, labels = None, save=False, fname=""):
+def make_roc_curve(classifiers, y_true, colors = None, logy=True, labels = None, fname=""):
     plt.figure(figsize=fig_size)
 
     fs = 18
@@ -69,20 +69,70 @@ def make_roc_curve(classifiers, y_true, colors = None, logy=False, labels = None
     plt.xlim([0, 1.0])
     plt.xlabel('Signal Efficiency', fontsize=fs)
     if(logy): 
-        plt.ylim([1., 1e4])
         plt.yscale('log')
-        plt.ylabel('QCD Rejection Rate', fontsize=fs)
-    else: 
-        plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
-        plt.xlabel('QCD Efficiency', fontsize=fs)
-        plt.ylim([0, 1.0])
+    plt.ylim([1., 1e4])
+    plt.ylabel('QCD Rejection Rate', fontsize=fs)
 
+    plt.ylabel('QCD Rejection Rate', fontsize=fs)
     plt.legend(loc="upper right", fontsize = fs_leg)
-    if(save): 
+    if(fname != ""): 
         print("Saving roc plot to %s" % fname)
         plt.savefig(fname)
     #else: 
         #plt.show(block=False)
+
+def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None, eff_min = 1e-3, ymax = -1, fname=""):
+    plt.figure(figsize=fig_size)
+
+    plt.figure(figsize=fig_size)
+
+    fs = 18
+    fs_leg = 16
+
+    sic_max = 0.
+
+
+
+    for idx,scores in enumerate(classifiers):
+        fpr, tpr, thresholds = roc_curve(y_true, scores)
+        fpr= np.clip(fpr, 1e-8, 1.)
+        tpr = np.clip(tpr, 1e-8, 1.)
+
+        mask = tpr > eff_min
+
+        xs = fpr[mask]
+        ys = tpr[mask]/np.sqrt(xs)
+
+        sic_max = max(np.amax(ys), sic_max)
+
+
+        
+
+
+        lbl = 'auc'
+        clr = 'navy'
+        if(labels != None): lbl = labels[idx]
+        if(colors != None): clr = colors[idx]
+        print(lbl, "max sic: ", np.amax(ys))
+        plt.plot(xs, ys, lw=2, color=clr, label='%s' % lbl)
+
+
+    
+    plt.xlim([eff_min, 1.0])
+    if(ymax < 0):
+        ymax = sic_max
+        
+    plt.ylim([0,ymax])
+    plt.xscale('log')
+    plt.xlabel('Background Efficiency', fontsize = fs)
+    plt.ylabel('Significance Improvement', fontsize = fs)
+    plt.tick_params(axis='x', labelsize=fs_leg)
+    plt.tick_params(axis='y', labelsize=fs_leg)
+    plt.grid(axis = 'y', linestyle='--', linewidth = 0.5)
+    plt.legend(loc="best", fontsize= fs_leg)
+    if(fname != ""):
+        plt.savefig(fname)
+        print("Saving file to %s " % fname)
 
 def make_histogram(entries, labels, colors, xaxis_label, title, num_bins, logy = False, normalize = False, stacked = False, save=False, h_type = 'step', 
         h_range = None, fontsize = 16, fname="", yaxis_label = ""):
@@ -152,27 +202,76 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
     #else: plt.show(block=False)
     return fig
 
-def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, weights = None, fname=""):
+def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, weights = None, fname="", ratio_range = -1, errors = False):
     h_type= 'step'
     alpha = 1.
+    fontsize = 16
     fig = plt.figure(figsize = fig_size)
     gs = gridspec.GridSpec(2,1, height_ratios = [3,1])
     ax0 =  plt.subplot(gs[0])
+
+    low = np.amin([np.amin(entries[0]), np.amin(entries[1])])
+    high = np.amax([np.amax(entries[0]), np.amax(entries[1])])
+    if(h_range == None):
+        h_range = (low, high)
+
     ns, bins, patches  = ax0.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, 
             density = normalize, weights = weights, histtype=h_type)
-    plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
+
+    plt.xlim([low, high])
     max_rw = 5.
     ax0.legend(loc='upper right')
+    plt.title(title, fontsize=fontsize)
     n0 = np.clip(ns[0], 1e-8, None)
     n1 = np.clip(ns[1], 1e-8, None)
     ratio =  n0/ n1
     ratio = np.clip(ratio, 1./max_rw, max_rw)
 
+    ratio_err = None
+    #if(errors):
+    #    if(weights != None):
+    #        norm0 = np.sum(weights[0])
+    #        norm1 = np.sum(weights[1])
+    #    else:
+    #        norm0 = entries[0].shape[0]
+    #        norm1 = entries[1].shape[0]
+    #    err0  = np.sqrt(norm0*n0)/norm0
+    #    err1  = np.sqrt(norm1*n1)/norm1
+    #    ratio_err = ratio * np.sqrt((err0/n0)**2 + (err1/n1)**2)
+
+    bin_size = bins[1] - bins[0]
+
+    if(errors):
+        if(weights != None):
+            w0 = weights[0]**2
+            w1 = weights[1]**2
+            norm0 = np.sum(weights[0])*bin_size
+            norm1 = np.sum(weights[1])*bin_size
+        else:
+            w0 = w1 = None
+            norm0 = entries[0].shape[0]*bin_size
+            norm1 = entries[1].shape[0]*bin_size
+
+        err0 = np.sqrt(np.histogram(entries[0], bins=bins, weights=w0)[0])/norm0
+        err1 = np.sqrt(np.histogram(entries[1], bins=bins, weights=w1)[0])/norm1
+        err0_alt  = np.sqrt(norm0*n0)/norm0
+        err_alt1  = np.sqrt(norm1*n1)/norm1
+
+
+        ratio_err = ratio * np.sqrt((err0/n0)**2 + (err1/n1)**2)
+
+    bincenters = 0.5*(bins[1:]+bins[:-1]) 
     ax1 = plt.subplot(gs[1])
-    ax1.scatter(bins[:-1], ratio, alpha=alpha)
+
+    ax1.errorbar(bincenters, ratio, yerr = ratio_err, alpha=alpha, fmt='ko')
     plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
     ax1.set_ylabel("Ratio")
     ax1.set_xlabel(axis_label)
+
+    if(ratio_range > 0):
+        plt.ylim([1-ratio_range, 1+ratio_range])
+
+    plt.grid(axis='y')
 
     if(save): 
         plt.savefig(fname)
@@ -206,5 +305,6 @@ def make_scatter_plot(x, y, color, axis_names, fname= ""  ):
     plt.tick_params(axis='y', labelsize=12)
     plt.tick_params(axis='x', labelsize=12)
     if(fname != ""):
+        print("saving %s" % fname)
         plt.savefig(fname)
 

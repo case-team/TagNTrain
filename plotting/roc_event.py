@@ -3,14 +3,14 @@ sys.path.append('..')
 from utils.TrainingUtils import *
 import h5py
 
-fin = "../data/BB_v2_3500_images/BB_images_testset.h5"
-sig_idx = 4
-roc_plot_name = "s%i_eta_cut_event_roc.png" % sig_idx
-sic_plot_name = "s%i_eta_cut_event_sic.png" % sig_idx
-m_low = 3150.
-m_high = 3850.
+fin = "../data/BB_v2_2500_images/BB_images_testset.h5"
+sig_idx = 1
+roc_plot_name = "s%i_event_roc_CWoLa.png" % sig_idx
+sic_plot_name = "s%i_event_sic_CWoLa.png" % sig_idx
+m_low = 2250.
+m_high = 2750.
 
-eta_cut = 1.1
+eta_cut = -1
 
 
 single_file = True
@@ -18,8 +18,8 @@ hadronic_only = True
 
 sic_max = 5
 
-plot_dir = "../plots/BB_v2_M3500/mar15/"
-model_dir = "../models/BB_v2_M3500/"
+plot_dir = "../plots/BB_v2_M2500/april9/"
+model_dir = "../models/BB_v2_M2500/"
 
 
 #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
@@ -48,10 +48,16 @@ model_dir = "../models/BB_v2_M3500/"
 #]
 #model_type = [1,2,2,2,2, 2,2, 2,2, 2,2,2,2,2] 
 
-f_models = ["autoencoder_m3500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]
+#f_models = [ "autoencoder_m2500.h5" ,  "sep21_dense/TNT1_s1.h5", "jan27/dense_sig05_TNT1_s%i.h5",   "jan27/dense_sig025_TNT1_s%i.h5",  "jan27/dense_sig01_TNT1_s%i.h5"]
+f_models = ["jan27/cwola_hunting_dense_sig05_s%i.h5" ,"jan27/cwola_hunting_dense_sig05_s%i.h5", "jan27/cwola_hunting_dense_sig025_s%i.h5", "jan27/cwola_hunting_dense_sig01_s%i.h5"]
+#labels = ["AutoEncoder", "TNT (S/B = 1%)",  "TNT (S/B = 0.5%)", "TNT (S/B = 0.25%)", "TNT (S/B = 0.1%)"]
+labels = ["CWoLa (S/B = 1%)",  "CWoLa (S/B = 0.5%)", "CWoLa (S/B = 0.25%)", "CWoLa (S/B = 0.1%)"]
+model_type = [2,2,2,2,2,2]
+
+#f_models = ["autoencoder_m3500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]
 #f_models = ["autoencoder_m3500.h5",  "mar15_deta/dense_deta_sig025_TNT1_s%i.h5", "mar15_deta/cwola_hunting_dense_deta_sig025_s%i.h5"]
-labels = ["Autoencoder ", "TNT (S/B = 0.25%)", "CWoLa (S/B = 0.25%)"]
-model_type = [1, 2, 2] 
+#labels = ["Autoencoder ", "TNT (S/B = 0.25%)", "CWoLa (S/B = 0.25%)"]
+#model_type = [1, 2, 2] 
 
 #f_models = ["autoencoder_m2500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]
 #labels = ["Autoencoder ", "TNT (S/B = 1%)", "CWoLa (S/B = 1%)"]

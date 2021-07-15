@@ -18,7 +18,7 @@ data_start = 0
 sig_idx = 1
 sig_mass = 3500.
 
-delta_eta_cut = 1.1
+delta_eta_cut = -1
 
 #for rough significance only
 m_low = 3150
@@ -42,14 +42,14 @@ f_models = ["autoencoder_m3500.h5",
 #            "mar15_deta/dense_deta_sig10_TNT1_s%i.h5",  "mar15_deta/dense_deta_sig05_TNT1_s%i.h5",   "mar15_deta/dense_deta_sig025_TNT1_s%i.h5",  "mar15_deta/dense_deta_sig01_TNT1_s%i.h5", 
 #            "mar15_deta/cwola_hunting_dense_deta_sig10_s%i.h5",  "mar15_deta/cwola_hunting_dense_deta_sig05_s%i.h5", "mar15_deta/cwola_hunting_dense_deta_sig025_s%i.h5", "mar15_deta/cwola_hunting_dense_deta_sig01_s%i.h5"
 #model = f_models[0]
-model = "mar2/cwola_hunting_dense_sig025_s%i.h5"
+model = "mar2/dense_sig025_TNT1_s%i.h5"
 sig_frac = 0.0025
 model_type = 2
-f_out = "s1_eta_cut_sig025_nosel.h5"
-#f_out = "s1_sig025_cwola_eff%.1f.h5"
+#f_out = "s1_eta_cut_sig025_nosel.h5"
+f_out = "s1_sig025_TNT_eff%.1f.h5"
 #f_out = "s1_sig05_testset_TNT_eff%.0f.h5"
-#effs = [30., 10., 2.]
-effs = [100.]
+effs = [30., 10., 2.]
+#effs = [100.]
 
 
 

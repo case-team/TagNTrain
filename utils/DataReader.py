@@ -71,7 +71,7 @@ class MyGenerator(tf.keras.utils.Sequence):
 class DataReader:
     DR_count = 0
     def __init__(self, f_name, signal_idx =1, keys = None, sig_frac = -1., start = 0, stop = -1, batch_start = -1, batch_stop = -1, m_low = -1., m_high = -1., 
-            val_frac = 0., hadronic_only = False, eta_cut = -1., norm_img = "", local_storage = False, m_sig = -1, seed = 12345):
+            hadronic_only = False, eta_cut = -1., norm_img = "", ptsort =False, randsort = False, local_storage = False, m_sig = -1, seed = 12345):
         self.ready = False
         if(keys == None):
             self.keys = ['j1_images', 'j2_images', 'mjj']
@@ -83,12 +83,13 @@ class DataReader:
         self.sig_frac = sig_frac
         self.start = start
         self.stop = stop
-        self.val_frac = val_frac
         self.hadronic_only = hadronic_only
         self.m_low = m_low
         self.m_high = m_high
         self.m_sig = m_sig
         self.seed = seed
+        self.ptsort = ptsort
+        self.randsort = randsort
 
         self.norm_img = norm_img
         if(self.norm_img != ""):
@@ -114,6 +115,7 @@ class DataReader:
         self.max_load = 1000000 #max size to load without chunks
 
 
+        self.swapped_js = False
         self.first_write = True
         self.storage_dir = "/storage/local/data1/gpuscratch/oamram/" 
         if(local_storage):
@@ -151,11 +153,56 @@ class DataReader:
         self.keys.append('label')
         print("Kept %i events after selection" % self.nEvents)
         self.ready = True
-        if(self.val_frac > 0.):
-            print("Training events: %i, Validation events: %i" % (self.nTrain, self.nVal))
-            new_keys = copy.copy(self.keys)
-            for key in self.keys: new_keys.append("val_" + key)
-            self.keys = new_keys
+
+        if('swapped_js' not in self.keys and self.swapped_js): self.keys.append('swapped_js')
+
+    def get_key(self,f, cstart, cstop, mask, key):
+        if(key == 'mjj'):
+            data = f["jet_kinematics"][cstart:cstop][mask,0]
+
+        elif(key == 'j1_features'):
+            j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
+            j1_feats = f['jet1_extraInfo'][cstart:cstop][mask]
+            data = np.append(j1_m, j1_feats, axis = 1)
+            
+        elif(key == 'j2_features'):
+            j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
+            j2_feats = f['jet2_extraInfo'][cstart:cstop][mask]
+            data = np.append(j2_m, j2_feats, axis = 1)
+
+        elif(key == 'jj_features'):
+            j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
+            j1_feats = f['jet1_extraInfo'][cstart:cstop][mask]
+            j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
+            j2_feats = f['jet2_extraInfo'][cstart:cstop][mask]
+            data = np.concatenate((j1_m, j1_feats, j2_m, j2_feats), axis = 1)
+
+
+        elif(key == 'j1_images' or key == 'j2_images'):
+            data = np.expand_dims(f[key][cstart:cstop][mask], axis = -1)
+            #if(self.norm_img != ""):
+            #    if(key == 'j1_images'):
+            #        data = (data - self.j1_images_mean) / self.j1_images_std
+            #    elif(key == 'j2_images'):
+            #        data = (data - self.j2_images_mean) / self.j2_images_std
+
+        elif(key == 'jj_images'):
+            j1_img = np.expand_dims(f['j1_images'][cstart:cstop][mask], axis = -1)
+            j2_img = np.expand_dims(f['j2_images'][cstart:cstop][mask], axis = -1)
+            #if(self.norm_img != ""):
+            #    j1_img = (j1_img - self.j1_images_mean) / self.j1_images_std
+            #    j2_img = (j1_img - self.j2_images_mean) / self.j2_images_std
+
+            data = np.append(j2_img, j1_img, axis = 3)
+
+        else:
+            data = f[key][cstart:cstop][mask]
+
+        return data
+
+
+
+
 
     def read_batch(self, f_name):
 
@@ -172,7 +219,6 @@ class DataReader:
         print("Will read %i events in %i chunks \n" % (self.nEvents_file, nChunks))
 
 
-                
 
         for i in range(nChunks):
             cstart = self.start + i*self.chunk_size
@@ -229,87 +275,55 @@ class DataReader:
             #save labels 
             d_labels = labels[mask]
             self.nEvents += d_labels.shape[0]
-            if(self.val_frac > 0.):
-                n_val = int(np.floor(d_labels.shape[0]*self.val_frac))
-                n_train = d_labels.shape[0] - n_val
-                t_labels = d_labels[:n_train]
-                v_labels = d_labels[n_train:]
-            else:
-                t_labels = d_labels
+            t_labels = d_labels
 
             if(self.first_write):
                 self.f_storage.create_dataset('label', data = t_labels, chunks = True, maxshape = expandable_shape(d_labels.shape))
-                if(self.val_frac > 0.): self.f_storage.create_dataset('val_label', data = v_labels, chunks = True, maxshape = expandable_shape(d_labels.shape))
             else:
                 append_h5(self.f_storage, 'label', t_labels)
-                if(self.val_frac > 0.): append_h5(self.f_storage, 'val_label', v_labels)
 
 
 
             #save data in other keys
             data = None
+            swapping_idxs = np.array([])
+            if(self.ptsort):
+                j1_pt = f['jet_kinematics'][cstart:cstop][mask,2]
+                j2_pt = f['jet_kinematics'][cstart:cstop][mask,6]
+                swapping_idxs = j2_pt > j1_pt
+            elif(self.randsort):
+                swapping_idxs = np.random.choice(a=[True,False], size = f['jet_kinematics'][cstart:cstop][mask].shape[0])
+
             for ikey,key in enumerate(self.keys):
-                if(key == 'mjj'):
-                    data = f["jet_kinematics"][cstart:cstop][mask,0]
 
-                elif(key == 'j1_features'):
-                    j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
-                    j1_feats = f['jet1_extraInfo'][cstart:cstop][mask]
-                    data = np.append(j1_m, j1_feats, axis = 1)
-                    
-                elif(key == 'j2_features'):
-                    j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
-                    j2_feats = f['jet2_extraInfo'][cstart:cstop][mask]
-                    data = np.append(j2_m, j2_feats, axis = 1)
+                data = self.get_key(f,cstart, cstop, mask, key)
 
-                elif(key == 'jj_features'):
-                    j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
-                    j1_feats = f['jet1_extraInfo'][cstart:cstop][mask]
-                    j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
-                    j2_feats = f['jet2_extraInfo'][cstart:cstop][mask]
-                    data = np.concatenate((j1_m, j1_feats, j2_m, j2_feats), axis = 1)
-
-
-                elif(key == 'j1_images' or key == 'j2_images'):
-                    data = np.expand_dims(f[key][cstart:cstop][mask], axis = -1)
-                    #if(self.norm_img != ""):
-                    #    if(key == 'j1_images'):
-                    #        data = (data - self.j1_images_mean) / self.j1_images_std
-                    #    elif(key == 'j2_images'):
-                    #        data = (data - self.j2_images_mean) / self.j2_images_std
-
-                elif(key == 'jj_images'):
-                    j1_img = np.expand_dims(f['j1_images'][cstart:cstop][mask], axis = -1)
-                    j2_img = np.expand_dims(f['j2_images'][cstart:cstop][mask], axis = -1)
-                    #if(self.norm_img != ""):
-                    #    j1_img = (j1_img - self.j1_images_mean) / self.j1_images_std
-                    #    j2_img = (j1_img - self.j2_images_mean) / self.j2_images_std
-
-                    data = np.append(j2_img, j1_img, axis = 3)
-
-                else:
-                    data = f[key][cstart:cstop][mask]
+                if(('j1' in key or 'j2' in key) and swapping_idxs.shape[0] != 0):
+                    if('j1' in key): opp_key = 'j2' + key[2:]
+                    else: opp_key = 'j1' + key[2:]
+                    opp_data = self.get_key(f,cstart, cstop, mask, opp_key)
+                    data[swapping_idxs] = opp_data[swapping_idxs]
 
                 #copy this chunk into class data
                 tdata = None
                 vdata = None
-                if(self.val_frac > 0.):
-                    n_val = int(np.floor(data.shape[0]*self.val_frac))
-                    n_train = data.shape[0] - n_val
-                    tdata = data[:n_train]
-                    vdata = data[n_train:]
-                else:
-                    tdata = data
+                tdata = data
                 if(ikey == 0):
                     self.nTrain += tdata.shape[0]
-                    if(self.val_frac > 0.): self.nVal += vdata.shape[0]
                 if(self.first_write):
                     c_shape = expandable_shape(data.shape)
                     self.f_storage.create_dataset(key, data = tdata, chunks = True, maxshape = c_shape)
-                    if(self.val_frac > 0.): self.f_storage.create_dataset("val_"+key, data = vdata, chunks = True, maxshape = c_shape)
                 else:
                     append_h5(self.f_storage, key, tdata)
-                    if(self.val_frac > 0.): append_h5(self.f_storage, "val_"+key, vdata)
+
+
+            if(swapping_idxs.shape[0] != 0):
+                self.swapped_js = True
+                if(self.first_write):
+                    c_shape = expandable_shape(swapping_idxs.shape)
+                    self.f_storage.create_dataset("swapped_js", data =swapping_idxs, chunks = True, maxshape = c_shape)
+                else:
+                    append_h5(self.f_storage, "swapped_js", swapping_idxs)
 
             self.first_write = False
 
@@ -321,14 +335,25 @@ class DataReader:
         mjj = self.f_storage['mjj'][()]
         mjj_window = ((mjj > mjj_low) & (mjj < mjj_high))
         self.f_storage.create_dataset('Y_mjj', data = mjj_window)
-        del mjj, mjj_window
 
-        if(self.val_frac > 0.):
-            self.keys.append('val_Y_mjj')
-            mjj = self.f_storage['val_mjj'][()]
-            mjj_window = ((mjj > mjj_low) & (mjj < mjj_high))
-            self.f_storage.create_dataset('val_Y_mjj', data = mjj_window)
-            del mjj, mjj_window
+
+        self.keys.append('weight')
+        n_bkg_high = np.sum(mjj > mjj_high)
+        n_bkg_low = np.sum(mjj < mjj_low)
+        n_sig = np.sum(mjj_window)
+        
+        #reweight everything to have same weight as low mass bkg
+        bkg_high_weight = n_bkg_low/n_bkg_high
+        sig_weight = 2.*n_bkg_low / n_sig
+
+        weights = np.ones_like(mjj, dtype=np.float32)
+        weights[mjj > mjj_high] = bkg_high_weight
+        weights[mjj_window] = sig_weight
+        self.f_storage.create_dataset('weight', data=weights)
+
+
+        del mjj, mjj_window, weights
+
 
 
     def make_Y_TNT(self, sig_region_cut = 0.9, bkg_region_cut = 0.2, cut_var = np.array([]), mjj_low = -999999., mjj_high = 9999999., sig_high = True, cut_var_val = np.array([])):
@@ -354,6 +379,7 @@ class DataReader:
 
 
 
+
         keep_mask = sig_cut | bkg_cut
 
         Y_TNT = np.zeros_like(cut_var)
@@ -363,34 +389,29 @@ class DataReader:
         self.f_storage.create_dataset('Y_TNT', data = Y_TNT)
         self.keys.append("Y_TNT")
 
+        n_bkg_high = np.sum(mjj[bkg_cut] > mjj_high)
+        n_bkg_low = np.sum(mjj[bkg_cut] < mjj_low)
+        n_sig = np.sum(sig_cut)
+        #reweight everything to have same weight as low mass bkg
+        bkg_high_weight = n_bkg_low/n_bkg_high
+        sig_weight = 2.*n_bkg_low / n_sig
+
+        print(sig_weight, bkg_high_weight)
+
+        self.keys.append('weight')
+        weights = np.ones_like(mjj, dtype=np.float32)
+        weights[sig_cut] = sig_weight
+        weights[bkg_cut & (mjj > mjj_high)] = bkg_high_weight
+
+        self.f_storage.create_dataset('weight', data=weights)
+
         self.apply_mask(keep_mask)
 
-        #if(self.val_frac > 0. and cut_var_val.size > 0 ):
-
-        #    if(sig_high):
-        #        sig_cut_val = cut_var_val > sig_region_cut
-        #        bkg_cut_val = cut_var_val < bkg_region_cut
-        #    else:
-        #        sig_cut_val = cut_var_val < sig_region_cut
-        #        bkg_cut_val = cut_var_val > bkg_region_cut
-
-
-
-        #    self.keys.append('val_Y_TNT')
-        #    mjj = self.f_storage['val_mjj'][()]
-        #    mjj_window = ((mjj > mjj_low) & (mjj < mjj_high))
-        #    mjj_sb = ((mjj < mjj_low) | (mjj > mjj_high))
-
-        #    sig_cut = sig_cut & mjj_window
-        #    bkg_cut = bkg_cut & mjj_sb
-
-        #    self.f_storage.create_dataset('val_Y_mjj', data = mjj_window)
-        #    del mjj, mjj_window
 
 
 
 
-    def make_ptrw(self, Y_key, save_plots = False):
+    def make_ptrw(self, Y_key, use_weights = True, normalize = True, save_plots = False, plot_dir = ""):
        
 
         sig_cut = (self.f_storage[Y_key][()] > 0.9)
@@ -400,10 +421,25 @@ class DataReader:
             sig_cut = sig_cut & self.mask
             bkg_cut = bkg_cut & self.mask
 
+        if(use_weights):
+            sig_weights = self.f_storage['weight'][sig_cut]
+            bkg_weights = self.f_storage['weight'][bkg_cut]
+            weights = [sig_weights, bkg_weights]
+        else:
+            weights = None
 
         print("Doing reweighting based on jet pt")
         j1_pts = self.f_storage['jet_kinematics'][:,2]
         j2_pts = self.f_storage['jet_kinematics'][:,6]
+
+        if(self.swapped_js):
+            #meaning of j1 and j2 swapped for some events
+            swapped_js = self.f_storage['swapped_js'][()]
+            j1_pt_temp = np.copy(j1_pts)
+            j1_pts[swapped_js] = j2_pts[swapped_js]
+            j2_pts[swapped_js] = j1_pt_temp[swapped_js]
+            del j1_pt_temp
+
 
         j1_sr_pts = j1_pts[sig_cut]
         j1_br_pts = j1_pts[bkg_cut]
@@ -416,26 +452,35 @@ class DataReader:
         n_pt_bins = 20
 
         j1_bins, j1_ratio = make_ratio_histogram([j1_sr_pts, j1_br_pts], labels, colors, 'jet1 pt (GeV)', "Jet1 Sig vs. Bkg Pt distribution", n_pt_bins,
-                        normalize=True, save = save_plots, fname="j1_ptrw.png")
+                        normalize=normalize, weights = weights, save = save_plots, fname=plot_dir + "j1_ptrw.png")
         j1_rw_idxs = np.digitize(j1_pts, bins = j1_bins) - 1
         
         j1_rw_idxs = np.clip(j1_rw_idxs, 0, len(j1_ratio)-1) #handle overflows
         j1_rw_vals = j1_ratio[j1_rw_idxs]
         #don't reweight signal region
         j1_rw_vals[sig_cut] = 1.
+        if(use_weights):
+            j1_rw_vals *= self.f_storage['weight']
+
         self.f_storage.create_dataset('j1_ptrw', data = j1_rw_vals)
         self.keys.append("j1_ptrw")
 
         j2_bins, j2_ratio = make_ratio_histogram([j2_sr_pts, j2_br_pts], labels, colors, 'jet2 pt (GeV)', "Jet2 Sig vs. Bkg Pt distribution", n_pt_bins,
-                        normalize=True, save = save_plots, fname="j2_ptrw.png")
+                        normalize=normalize, weights = weights, save = save_plots, fname=plot_dir + "j2_ptrw.png")
         j2_rw_idxs = np.digitize(j2_pts, bins = j2_bins) - 1
         
         j2_rw_idxs = np.clip(j2_rw_idxs, 0, len(j2_ratio)-1) #handle overflows
         j2_rw_vals = j2_ratio[j2_rw_idxs]
         #don't reweight signal region
         j2_rw_vals[sig_cut] = 1.
+
+        if(use_weights):
+            j2_rw_vals *= self.f_storage['weight']
+
+
         self.f_storage.create_dataset('j2_ptrw', data = j2_rw_vals)
         self.keys.append("j2_ptrw")
+
 
 
     def __getitem__(self, key):
@@ -553,7 +598,7 @@ class DataReader:
 
 
 #create a mask that removes signal events to enforce a given fraction
-#removes signal from later events (should shuffle after)
+#randomly selects which signal events to remove
 def get_signal_mask(labels, mask, sig_frac, seed=12345):
 
     np.random.seed(seed)
@@ -572,7 +617,7 @@ def get_signal_mask(labels, mask, sig_frac, seed=12345):
 
 
 #create a mask that removes signal events to enforce a given fraction
-#Keeps signal randomly distributed but has more noise
+#Random chance to keep each signal event
 def get_signal_mask_rand(labels, mask, sig_frac, seed=12345):
 
     np.random.seed(seed)
