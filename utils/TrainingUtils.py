@@ -3,74 +3,108 @@ from .model_defs import *
 from .losses import *
 from .PlotUtils import *
 from .DataReader import *
+from .ModelEnsemble import *
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, roc_auc_score
 from scipy.stats import entropy
 from sklearn.utils import shuffle as sk_shuffle
-from optparse import OptionParser
-from optparse import OptionGroup
+import argparse
 
 def input_options():
-    parser = OptionParser()
-    parser = OptionParser(usage="usage: %prog analyzer outputfile [options] \nrun with --help to get list of options")
-    parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input file with data for training.")
-    parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
-    parser.add_option("--model_dir", default='../models/', help="Directory to read in and output models")
-    parser.add_option("-o", "--model_name", default='cwbh.h5', help="What to name the model")
-    parser.add_option("--model_start", default="", help="Starting point for model (empty string for new model)")
+#input options for all the of the different scripts. Not all options are used for everything
 
-    parser.add_option("--iter", dest = "tnt_iter", type = 'int', default=0, help="What iteration of  the tag & train algorithm this is (Start = 0).")
-    parser.add_option("--num_epoch", type = 'int', default=100, help="How many epochs to train for")
-    parser.add_option("--data_start", type = 'int', default=0, help="What event to start with")
-    parser.add_option("--num_data", type = 'int', default=-1, help="How many events to train on")
-    parser.add_option("--batch_size", type='int', default=256, help="Size of mini-batchs used for training")
-    parser.add_option("--batch_start", type='int', default=-1, help="Train over multiple batches of dataset. Starting batch")
-    parser.add_option("--batch_stop", type='int', default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
-    parser.add_option("--val_batch_start", type='int', default=-1, help="Batches to use for validation start")
-    parser.add_option("--val_batch_stop", type='int', default=-1, help="Batches to use for validation stop ")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--fin", default='../data/jet_images.h5', help="Input file with data for training.")
+    parser.add_argument("--plot_dir", default='../plots/', help="Directory to output plots")
+    parser.add_argument("--model_dir", default='../models/', help="Directory to read in and output models")
+    parser.add_argument("-o", "--output", default='test.h5', help="Output location")
+    parser.add_argument("-l", "--labeler_name", default='', help="Name of model used for labeling")
+    parser.add_argument("--model_start", default="", help="Starting point for model (empty string for new model)")
+    parser.add_argument("--model_type", default=2, type=int,  help="Type of model: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 VAE")
 
-    parser.add_option("--use_one", default = False, action = "store_true", help="Make a classifier for one jet instead of both")
-    parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
-    parser.add_option("--use_dense", default = False, action = "store_true", help="Make a classifier using inputs from cwola hunting paper instead of jet images")
-    parser.add_option("--mjj_low", type='int', default = 2250,  help="Low mjj cut value")
-    parser.add_option("--mjj_high", type='int', default = 2750, help="High mjj cut value")
-    parser.add_option("--mjj_sig", type='int', default = 2500, help="Signal mass (used for signal filtering)")
-    parser.add_option("--d_eta", type='float', default = -1, help="Delta eta cut")
-    parser.add_option("--no_ptrw", default = False, action="store_true",  help="Don't reweight events to have matching pt distributions in sig-rich and bkg-rich samples")
-    parser.add_option("--no_sample_weights", default = False, action="store_true", help="Don't do weighting of different signal / bkg regions")
+    parser.add_argument("--iter", dest = "tnt_iter", type = int, default=0, help="What iteration of  the tag & train algorithm this is (Start = 0).")
+    parser.add_argument("--num_epoch", type = int, default=100, help="How many epochs to train for")
+    parser.add_argument("--data_start", type = int, default=0, help="What event to start with")
+    parser.add_argument("--num_data", type = int, default=-1, help="How many events to train on")
+    parser.add_argument("--batch_size", type=int, default=256, help="Size of mini-batchs used for training")
+    parser.add_argument("--batch_start", type=int, default=-1, help="Train over multiple batches of dataset. Starting batch")
+    parser.add_argument("--batch_stop", type=int, default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
+    parser.add_argument("--val_batch_start", type=int, default=-1, help="Batches to use for validation start")
+    parser.add_argument("--val_batch_stop", type=int, default=-1, help="Batches to use for validation stop ")
 
-    parser.add_option("--large", default = False, action = "store_true", help="Use larger NN archetecture")
-    parser.add_option("--sig_idx", type = 'int', default = 1,  help="What index of signal to use")
-    parser.add_option("-s", "--sig_frac", type = 'float', default = -1.,  help="Reduce signal to this amount (< 0 to not filter )")
-    parser.add_option("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays of signal")
-    parser.add_option("--seed", type = 'int', default = 123456,  help="RNG seed for model")
-    parser.add_option("--BB_seed", type = 'int', default = 123456,  help="RNG seed for dataset")
-    parser.add_option("--num_models", type = 'int', default = 1,  help="How many networks to train (if >1 will save the one with best validation loss)")
-    parser.add_option("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
+    parser.add_argument("--use_one", default = False, action = "store_true", help="Make a classifier for one jet instead of both")
+    parser.add_argument("-j", "--training_j", type =int, default = 1, help="Which jet to make a classifier for (1 or 2)")
+    parser.add_argument("--use_images", default = False, action = "store_true", help="Make a classifier using jet images as inputs")
+    parser.add_argument("--mjj_low", type=int, default = 2250,  help="Low mjj cut value")
+    parser.add_argument("--mjj_high", type=int, default = 2750, help="High mjj cut value")
+    parser.add_argument("--mjj_sig", type=int, default = 2500, help="Signal mass (used for signal filtering)")
+    parser.add_argument("--d_eta", type=float, default = -1, help="Delta eta cut")
+    parser.add_argument("--no_ptrw", default = False, action="store_true",  help="Don't reweight events to have matching pt distributions in sig-rich and bkg-rich samples")
+    parser.add_argument("--no_sample_weights", default = False, action="store_true", help="Don't do weighting of different signal / bkg regions")
+
+    parser.add_argument("--large", default = False, action = "store_true", help="Use larger NN archetecture")
+    parser.add_argument("--sig_idx", type = int, default = 1,  help="What index of signal to use")
+    parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
+    parser.add_argument("--sig_per_batch", type = float, default = -1.,  help="Reduce signal to this number of events in each batch (< 0 to not use )")
+    parser.add_argument("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays of signal")
+    parser.add_argument("--seeds", nargs="+", type = int, default = [123456],  help="RNG seeds for models")
+    parser.add_argument("--BB_seed", type = int, default = 123456,  help="RNG seed for dataset")
+    parser.add_argument("--num_models", type = int, default = 1,  help="How many networks to train (if >1 will save the one with best validation loss)")
+    parser.add_argument("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
 
 
-    parser.add_option("--sig_cut", type='int', default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")
-    parser.add_option("--bkg_cut", type='int', default = 40,  help="What classifier percentile to use to define bkg-rich region in TNT")
+    parser.add_argument("--local_storage", default =False, action="store_true",  help="Store temp files locally not on gpuscratch")
+    parser.add_argument("--sig_cut", type=int, default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")
+    parser.add_argument("--bkg_cut", type=int, default = 40,  help="What classifier percentile to use to define bkg-rich region in TNT")
 
 
-    parser.add_option("--ptsort", default = False, action="store_true",  help="Sort j1 and j2 by pt rather than by jet mass")
-    parser.add_option("--randsort", default = False, action="store_true",  help="Sort j1 and j2 randomly rather than by jet mass")
+    parser.add_argument("--ptsort", default = False, action="store_true",  help="Sort j1 and j2 by pt rather than by jet mass")
+    parser.add_argument("--randsort", default = False, action="store_true",  help="Sort j1 and j2 randomly rather than by jet mass")
     return parser
 
 def load_dataset_from_options(options):
-    data = DataReader(options.fin, keys = options.keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-            m_low = options.keep_low, m_high = options.keep_high, batch_start = options.batch_start, batch_stop = options.batch_stop , hadronic_only = options.hadronic_only, 
-            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta)
-    data.read()
+    if(not hasattr(options, 'keep_low') or not hasattr(options, 'keep_high')):
+        options.keep_low = options.keep_high = -1
 
-    if(options.val_batch_start >0 and options.val_batch_stop > 0):
+    if(not hasattr(options, 'data_batch_list')):
+        data_batch_list = None
+        val_batch_list = None
+
+        if(options.batch_start >=0 and options.batch_stop >= 0): 
+            data_batch_list = list(range(options.batch_start, options.batch_stop + 1))
+
+        if(options.val_batch_start >=0 and options.val_batch_stop >= 0): 
+            if(data_batch_list is None):
+                print("Must give data batch range if using validation batches")
+                exit(1)
+            val_batch_list = list(range(options.val_batch_start, options.val_batch_stop+1))
+
+            for i in val_batch_list: #validation batch range takes priority over regular batches
+                if i in data_batch_list:
+                    data_batch_list.remove(i)
+    else:
+        data_batch_list = options.data_batch_list
+        if(hasattr(options, 'val_batch_list')): val_batch_list = options.val_batch_list
+        else: val_batch_list = None
+
+    if(val_batch_list != None):
+
         val_data = DataReader(options.fin, keys = options.keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-            m_low = options.keep_low, m_high = options.keep_high, batch_start = options.val_batch_start, batch_stop = options.val_batch_stop , hadronic_only = options.hadronic_only, 
-            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta)
+            m_low = options.keep_low, m_high = options.keep_high, batch_list = val_batch_list, hadronic_only = options.hadronic_only, 
+            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
         val_data.read()
     else:
         val_data = None
+
+        
+
+
+    data = DataReader(options.fin, keys = options.keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
+            m_low = options.keep_low, m_high = options.keep_high, batch_list = data_batch_list, hadronic_only = options.hadronic_only, 
+            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
+    data.read()
+
     return data, val_data
 
 
@@ -148,14 +182,17 @@ class RocCallback(tf.keras.callbacks.Callback):
 
 def make_selection(j1_scores, j2_scores, percentile):
 # make a selection with a given efficiency using both scores (and)
-    n_points = 400
-    j1_threshs = [np.percentile(j1_scores,i) for i in np.arange(0., 100., 100./n_points)]
-    j2_threshs = [np.percentile(j2_scores,i) for i in np.arange(0., 100., 100./n_points)]
 
-    combined_effs = np.array([np.mean((j1_scores > j1_threshs[i]) & (j2_scores > j2_threshs[i])) for i in range(n_points)])
+    n_points = 1000
+    j1_qs = quantile_transform(j1_scores.reshape(-1,1)).reshape(-1)
+    j2_qs = quantile_transform(j2_scores.reshape(-1,1)).reshape(-1)
+
+    threshs = [thresh for thresh in np.arange(0., 1., 1./n_points)]
+
+    combined_effs = np.array([np.mean((j1_qs > thresh & j2_qs > thresh)) for thresh in threshs])
     cut_idx = np.argwhere(combined_effs < (100. - percentile)/100.)[0][0]
-    mask = (j1_scores > j1_threshs[cut_idx]) & (j2_scores > j2_threshs[cut_idx])
-    print("Cut idx %i, eff %.3e, j1_cut %.3e, j2_cut %.3e " %(cut_idx, combined_effs[cut_idx], j1_threshs[cut_idx], j2_threshs[cut_idx]))
+    mask = (j1_qs > threshs[cut_idx]) & (j2_qs > threshs[cut_idx])
+    print("Cut idx %i, eff %.3e, j1_cut %.3e, j2_cut %.3e " %(cut_idx, combined_effs[cut_idx]))
     print(np.mean(mask))
     return mask
 
@@ -288,10 +325,10 @@ class AdditionalValidationSets(tf.keras.callbacks.Callback):
 
 
 
-def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=None,  batch_size = 512):
+def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=None,  num_models = 1, batch_size = 512):
 
     if(model_type <= 2):
-        j_model = tf.keras.models.load_model(model_name)
+        j_model = ModelEnsemble(location = model_name, num_models = num_models)
 
         if(model_type == 0):  #cnn
             j_score = j_model.predict(j_images, batch_size = batch_size)
@@ -316,23 +353,29 @@ def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=
 
 
 
-def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=None, j1_dense_inputs=None, j2_dense_inputs=None, batch_size = 512):
+def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=None, j1_dense_inputs=None, j2_dense_inputs=None, 
+        num_models = 1, batch_size = 512):
 
     if(model_type <= 2):
         if(len(model_name) != 2):
-            if('/' not in model_name):
-                j1_fname = model_dir + "j1_" + model_name
-                j2_fname = model_dir + "j2_" + model_name
+            if('j_label' in model_name):
+                j1_fname = model_dir + model_name.format(j_label = "j1")
+                j2_fname = model_dir + model_name.format(j_label = "j2")
             else:
-                ins_idx = model_name.rfind('/')+1
-                j1_fname = model_dir + model_name[:ins_idx] + "j1_" + model_name[ins_idx:]
-                j2_fname = model_dir + model_name[:ins_idx] + "j2_" + model_name[ins_idx:]
+                j1_fname = j2_fname = model_dir + model_name
+            #if('/' not in model_name):
+            #    j1_fname = model_dir + "j1_" + model_name
+            #    j2_fname = model_dir + "j2_" + model_name
+            #else:
+            #    ins_idx = model_name.rfind('/')+1
+            #    j1_fname = model_dir + model_name[:ins_idx] + "j1_" + model_name[ins_idx:]
+            #    j2_fname = model_dir + model_name[:ins_idx] + "j2_" + model_name[ins_idx:]
             print(j1_fname, j2_fname)
-            j1_model = tf.keras.models.load_model(j1_fname)
-            j2_model = tf.keras.models.load_model(j2_fname)
+            j1_model = ModelEnsemble(location = j1_fname, num_models = num_models)
+            j2_model = ModelEnsemble(location = j2_fname, num_models = num_models)
         else:
-            j1_model = tf.keras.models.load_model(model_dir + model_name[0])
-            j2_model = tf.keras.models.load_model(model_dir + model_name[1])
+            j1_model = ModelEnsemble(location = model_dir + model_name[0], num_models = num_models)
+            j2_model = ModelEnsemble(location =  model_dir + model_name[1], num_models = num_models)
 
         if(model_type == 0):  #cnn
             j1_score = j1_model.predict(j1_images, batch_size = batch_size)
@@ -360,7 +403,7 @@ def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=
 
     return j1_score.reshape(-1), j2_score.reshape(-1)
 
-def get_jj_scores(model_dir, model_name, model_type, jj_images = None, jj_dense_inputs = None, batch_size = 512):
+def get_jj_scores(model_dir, model_name, model_type, jj_images = None, jj_dense_inputs = None, batch_size = 512, num_models = 1):
     if(model_type == 3): #CNN both jets
         jj_model = tf.keras.models.load_model(model_dir + model_name)
         scores = jj_model.predict(jj_images, batch_size = batch_size).reshape(-1)

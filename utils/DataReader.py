@@ -20,19 +20,47 @@ def append_h5(f, name, data):
 
 class MyGenerator(tf.keras.utils.Sequence):
     def __init__(self, f, n, batch_size, key1, key2, key3, mask = None):
-        self.f = f
-        self.n = n
+        self.f = [f]
+        self.n = [n]
         self.batch_size = batch_size
-        self.n_batches = int(np.ceil(self.n / self.batch_size))
+        self.f_stops = [int(np.ceil(n / self.batch_size))]
+        self.n_total_batches = self.f_stops[0]
+        self.masks = [mask]
+
+        if(mask is not None): self.nTotal = np.sum(mask)
+        else: self.nTotal = n
         self.idx = 0
 
-        self.key1 = key1
-        self.key2 = key2
-        self.key3 = key3
-        self.mask = mask
+        self.key1 = [key1]
+        self.key2 = [key2]
+        self.key3 = [key3]
+
+
+    def add_dataset(self, key1,key2, key3, f2 = None, n2 = None, mask = None, dataset = None):
+        if(dataset is not None):
+
+            n2 = dataset.f_storage[key1].shape[0]
+            mask = dataset.mask
+            f2 = dataset.f_storage
+
+        self.f.append(f2)
+        self.n.append(n2)
+        if(mask is not None): self.nTotal += np.sum(mask)
+        else: self.nTotal += n2
+        n_batches = int(np.ceil(n2 / self.batch_size))
+        self.n_total_batches += n_batches
+        self.f_stops.append(self.f_stops[-1] + n_batches)
+        self.masks.append(mask)
+        self.key1.append(key1)
+        self.key2.append(key2)
+        self.key3.append(key3)
+        
+        print("Added dataset with %i batches after batch %i. Now %i total batches" % (n_batches, self.f_stops[-2], self.n_total_batches))
+        print(self.f_stops)
+
 
     def __next__(self):
-        if self.idx >= self.n_batches:
+        if self.idx >= self.n_total_batches:
            self.idx = 0
         result = self.__getitem__(self.idx)
         self.idx += 1
@@ -40,28 +68,46 @@ class MyGenerator(tf.keras.utils.Sequence):
 
     def __len__(self):
         'Denotes the number of batches per epoch'
-        return self.n_batches
+        return self.n_total_batches
 
     def on_epoch_end(self):
         pass
         #print("Epoch end")
 
     def __getitem__(self, i):
-        if(self.mask is not None and self.mask.shape[0] == 0):
-            if(self.key3 == None):
-                return (self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size])
+        f_idx = 0
+        f_batch_i = i
+        for idx, f_stop in enumerate(self.f_stops):
+            if(i >= f_stop):
+                f_idx = idx+1
+                f_batch_i = i - f_stop
+
+        f_idx = f_idx % len(self.f)
+        f = self.f[f_idx]
+        mask = self.masks[f_idx]
+        key1 = self.key1[f_idx]
+        key2 = self.key2[f_idx]
+        key3 = self.key3[f_idx]
+        
+        start = self.batch_size * f_batch_i
+        stop = self.batch_size * (f_batch_i+1)
+
+
+
+
+        if(mask is None or  mask.shape[0] == 0):
+            if(self.key3 is None):
+                return (f[key1][start:stop], f[key2][start:stop])
             else:
 
-                return (self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size], 
-                        self.f[self.key3][self.batch_size*i:(i+1)*self.batch_size])
+                return (f[key1][start:stop], f[key2][start:stop], f[key3][start:stop])
         else:
-            mask_local = self.mask[self.batch_size*i:(i+1)*self.batch_size]
-            if(self.key3 == None):
-                return (self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size][mask_local], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size][mask_local])
+            mask_local = mask[start:stop]
+            if(key3 is None):
+                return (f[key1][start:stop][mask_local], f[key2][start:stop][mask_local])
             else:
 
-                return (self.f[self.key1][self.batch_size*i:(i+1)*self.batch_size][mask_local], self.f[self.key2][i*self.batch_size:(i+1)*self.batch_size][mask_local], 
-                        self.f[self.key3][self.batch_size*i:(i+1)*self.batch_size][mask_local])
+                return (f[key1][start:stop][mask_local], f[key2][start:stop][mask_local], f[key3][start:stop][mask_local])
 
 
 
@@ -70,17 +116,23 @@ class MyGenerator(tf.keras.utils.Sequence):
 
 class DataReader:
     DR_count = 0
-    def __init__(self, f_name, signal_idx =1, keys = None, sig_frac = -1., start = 0, stop = -1, batch_start = -1, batch_stop = -1, m_low = -1., m_high = -1., 
-            hadronic_only = False, eta_cut = -1., norm_img = "", ptsort =False, randsort = False, local_storage = False, m_sig = -1, seed = 12345):
+
+    def __init__(self, f_name = None, signal_idx =1, keys = None, sig_frac = -1., start = 0, stop = -1, batch_start = -1, batch_stop = -1, batch_list = None, 
+            m_low = -1., m_high = -1., hadronic_only = False, eta_cut = -1., ptsort =False, randsort = False, local_storage = False, 
+            m_sig = -1, sig_per_batch = -1, seed = 12345):
         self.ready = False
-        if(keys == None):
+        if(f_name is None):
+           return
+
+        if(keys is None):
             self.keys = ['j1_images', 'j2_images', 'mjj']
         else:
-            self.keys = copy.copy(keys)
+            self.keys = copy.deepcopy(keys)
         self.f_name = f_name
         self.eta_cut = eta_cut
         self.signal_idx = signal_idx
         self.sig_frac = sig_frac
+        self.sig_per_batch = sig_per_batch
         self.start = start
         self.stop = stop
         self.hadronic_only = hadronic_only
@@ -90,26 +142,18 @@ class DataReader:
         self.seed = seed
         self.ptsort = ptsort
         self.randsort = randsort
-
-        self.norm_img = norm_img
-        if(self.norm_img != ""):
-            print("Don't use norm images anymore bro ! \n")
-            exit(0)
-            #f_norm_img = h5py.File(self.norm_img, "r")
-            #self.j1_images_mean = f_norm_img['j1_images_mean'][()]
-            #self.j2_images_mean = f_norm_img['j2_images_mean'][()]
-            #self.j1_images_std = f_norm_img['j1_images_std'][()]
-            #self.j2_images_std = f_norm_img['j2_images_std'][()]
-            #f_norm_img.close()
+        if(self.randsort): print("Rand sort")
 
         self.multi_batch = False
-        self.batch_start = batch_start
-        self.batch_stop = batch_stop
-        if(self.batch_start != -1 and self.batch_stop != -1):
+        if(batch_start != -1 and batch_stop != -1 and batch_list is None):
+            batch_list = list(range(batch_start, batch_stop+1))
+
+        print("Batch_list:", batch_list)
+
+        if(batch_list is not None):
             self.multi_batch = True
-            if(self.stop != -1 and self.batch_start != self.batch_stop):
-                print("Selecting fixed number of events (%i to %i) in batch mode currently not supported!" % (self.start, self.stop))
-                exit(1)
+
+        self.batch_list = batch_list
 
         self.chunk_size = 200000
         self.max_load = 1000000 #max size to load without chunks
@@ -117,9 +161,11 @@ class DataReader:
 
         self.swapped_js = False
         self.first_write = True
-        self.storage_dir = "/storage/local/data1/gpuscratch/oamram/" 
-        if(local_storage):
-            self.storage_dir = "" 
+        gpu_storage = "/storage/local/data1/gpuscratch/oamram/" 
+        self.storage_dir = "" 
+        if(not local_storage and os.path.isdir(gpu_storage)):
+            self.storage_dir = gpu_storage
+
         #increment count so not to overwrite other files
         self.f_storage_name = self.storage_dir + "DReader%i_temp.h5" % DataReader.DR_count
         while(os.path.exists(self.f_storage_name)):
@@ -130,8 +176,24 @@ class DataReader:
         self.f_storage = h5py.File(self.f_storage_name, "w")
 
         self.mask = np.array([])
-        self.val_mask = np.array([])
 
+    def __copy__(self):
+        new = DataReader()
+        for attr, value in self.__dict__.items():
+            new.__dict__[attr] = value
+        return new
+
+    def __deepcopy__(self, memo):
+        new = DataReader()
+
+        for attr, value in self.__dict__.items():
+            new.__dict__[attr] = value
+
+        new.keys = copy.deepcopy(self.keys)
+        new.mask = np.copy(self.mask)
+
+
+        return new
 
     def read(self):
         self.loading_images = False
@@ -144,7 +206,7 @@ class DataReader:
         self.nVal = 0
 
         if(self.multi_batch):
-            for i in range(self.batch_start, self.batch_stop +1):
+            for i in self.batch_list:
                 f_name = self.f_name + "BB_images_batch%i.h5" % i 
                 self.read_batch(f_name)
         else:
@@ -180,19 +242,10 @@ class DataReader:
 
         elif(key == 'j1_images' or key == 'j2_images'):
             data = np.expand_dims(f[key][cstart:cstop][mask], axis = -1)
-            #if(self.norm_img != ""):
-            #    if(key == 'j1_images'):
-            #        data = (data - self.j1_images_mean) / self.j1_images_std
-            #    elif(key == 'j2_images'):
-            #        data = (data - self.j2_images_mean) / self.j2_images_std
 
         elif(key == 'jj_images'):
             j1_img = np.expand_dims(f['j1_images'][cstart:cstop][mask], axis = -1)
             j2_img = np.expand_dims(f['j2_images'][cstart:cstop][mask], axis = -1)
-            #if(self.norm_img != ""):
-            #    j1_img = (j1_img - self.j1_images_mean) / self.j1_images_std
-            #    j2_img = (j1_img - self.j2_images_mean) / self.j2_images_std
-
             data = np.append(j2_img, j1_img, axis = 3)
 
         else:
@@ -237,7 +290,13 @@ class DataReader:
             #only keep some events
             cur_sig_overall = np.mean(labels[mask])
             mjj = f["jet_kinematics"][cstart:cstop,0]
-            if(self.sig_frac >= 0.): #filter signal
+            do_filter = False
+            if(self.sig_per_batch >= 0):
+                num_sig = np.sum(labels[mask])
+                do_filter = num_sig > self.sig_per_batch
+                new_sig_frac = self.sig_per_batch / labels[mask].shape[0]
+                print("Signal fraction overall is %.4f, %i sig events in batch and we want %i. Filter %i" %(cur_sig_overall, num_sig, self.sig_per_batch, do_filter))
+            elif(self.sig_frac >= 0.): #filter signal based on S/B in signal region
                 sig_mask = (raw_labels == self.signal_idx).reshape(-1)
                 bkg_mask = (raw_labels <=0).reshape(-1)
                 if(self.m_sig < 0):
@@ -252,18 +311,22 @@ class DataReader:
                 B_window = float(mjj[in_window & bkg_mask].shape[0])
                 cur_sig_frac_window = S_window / B_window
                 do_filter = cur_sig_frac_window > self.sig_frac
+                new_sig_frac = self.sig_frac/cur_sig_frac_window * cur_sig_overall
                 print("Signal fraction overall is %.4f, %.4f in SR and we want %.4f in window: Filter %i" %(cur_sig_overall, cur_sig_frac_window, self.sig_frac, do_filter))
-                if(do_filter): 
-                    new_sig_frac = self.sig_frac/cur_sig_frac_window * cur_sig_overall
-                    #mask_sig = get_signal_mask_rand(labels, mask, new_sig_frac, self.seed)
-                    mask_sig = get_signal_mask(labels, mask, new_sig_frac, self.seed)
-                    mask = mask & mask_sig
+
+            if(do_filter): 
+                #mask_sig = get_signal_mask_rand(labels, mask, new_sig_frac, self.seed)
+                mask_sig = get_signal_mask(labels, mask, new_sig_frac, self.seed)
+                mask = mask & mask_sig
             if(self.m_low > 0. and self.m_high >0.):
                 mjj = f["jet_kinematics"][cstart:cstop,0]
                 mjj_mask = (mjj > self.m_low) & (mjj < self.m_high)
                 mask = mask & mjj_mask
             if(self.hadronic_only):
                 is_lep = f['event_info'][cstart:cstop:,4] # stored as a float
+                sig_mask = (raw_labels == self.signal_idx).reshape(-1)
+                sig_mean_val = np.mean(is_lep[sig_mask] < 0.1)
+                print("Hadronic only mask has mean %.3f " % sig_mean_val)
                 mask = mask & (is_lep < 0.1)
             if(self.eta_cut > 0.):
                 deta = f['jet_kinematics'][cstart:cstop,1]
@@ -355,10 +418,9 @@ class DataReader:
         del mjj, mjj_window, weights
 
 
+    def make_Y_TNT(self, sig_region_cut = 0.9, bkg_region_cut = 0.2, cut_var = None, mjj_low = -999999., mjj_high = 9999999., sig_high = True, extra_str = ''):
 
-    def make_Y_TNT(self, sig_region_cut = 0.9, bkg_region_cut = 0.2, cut_var = np.array([]), mjj_low = -999999., mjj_high = 9999999., sig_high = True, cut_var_val = np.array([])):
-
-        if(cut_var.size == 0):
+        if(cut_var is None):
             raise TypeError('Must supply cut_var argument!')
 
         #sig_high is whether signal lives at > cut value or < cut value
@@ -386,8 +448,8 @@ class DataReader:
 
         Y_TNT[bkg_cut] = 0
         Y_TNT[sig_cut] = 1
-        self.f_storage.create_dataset('Y_TNT', data = Y_TNT)
-        self.keys.append("Y_TNT")
+        self.f_storage.create_dataset('Y_TNT' + extra_str, data = Y_TNT)
+        self.keys.append("Y_TNT" + extra_str)
 
         n_bkg_high = np.sum(mjj[bkg_cut] > mjj_high)
         n_bkg_low = np.sum(mjj[bkg_cut] < mjj_low)
@@ -396,14 +458,13 @@ class DataReader:
         bkg_high_weight = n_bkg_low/n_bkg_high
         sig_weight = 2.*n_bkg_low / n_sig
 
-        print(sig_weight, bkg_high_weight)
 
-        self.keys.append('weight')
+        self.keys.append('weight' + extra_str)
         weights = np.ones_like(mjj, dtype=np.float32)
         weights[sig_cut] = sig_weight
         weights[bkg_cut & (mjj > mjj_high)] = bkg_high_weight
 
-        self.f_storage.create_dataset('weight', data=weights)
+        self.f_storage.create_dataset('weight' + extra_str, data=weights)
 
         self.apply_mask(keep_mask)
 
@@ -411,7 +472,8 @@ class DataReader:
 
 
 
-    def make_ptrw(self, Y_key, use_weights = True, normalize = True, save_plots = False, plot_dir = ""):
+
+    def make_ptrw(self, Y_key, use_weights = True, normalize = True, save_plots = False, plot_dir = "", extra_str = ""):
        
 
         sig_cut = (self.f_storage[Y_key][()] > 0.9)
@@ -422,8 +484,8 @@ class DataReader:
             bkg_cut = bkg_cut & self.mask
 
         if(use_weights):
-            sig_weights = self.f_storage['weight'][sig_cut]
-            bkg_weights = self.f_storage['weight'][bkg_cut]
+            sig_weights = self.f_storage['weight'+extra_str][sig_cut]
+            bkg_weights = self.f_storage['weight'+extra_str][bkg_cut]
             weights = [sig_weights, bkg_weights]
         else:
             weights = None
@@ -460,10 +522,10 @@ class DataReader:
         #don't reweight signal region
         j1_rw_vals[sig_cut] = 1.
         if(use_weights):
-            j1_rw_vals *= self.f_storage['weight']
+            j1_rw_vals *= self.f_storage['weight' + extra_str]
 
-        self.f_storage.create_dataset('j1_ptrw', data = j1_rw_vals)
-        self.keys.append("j1_ptrw")
+        self.f_storage.create_dataset('j1_ptrw'+extra_str, data = j1_rw_vals)
+        self.keys.append("j1_ptrw"+extra_str)
 
         j2_bins, j2_ratio = make_ratio_histogram([j2_sr_pts, j2_br_pts], labels, colors, 'jet2 pt (GeV)', "Jet2 Sig vs. Bkg Pt distribution", n_pt_bins,
                         normalize=normalize, weights = weights, save = save_plots, fname=plot_dir + "j2_ptrw.png")
@@ -475,11 +537,11 @@ class DataReader:
         j2_rw_vals[sig_cut] = 1.
 
         if(use_weights):
-            j2_rw_vals *= self.f_storage['weight']
+            j2_rw_vals *= self.f_storage['weight'+extra_str]
 
 
-        self.f_storage.create_dataset('j2_ptrw', data = j2_rw_vals)
-        self.keys.append("j2_ptrw")
+        self.f_storage.create_dataset('j2_ptrw'+extra_str, data = j2_rw_vals)
+        self.keys.append("j2_ptrw" + extra_str)
 
 
 
@@ -490,10 +552,7 @@ class DataReader:
         if(key not in self.keys):
             print("Key %s not in list of preloaded keys!" % key, self.keys)
             exit(1)
-        if('val' in key):
-            mask_ = self.val_mask
-        else:
-            mask_ = self.mask
+        mask_ = self.mask
 
         if(mask_.shape[0] == 0):
             return self.f_storage[key][()]
@@ -516,10 +575,7 @@ class DataReader:
         if(n_objs != n_objs2):
             print("Mismatched datasets size ?? Key %s has size %i, key %s has size %i " %(key1, n_objs, key2, n_objs))
 
-        if('val' in key1):
-            mask_ = self.val_mask
-        else:
-            mask_ = self.mask
+        mask_ = self.mask
 
 
         h5_gen = MyGenerator(self.f_storage, n_objs, batch_size, key1, key2, key3, mask = mask_)
@@ -530,10 +586,7 @@ class DataReader:
         n_objs = self.f_storage[key].shape[0]
         n_chunks = int(np.ceil(n_objs / chunk_size))
         results = np.array([])
-        if('val' in key):
-            mask_ = self.val_mask
-        else:
-            mask_ = self.mask
+        mask_ = self.mask
 
         for i in range(n_chunks):
             imgs = self.f_storage[key][chunk_size*i:(i+1)*chunk_size]
@@ -569,16 +622,8 @@ class DataReader:
             self.nTrain = int(self.nTrain * filter_frac)
             print("applied mask. Eff %.3f " % filter_frac)
         else: #to val
-            if(mask.shape[0] != self.nVal):
-                print("Error: Mask shape and number of validation events incompatable", mask.shape, self.nVal)
-                exit(1)
-
-            if(self.val_mask.shape[0] == 0):
-                self.val_mask = mask
-            else:
-                self.val_mask = self.val_mask & mask
-            filter_frac = np.mean(mask)
-            self.nVal = int(self.nVal * filter_frac)
+            print("Deprecated option")
+            sys.exit(1)
 
     
 

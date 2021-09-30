@@ -61,6 +61,7 @@ def make_roc_curve(classifiers, y_true, colors = None, logy=True, labels = None,
         clr = 'navy'
         if(labels != None): lbl = labels[idx]
         if(colors != None): clr = colors[idx]
+
         print(lbl, " ", roc_auc)
         plt.plot(tpr, ys, lw=2, color=clr, label='%s = %.3f' % (lbl, roc_auc))
 
