@@ -26,16 +26,20 @@ def input_options():
     parser.add_argument("--iter", dest = "tnt_iter", type = int, default=0, help="What iteration of  the tag & train algorithm this is (Start = 0).")
     parser.add_argument("--num_epoch", type = int, default=100, help="How many epochs to train for")
     parser.add_argument("--data_start", type = int, default=0, help="What event to start with")
+    parser.add_argument("--data_sop", type = int, default=-1, help="What event to stop on")
     parser.add_argument("--num_data", type = int, default=-1, help="How many events to train on")
     parser.add_argument("--batch_size", type=int, default=256, help="Size of mini-batchs used for training")
     parser.add_argument("--batch_start", type=int, default=-1, help="Train over multiple batches of dataset. Starting batch")
     parser.add_argument("--batch_stop", type=int, default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
     parser.add_argument("--val_batch_start", type=int, default=-1, help="Batches to use for validation start")
     parser.add_argument("--val_batch_stop", type=int, default=-1, help="Batches to use for validation stop ")
+    parser.add_argument("--no_minor_bkgs", default = False, action = "store_true", help="Exclude minor backgrounds from sample")
 
     parser.add_argument("--use_one", default = False, action = "store_true", help="Make a classifier for one jet instead of both")
     parser.add_argument("-j", "--training_j", type =int, default = 1, help="Which jet to make a classifier for (1 or 2)")
     parser.add_argument("--use_images", default = False, action = "store_true", help="Make a classifier using jet images as inputs")
+    parser.add_argument("--keep_mlow", type=int, default = -1,  help="Low mjj value to keep in dataset")
+    parser.add_argument("--keep_mhigh", type=int, default = -1, help="High mjj value to keep in dataset")
     parser.add_argument("--mjj_low", type=int, default = 2250,  help="Low mjj cut value")
     parser.add_argument("--mjj_high", type=int, default = 2750, help="High mjj cut value")
     parser.add_argument("--mjj_sig", type=int, default = 2500, help="Signal mass (used for signal filtering)")
@@ -64,8 +68,8 @@ def input_options():
     return parser
 
 def load_dataset_from_options(options):
-    if(not hasattr(options, 'keep_low') or not hasattr(options, 'keep_high')):
-        options.keep_low = options.keep_high = -1
+    if(not hasattr(options, 'keep_mlow') or not hasattr(options, 'keep_mhigh')):
+        options.keep_mlow = options.keep_mhigh = -1
 
     if(not hasattr(options, 'data_batch_list')):
         data_batch_list = None
@@ -89,20 +93,28 @@ def load_dataset_from_options(options):
         else: val_batch_list = None
 
     if(val_batch_list != None):
+        opts_dict = vars(copy.deepcopy(options))
+        opts_dict['batch_list'] = val_batch_list
+        val_data = DataReader(**opts_dict)
 
-        val_data = DataReader(options.fin, keys = options.keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-            m_low = options.keep_low, m_high = options.keep_high, batch_list = val_batch_list, hadronic_only = options.hadronic_only, 
-            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
-        val_data.read()
+        #val_data = DataReader(fin = options.fin, keys = options.keys, sig_idx = options.sig_idx, sig_frac = options.sig_frac, 
+        #        data_start = options.data_start, data_stop = options.data_start + options.num_data, 
+        #    keep_mlow = options.keep_mlow, keep_mhigh = options.keep_mhigh, batch_list = val_batch_list, hadronic_only = options.hadronic_only, 
+        #    mjj_sig = options.mjj_sig, BB_seed = options.BB_seed, d_eta = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
+        #val_data.read()
     else:
         val_data = None
 
+    opts_dict = vars(copy.deepcopy(options))
+    opts_dict['batch_list'] = data_batch_list
+    data = DataReader(**opts_dict)
         
 
+    #data = DataReader(fin = options.fin, keys = options.keys, sig_idx = options.sig_idx, sig_frac = options.sig_frac, 
+    #    data_start = options.data_start, data_stop = options.data_start + options.num_data, 
+    #    keep_mlow = options.keep_mlow, keep_mhigh = options.keep_mhigh, batch_list = data_batch_list, hadronic_only = options.hadronic_only, 
+    #    mjj_sig = options.mjj_sig, BB_seed = options.BB_seed, d_eta = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
 
-    data = DataReader(options.fin, keys = options.keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-            m_low = options.keep_low, m_high = options.keep_high, batch_list = data_batch_list, hadronic_only = options.hadronic_only, 
-            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
     data.read()
 
     return data, val_data

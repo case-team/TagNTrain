@@ -49,7 +49,7 @@ def tag_and_train(options):
 
 
 
-    options.keep_low = options.keep_high = -1.
+    options.keep_mlow = options.keep_mhigh = -1.
 
     if(not options.no_mjj_cut):
         #keep window size proportional to mjj bin center
@@ -58,10 +58,10 @@ def tag_and_train(options):
 
         window_low_size = window_frac*options.mjj_low / (1 + window_frac)
         window_high_size = window_frac*options.mjj_high / (1 - window_frac)
-        options.keep_low = options.mjj_low - window_low_size
-        options.keep_high = options.mjj_high + window_high_size
+        options.keep_mlow = options.mjj_mlow - window_low_size
+        options.keep_mhigh = options.mjj_mhigh + window_high_size
 
-        print("Mjj keep low %.0f keep high %.0f \n" % ( options.keep_low, options.keep_high))
+        print("Mjj keep low %.0f keep high %.0f \n" % ( options.keep_mlow, options.keep_mhigh))
 
 
 

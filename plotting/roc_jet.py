@@ -107,8 +107,8 @@ if(include_images):
 if(single_file):
     num_data = -1
     data_start = 0
-    data = DataReader(fin, signal_idx = sig_idx, start = data_start, stop = data_start + num_data, keys = keys, m_low = m_low, m_high = m_high, hadronic_only = hadronic_only, 
-            eta_cut = eta_cut, randsort = randsort, batch_start = batch_start, batch_stop = batch_stop, sig_frac = sig_frac )
+    data = DataReader(fin=fin, sig_idx = sig_idx, data_start = data_start, data_stop = data_start + num_data, keys = keys, keep_mlow = m_low, keep_mhigh = m_high, 
+            hadronic_only = hadronic_only, d_eta = d_eta, batch_start = batch_start, batch_stop = batch_stop, sig_frac = sig_frac)
     data.read()
     if(include_images): images = data[x_label]
     Y = data['label'].reshape(-1)

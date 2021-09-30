@@ -17,10 +17,10 @@ def train_cwola_hunting_network(options):
 #keep window size proportional to mjj bin center
     window_low_size = window_frac*options.mjj_low / (1 + window_frac)
     window_high_size = window_frac*options.mjj_high / (1 - window_frac)
-    options.keep_low = options.mjj_low - window_low_size
-    options.keep_high = options.mjj_high + window_high_size
+    options.keep_mlow = options.mjj_low - window_low_size
+    options.keep_mhigh = options.mjj_high + window_high_size
 
-    print("Mjj keep low %.0f keep high %.0f \n" % ( options.keep_low, options.keep_high))
+    print("Mjj keep low %.0f keep high %.0f \n" % ( options.keep_mlow, options.keep_mhigh))
 
 
 #which images to train on and which to use for labelling
@@ -70,6 +70,7 @@ def train_cwola_hunting_network(options):
     t1 = time.time()
     data, val_data = load_dataset_from_options(options)
     do_val = val_data is not None
+    print(val_data.keys)
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
 
@@ -97,6 +98,10 @@ def train_cwola_hunting_network(options):
     t_data = data.gen(x_key,'Y_mjj', key3 = sample_weights, batch_size = options.batch_size)
     v_data = None
 
+    cbs = [tf.keras.callbacks.History()]
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=options.num_epoch/10, verbose=1, mode='min')
+    cbs.append(early_stop)
+
     nVal = 0
     if(do_val): 
         nVal = val_data.nTrain
@@ -109,9 +114,6 @@ def train_cwola_hunting_network(options):
 
 
 
-    cbs = [tf.keras.callbacks.History()]
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=options.num_epoch/10, verbose=1, mode='min')
-    cbs.append(early_stop)
 
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
@@ -122,10 +124,10 @@ def train_cwola_hunting_network(options):
 
 
     for seed in options.seeds:
-        np.random.seed(options.seed)
-        tf.set_random_seed(options.seed)
-        os.environ['PYTHONHASHSEED']=str(options.seed)
-        random.seed(options.seed)
+        np.random.seed(seed)
+        tf.set_random_seed(seed)
+        os.environ['PYTHONHASHSEED']=str(seed)
+        random.seed(seed)
 
         model_list = []
 

@@ -113,47 +113,58 @@ class MyGenerator(tf.keras.utils.Sequence):
 
 
 
-
 class DataReader:
     DR_count = 0
 
-    def __init__(self, f_name = None, signal_idx =1, keys = None, sig_frac = -1., start = 0, stop = -1, batch_start = -1, batch_stop = -1, batch_list = None, 
-            m_low = -1., m_high = -1., hadronic_only = False, eta_cut = -1., ptsort =False, randsort = False, local_storage = False, 
-            m_sig = -1, sig_per_batch = -1, seed = 12345):
-        self.ready = False
-        if(f_name is None):
-           return
+    def __init__(self, iterable = (), **kwargs):
 
-        if(keys is None):
+            #fin = None, sig_idx =1, keys = None, sig_frac = -1., data_start = 0, data_stop = -1, batch_start = -1, batch_stop = -1, batch_list = None, 
+            #keep_mlow = -1., keep_mhigh = -1., hadronic_only = False, d_eta = -1., ptsort =False, randsort = False, local_storage = False, 
+            #mjj_sig = -1, sig_per_batch = -1, BB_seed = 12345):
+
+        self.ready = False
+        #second  arg is default argument
+        self.fin = kwargs.get('fin', None)
+        self.d_eta = kwargs.get('d_eta', -1.)
+        self.sig_idx = kwargs.get('sig_idx', 1)
+        self.sig_frac = kwargs.get('sig_frac', -1.)
+        self.sig_per_batch = kwargs.get('sig_per_batch', -1)
+        self.data_start = kwargs.get('data_start', 0)
+        self.data_stop = kwargs.get('data_stop', -1)
+        self.hadronic_only = kwargs.get('hadronic_only', False)
+        self.keep_mlow = kwargs.get('keep_mlow', -1.)
+        self.keep_mhigh = kwargs.get('keep_mhigh', -1.)
+        self.mjj_sig = kwargs.get('mjj_sig', -1.)
+        self.BB_seed = kwargs.get('BB_seed', 123456)
+        self.ptsort = kwargs.get('ptsort', False)
+        self.randsort = kwargs.get('randsort', False)
+        self.batch_list = kwargs.get('batch_list', None)
+
+        local_storage = kwargs.get('local_storage', False)
+        batch_start = kwargs.get('batch_start', -1)
+        batch_stop = kwargs.get('batch_stop', -1)
+
+
+
+
+        if(kwargs['keys'] is None):
             self.keys = ['j1_images', 'j2_images', 'mjj']
         else:
-            self.keys = copy.deepcopy(keys)
-        self.f_name = f_name
-        self.eta_cut = eta_cut
-        self.signal_idx = signal_idx
-        self.sig_frac = sig_frac
-        self.sig_per_batch = sig_per_batch
-        self.start = start
-        self.stop = stop
-        self.hadronic_only = hadronic_only
-        self.m_low = m_low
-        self.m_high = m_high
-        self.m_sig = m_sig
-        self.seed = seed
-        self.ptsort = ptsort
-        self.randsort = randsort
+            self.keys = copy.deepcopy(kwargs.get('keys'))
+
+        print(self.keys)
+
         if(self.randsort): print("Rand sort")
 
         self.multi_batch = False
-        if(batch_start != -1 and batch_stop != -1 and batch_list is None):
-            batch_list = list(range(batch_start, batch_stop+1))
+        if(batch_start != -1 and batch_stop != -1 and self.batch_list is None):
+            self.batch_list = list(range(batch_start, batch_stop+1))
 
-        print("Batch_list:", batch_list)
+        print("Batch_list:", self.batch_list)
 
-        if(batch_list is not None):
+        if(self.batch_list is not None):
             self.multi_batch = True
 
-        self.batch_list = batch_list
 
         self.chunk_size = 200000
         self.max_load = 1000000 #max size to load without chunks
@@ -176,6 +187,7 @@ class DataReader:
         self.f_storage = h5py.File(self.f_storage_name, "w")
 
         self.mask = np.array([])
+        #print(self.__dict__)
 
     def __copy__(self):
         new = DataReader()
@@ -207,10 +219,10 @@ class DataReader:
 
         if(self.multi_batch):
             for i in self.batch_list:
-                f_name = self.f_name + "BB_images_batch%i.h5" % i 
+                f_name = self.fin + "BB_images_batch%i.h5" % i 
                 self.read_batch(f_name)
         else:
-            self.read_batch(self.f_name)
+            self.read_batch(self.fin)
 
         self.keys.append('label')
         print("Kept %i events after selection" % self.nEvents)
@@ -260,9 +272,9 @@ class DataReader:
     def read_batch(self, f_name):
 
         f = h5py.File(f_name, "r")
-        if(self.stop == -1): stop = f['event_info'].shape[0]
+        if(self.data_stop == -1): stop = f['event_info'].shape[0]
         else: stop = self.stop
-        self.nEvents_file = stop - self.start
+        self.nEvents_file = stop - self.data_start
 
         nChunks = 1
         if(self.nEvents_file > self.max_load and loading_images):
@@ -274,16 +286,16 @@ class DataReader:
 
 
         for i in range(nChunks):
-            cstart = self.start + i*self.chunk_size
+            cstart = self.data_start + i*self.chunk_size
             if(nChunks == 1): cstop = stop
-            else: cstop = min(cstart + self.chunk_size, self.stop)
+            else: cstop = min(cstart + self.chunk_size, self.data_stop)
 
             #fill this chunk
             raw_labels = f['truth_label'][cstart: cstop]
             labels = np.zeros_like(raw_labels)
-            if(self.signal_idx > 0):
-                labels[raw_labels == self.signal_idx] = 1
-                mask = np.squeeze((raw_labels <= 0) | (raw_labels == self.signal_idx)) 
+            if(self.sig_idx > 0):
+                labels[raw_labels == self.sig_idx] = 1
+                mask = np.squeeze((raw_labels <= 0) | (raw_labels == self.sig_idx)) 
             else:
                 mask = np.squeeze(raw_labels >= -999999)
 
@@ -297,12 +309,12 @@ class DataReader:
                 new_sig_frac = self.sig_per_batch / labels[mask].shape[0]
                 print("Signal fraction overall is %.4f, %i sig events in batch and we want %i. Filter %i" %(cur_sig_overall, num_sig, self.sig_per_batch, do_filter))
             elif(self.sig_frac >= 0.): #filter signal based on S/B in signal region
-                sig_mask = (raw_labels == self.signal_idx).reshape(-1)
+                sig_mask = (raw_labels == self.sig_idx).reshape(-1)
                 bkg_mask = (raw_labels <=0).reshape(-1)
-                if(self.m_sig < 0):
+                if(self.mjj_sig < 0):
                     sig_mass = np.mean(mjj[sig_mask])
                 else:
-                    sig_mass = self.m_sig
+                    sig_mass = self.mjj_sig
 
                 window_low = 0.9 * sig_mass
                 window_high = 1.1* sig_mass
@@ -315,23 +327,25 @@ class DataReader:
                 print("Signal fraction overall is %.4f, %.4f in SR and we want %.4f in window: Filter %i" %(cur_sig_overall, cur_sig_frac_window, self.sig_frac, do_filter))
 
             if(do_filter): 
-                #mask_sig = get_signal_mask_rand(labels, mask, new_sig_frac, self.seed)
-                mask_sig = get_signal_mask(labels, mask, new_sig_frac, self.seed)
+                #mask_sig = get_signal_mask_rand(labels, mask, new_sig_frac, self.BB_seed)
+                mask_sig = get_signal_mask(labels, mask, new_sig_frac, self.BB_seed)
                 mask = mask & mask_sig
-            if(self.m_low > 0. and self.m_high >0.):
+            if(self.keep_mlow > 0. and self.keep_mhigh >0.):
                 mjj = f["jet_kinematics"][cstart:cstop,0]
-                mjj_mask = (mjj > self.m_low) & (mjj < self.m_high)
+                mjj_mask = (mjj > self.keep_mlow) & (mjj < self.keep_mhigh)
+                #print("mjj_mask", np.mean(mjj_mask))
                 mask = mask & mjj_mask
             if(self.hadronic_only):
                 is_lep = f['event_info'][cstart:cstop:,4] # stored as a float
-                sig_mask = (raw_labels == self.signal_idx).reshape(-1)
+                sig_mask = (raw_labels == self.sig_idx).reshape(-1)
                 sig_mean_val = np.mean(is_lep[sig_mask] < 0.1)
                 print("Hadronic only mask has mean %.3f " % sig_mean_val)
                 mask = mask & (is_lep < 0.1)
-            if(self.eta_cut > 0.):
+            if(self.d_eta > 0.):
                 deta = f['jet_kinematics'][cstart:cstop,1]
-                deta_mask = deta < self.eta_cut
+                deta_mask = deta < self.d_eta
                 mask = mask & deta_mask
+                #print("deta_mask", np.mean(deta_mask))
 
 
 
@@ -644,9 +658,9 @@ class DataReader:
 
 #create a mask that removes signal events to enforce a given fraction
 #randomly selects which signal events to remove
-def get_signal_mask(labels, mask, sig_frac, seed=12345):
+def get_signal_mask(labels, mask, sig_frac, BB_seed=12345):
 
-    np.random.seed(seed)
+    np.random.seed(BB_seed)
     num_events = labels.shape[0]
     cur_frac =  np.mean(labels[mask])
     keep_frac = (sig_frac/cur_frac)
@@ -663,9 +677,9 @@ def get_signal_mask(labels, mask, sig_frac, seed=12345):
 
 #create a mask that removes signal events to enforce a given fraction
 #Random chance to keep each signal event
-def get_signal_mask_rand(labels, mask, sig_frac, seed=12345):
+def get_signal_mask_rand(labels, mask, sig_frac, BB_seed=12345):
 
-    np.random.seed(seed)
+    np.random.seed(BB_seed)
     num_events = labels.shape[0]
     cur_frac =  np.mean(labels[mask])
     if(cur_frac <= sig_frac):
