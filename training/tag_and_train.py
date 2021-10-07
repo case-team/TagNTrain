@@ -194,12 +194,12 @@ def tag_and_train(options):
     if(do_val): 
         #v_data = val_data.gen(x_key,'label', key3 = sample_weights, batch_size = options.batch_size) #true labels
         v_data = val_data.gen(x_key,'Y_TNT', key3 = sample_weights, batch_size = options.batch_size) #TNT labels
-        val_data_plain = [val_data[x_key], val_data['label'], val_data['Y_TNT'], val_data[sample_weights]]
+        val_data_plain = [val_data[x_key], np.clip(val_data['label'], 0,1), val_data['Y_TNT'], val_data[sample_weights]]
         if(options.randsort):
             v_data.add_dataset(x_key2, 'Y_TNT2', key3 = sample_weights + '2', dataset = val_data2)
             print(val_data_plain[0].shape, val_data_plain[1].shape)
             val_data_plain[0] = np.append(val_data_plain[0], val_data2[x_key2], axis =0)
-            val_data_plain[1] = np.append(val_data_plain[1], val_data2['label'], axis = 0)
+            val_data_plain[1] = np.append(val_data_plain[1], np.clip(val_data2['label'], 0,1), axis = 0)
             val_data_plain[2] = np.append(val_data_plain[2], val_data2['Y_TNT2'], axis = 0)
             val_data_plain[3] = np.append(val_data_plain[3], val_data2[sample_weights + '2'], axis = 0)
             print(val_data_plain[0].shape, val_data_plain[1].shape)

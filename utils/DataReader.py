@@ -139,10 +139,13 @@ class DataReader:
         self.ptsort = kwargs.get('ptsort', False)
         self.randsort = kwargs.get('randsort', False)
         self.batch_list = kwargs.get('batch_list', None)
+        self.no_minor_bkgs = kwargs.get('no_minor_bkgs', False)
 
         local_storage = kwargs.get('local_storage', False)
         batch_start = kwargs.get('batch_start', -1)
         batch_stop = kwargs.get('batch_stop', -1)
+
+        print("Creating dataset. Mass range %.0f - %.0f. Delta Eta cut %.1f" % (self.keep_mlow, self.keep_mhigh, self.d_eta))
 
 
 
@@ -277,7 +280,7 @@ class DataReader:
         self.nEvents_file = stop - self.data_start
 
         nChunks = 1
-        if(self.nEvents_file > self.max_load and loading_images):
+        if(self.nEvents_file > self.max_load and self.loading_images):
             nChunks = int(math.ceil(float(self.nEvents_file)/self.chunk_size))
 
         print("\nLoading file %s" % f_name)
@@ -292,19 +295,31 @@ class DataReader:
 
             #fill this chunk
             raw_labels = f['truth_label'][cstart: cstop]
-            labels = np.zeros_like(raw_labels)
+            labels = np.copy(raw_labels)
             if(self.sig_idx > 0):
                 labels[raw_labels == self.sig_idx] = 1
-                mask = np.squeeze((raw_labels <= 0) | (raw_labels == self.sig_idx)) 
+                if(self.no_minor_bkgs):
+                    mask = np.squeeze((raw_labels == 0) | (raw_labels == self.sig_idx)) 
+                else:
+                    mask = np.squeeze((raw_labels <= 0) | (raw_labels == self.sig_idx)) 
+
             else:
                 mask = np.squeeze(raw_labels >= -999999)
 
+            #Do hadronic only mask before reducing signal
+            if(self.hadronic_only):
+                is_lep = f['event_info'][cstart:cstop:,4] # stored as a float
+                sig_mask = (raw_labels == self.sig_idx).reshape(-1)
+                sig_mean_val = np.mean(is_lep[sig_mask] < 0.1)
+                print("Hadronic only mask has mean %.3f " % sig_mean_val)
+                mask = mask & (is_lep < 0.1)
+
             #only keep some events
-            cur_sig_overall = np.mean(labels[mask])
+            cur_sig_overall = np.mean(labels[mask] > 0)
             mjj = f["jet_kinematics"][cstart:cstop,0]
             do_filter = False
             if(self.sig_per_batch >= 0):
-                num_sig = np.sum(labels[mask])
+                num_sig = np.sum(labels[mask] > 0)
                 do_filter = num_sig > self.sig_per_batch
                 new_sig_frac = self.sig_per_batch / labels[mask].shape[0]
                 print("Signal fraction overall is %.4f, %i sig events in batch and we want %i. Filter %i" %(cur_sig_overall, num_sig, self.sig_per_batch, do_filter))
@@ -335,12 +350,6 @@ class DataReader:
                 mjj_mask = (mjj > self.keep_mlow) & (mjj < self.keep_mhigh)
                 #print("mjj_mask", np.mean(mjj_mask))
                 mask = mask & mjj_mask
-            if(self.hadronic_only):
-                is_lep = f['event_info'][cstart:cstop:,4] # stored as a float
-                sig_mask = (raw_labels == self.sig_idx).reshape(-1)
-                sig_mean_val = np.mean(is_lep[sig_mask] < 0.1)
-                print("Hadronic only mask has mean %.3f " % sig_mean_val)
-                mask = mask & (is_lep < 0.1)
             if(self.d_eta > 0.):
                 deta = f['jet_kinematics'][cstart:cstop,1]
                 deta_mask = deta < self.d_eta
@@ -662,7 +671,7 @@ def get_signal_mask(labels, mask, sig_frac, BB_seed=12345):
 
     np.random.seed(BB_seed)
     num_events = labels.shape[0]
-    cur_frac =  np.mean(labels[mask])
+    cur_frac =  np.mean(labels[mask] > 0)
     keep_frac = (sig_frac/cur_frac)
     drop_frac = (1. - (sig_frac/cur_frac))
     progs = np.cumsum(labels)/(num_events * cur_frac)
@@ -681,7 +690,7 @@ def get_signal_mask_rand(labels, mask, sig_frac, BB_seed=12345):
 
     np.random.seed(BB_seed)
     num_events = labels.shape[0]
-    cur_frac =  np.mean(labels[mask])
+    cur_frac =  np.mean(labels[mask] > 0)
     if(cur_frac <= sig_frac):
         return np.ones_like(labels)
 

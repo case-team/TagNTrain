@@ -2,6 +2,7 @@ import sys
 sys.path.append('..')
 from training.train_cwola_hunting_network import *
 from training.tag_and_train import *
+from condor.doCondor import *
 
 
 
@@ -26,12 +27,9 @@ def create_model_ensemble(options):
             dirname = options.output.format(seed = seed)
             os.system("mkdir %s" % dirname)
     else:
-        os.system("mkdir %s" % options.output)
+        if(not os.path.exists(options.output)): os.system("mkdir %s" % options.output)
 
-    if(options.condor):
-        condor_dir = options.output + "condor/"
-        os.system("mkdir " +  condor_dir)
-
+    opts_list = []
     for i in range(num_ensemble_models):
         options_copy = copy.deepcopy(options)
         options_copy.output += "model%i.h5" % i
@@ -42,24 +40,42 @@ def create_model_ensemble(options):
         if(hasattr(options_copy, "data_batch_list")):
             options_copy.val_batch_list = options_copy.data_batch_list[options_copy.val_batch_start : options_copy.val_batch_stop+1]
 
-            for i in options_copy.val_batch_list: #validation batch range takes priority over regular batches
-                if i in options_copy.data_batch_list:
-                    options_copy.data_batch_list.remove(i)
-            print('data', options_copy.data_batch_list)
-            print('val', options_copy.val_batch_list)
+            for j in options_copy.val_batch_list: #validation batch range takes priority over regular batches
+                if j in options_copy.data_batch_list:
+                    options_copy.data_batch_list.remove(j)
+            #print(i, 'data', options_copy.data_batch_list)
+            #print(i, 'val', options_copy.val_batch_list)
 
 
         if(not options.condor):
             if(options.do_TNT): tag_and_train(options_copy)
             else: train_cwola_hunting_network(options_copy)
+
         else:
 
+            options_copy.output = "model%i.h5" % i
+            options_copy.local_storage = True
+            options_copy.fin = "../data/BB/"
             options_dict = options_copy.__dict__
 
-            with open(condor_dir + "train_params%i.pkl" % i , "w") as f:
-                pickle.dump(options_dict, f)
+            write_options_to_pkl(options_dict, "train_opts_%i.pkl" % i )
+            opts_list.append("train_opts_%i.pkl" % i)
 
-            condor_cmd = "python ../scripts/train_from_param_dict.py train_params%i.pkl" % i
+    if(options.condor):
+        condor_dir = options.output + "condor_jobs/"
+        if( not os.path.exists(condor_dir)): os.system("mkdir %s" % condor_dir)
+        c_opts = condor_options().parse_args([])
+        c_opts.nJobs = num_ensemble_models
+        c_opts.outdir = condor_dir
+        c_opts.script = "../condor/scripts/train_from_pkl.sh"
+        c_opts.name = options.label
+        c_opts.sub = True
+        #c_opts.sub = False
+        c_opts.input = opts_list
+        doCondor(c_opts)
+        for fname in opts_list:
+            os.system("rm %s" % fname)
+
 
 
 if(__name__ == "__main__"):

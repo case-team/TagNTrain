@@ -5,23 +5,13 @@ import matplotlib.colors as mcolors
 from optparse import OptionParser
 from optparse import OptionGroup
 
-parser = OptionParser()
-parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input file for training.")
-parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
-parser.add_option("-l", "--plot_label", default="", help="what to call the plots")
-parser.add_option("--num_data", type='int', default=-1)
-parser.add_option("--batch_start", type='int', default=-1, help="Train over multiple batches of dataset. Starting batch")
-parser.add_option("--batch_stop", type='int', default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
-parser.add_option("--data_start", type='int', default=0)
-parser.add_option("-s", "--signal", type='int', default=1, help="Which signal type to use ")
-parser.add_option("--sig_frac",  type='float', default=-1., help="Filter signal to this amount (negative to do nothing)")
-parser.add_option("--mjj_sig", type='int', default = -1, help="Mjj value of signal (used for filtering in correct mass region)")
-parser.add_option("--mjj_low", type='int', default = -1,  help="Low mjj cut value")
-parser.add_option("--mjj_high", type='int', default = -1, help="High mjj cut value")
-parser.add_option("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays")
+parser = input_options()
+parser.add_argument("--plot_label", default='', help="extra str for plot label")
+options = parser.parse_args()
 
-
-(options, args) = parser.parse_args()
+eta_cut = options.d_eta
+options.d_eta = -1.
+options.keys = ['jet_kinematics']
 
 fin = options.fin
 plot_dir = options.plot_dir
@@ -50,10 +40,7 @@ mjj_window = 500.
 
     
 
-keys = ['jet_kinematics']
-data = DataReader(fin, signal_idx = options.signal, sig_frac = options.sig_frac, keys = keys, start = data_start, stop = data_start + num_data, hadronic_only = options.hadronic_only, 
-        batch_start = options.batch_start, batch_stop = options.batch_stop, m_low = options.mjj_low, m_high = options.mjj_high, m_sig = options.mjj_sig)
-data.read()
+data, _ = load_dataset_from_options(options)
 Y = data['label'].reshape(-1)
 mjj = data['jet_kinematics'][:,0]
 d_eta = data['jet_kinematics'][:,1]
@@ -94,7 +81,6 @@ make_outline_hist([d_eta[bkg_events]],  d_eta[sig_events], labels, ['b','r'], r'
         normalize = True, save = save_figs,  h_range = eta_range, fname=plot_dir + plot_label + "nocut_delta_eta.png" )
 
 
-eta_cut = 1.1
 eff_B = np.sum(d_eta[bkg_events] < eta_cut) / d_eta[bkg_events].shape[0]
 eff_S = np.sum(d_eta[sig_events] < eta_cut) / d_eta[sig_events].shape[0]
 

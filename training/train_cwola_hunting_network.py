@@ -70,7 +70,6 @@ def train_cwola_hunting_network(options):
     t1 = time.time()
     data, val_data = load_dataset_from_options(options)
     do_val = val_data is not None
-    print(val_data.keys)
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
 
@@ -165,7 +164,7 @@ def train_cwola_hunting_network(options):
                 preds = model_list[model_idx].predict(val_data[x_key])
                 loss = bce(preds.reshape(-1), val_data['Y_mjj'][()].reshape(-1), weights = val_data[sample_weights])
                 true_loss = bce(preds.reshape(-1), val_data['label'][()].reshape(-1))
-                auc = roc_auc_score(val_data['label'], preds)
+                auc = roc_auc_score(np.clip(val_data['label'], 0, 1), preds)
                 eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.01)
                 print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
                 loss = -eff_cut_metric
@@ -179,8 +178,8 @@ def train_cwola_hunting_network(options):
         if(do_val):
             msg = "End of training. "
             y_pred_val = best_model.predict_proba(val_data[x_key])
-            roc_val = roc_auc_score(val_data['label'], y_pred_val)
-            phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data['label']))
+            roc_val = roc_auc_score(np.clip(val_data['label'], 0, 1), y_pred_val)
+            phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data['label'] > 0))
             msg += phrase
             print(msg, end =100*' ' + '\n')
 

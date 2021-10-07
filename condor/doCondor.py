@@ -1,0 +1,247 @@
+#!/usr/bin/env python
+
+# doCondor.py #############################################################################
+# Python driver for submitting condor jobs 
+# Oz Amram
+
+
+# ------------------------------------------------------------------------------------
+
+
+import subprocess
+import sys, os, fnmatch
+from optparse import OptionParser
+from optparse import OptionGroup
+from numpy import arange
+from itertools import product
+import argparse
+
+default_args = []
+
+# Options
+
+def condor_options():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-o", "--outdir", default='condor_jobs/',
+            help="output for analyzer. This will always be the output for job scripts.")
+    parser.add_argument("-n", "--name", default='', 
+            help="Name of job. Will be used for eos output and local directory")
+    parser.add_argument("-v", "--verbose", dest="verbose", default=False, action="store_true", 
+            help="Spit out more info")
+    parser.add_argument("-i", "--input", default=[], help="Additional list of files to be used as input (comma separated)")
+    # Make condor submission scripts arguments
+    parser.add_argument("--njobs", dest="nJobs", type=int, default=1, help="Split into n jobs, will automatically produce submission scripts")
+    parser.add_argument("-s", "--script", dest="script", default="scripts/my_script.sh",
+            help="sh script to be run by jobs (if splitting, should take eosoutput, nJobs and iJob as args)")
+    parser.add_argument("--dry-run", dest="dryRun", default=False, action="store_true", 
+            help="Do nothing, just create jobs if requested")
+    parser.add_argument("--combine", dest='with_combine', default=False, action="store_true", help="include combine in tarball")
+
+    # Monitor arguments (submit,check,resubmit failed)  -- just pass outodir as usual but this time pass --monitor sub --monitor check or --monitor resub
+    parser.add_argument("--sub", default=False, action="store_true", help="Submit jobs")
+    parser.add_argument("--status", default=False, action="store_true", help="Check on submitted jobs")
+
+    parser.add_argument("-e", "--haddEOS", dest='haddEOS', default = False, action='store_true',  help="Hadd EOS files together and save in output_files/YEAR directory")
+    parser.add_argument("-g", "--getEOS", default = False, action='store_true',  help="Get EOS files and save to out directory")
+    parser.add_argument("-y", "--year", dest='year', type=int, default = 2016,  help="Year for output file location")
+
+    parser.add_argument("--tar", dest='tar', default = False, action='store_true',  help="Create tarball of current directory")
+    parser.add_argument("--tarname", dest='tarname', default = "CASE", help="Name of directory to tar (relative to cmssw_base)")
+    parser.add_argument("--tarexclude", dest='tarexclude', default = '', 
+            help="Name of directories to exclude from the tar (relative to cmssw_base), format as comma separated string (eg 'dir1, dir2') ")
+    parser.add_argument("--cmssw", default = False, action="store_true",  help="Shortcut to create tarball for CMSSW environment for DY AFB analysis (with combine)")
+    parser.add_argument("--case", default = False, action="store_true",  help="Shortcut to create tarball for case  analysis")
+    parser.add_argument("--root_files", dest='root_files', default = False, action="store_true",  help="Shortcut to create tarball for root files of AFB analysis")
+    parser.add_argument("--no_rename", default = False, action="store_true",  help="Don't rename files for storing on EOS")
+    parser.add_argument("--mem", default = 0, type=int,  help="Request extra memory")
+    return parser
+
+
+
+def doCondor(options):
+    cwd = os.getcwd()
+    #if len(args) < 1 and (not options.monitor or not options.tar) : sys.exit('Error -- must specify ANALYZER')
+    cmssw_ver = os.getenv('CMSSW_VERSION', 'CMSSW_10_6_5')
+    cmssw_base = os.getenv('CMSSW_BASE')
+    xrd_base = 'root://cmseos.fnal.gov/'
+    EOS_home = '/store/user/oamram/'
+    EOS_base = xrd_base + EOS_home
+    scram_arch = 'slc7_amd64_gcc700'
+    cmssw_name = 'CASE_analysis'
+
+    # write job
+    def write_job(out, name, nJobs, iJob, eosout=''):
+        #print 'job_i %i nfiles %i subjobi %i'%(i,n,j)
+        cwd = os.getcwd()
+        eos_an_file = EOS_base + 'Condor_inputs/' + options.tarname + '.tgz'
+        eos_cmssw_file = EOS_base + 'Condor_inputs/' +  'CASE_CMSSW.tgz'
+
+        sub_file = open('%s/%s_job%d.sh' % (out, name, iJob), 'w')
+        sub_file.write('#!/bin/bash\n')
+        sub_file.write('# Job Number %d, of %d \n' % (iJob, nJobs))
+        sub_file.write('set -x \n')
+        sub_file.write('source /cvmfs/cms.cern.ch/cmsset_default.sh\n')
+        sub_file.write('pwd\n')
+        sub_file.write('export SCRAM_ARCH=%s\n' % scram_arch)
+
+        if(not options.with_combine):
+            sub_file.write('eval `scramv1 project CMSSW %s`\n'% (cmssw_ver))
+            sub_file.write('cat my_script.sh \n')
+            sub_file.write('mv my_script.sh %s/src/ \n'% (cmssw_ver))
+            sub_file.write('cd %s/src\n'%(cmssw_ver))
+            sub_file.write('eval `scramv1 runtime -sh`\n')
+
+        else:
+            sub_file.write('xrdcp %s CMSSW.tgz \n' % eos_cmssw_file) 
+            sub_file.write('cat my_script.sh \n')
+            sub_file.write('tar -xzf CMSSW.tgz \n')
+            sub_file.write('ls \n')
+            sub_file.write('mv my_script.sh %s/src/ \n' % cmssw_name)
+            sub_file.write('cd %s/src \n' % cmssw_name)
+            sub_file.write('eval `scramv1 runtime -sh`\n')
+            sub_file.write('scram b ProjectRename \n')
+
+        sub_file.write('xrdcp %s tarDir.tgz\n' %eos_an_file)
+        sub_file.write('tar -xzvf tarDir.tgz \n')
+        sub_file.write('scram b -j \n')
+        sub_file.write('./my_script.sh %s %i \n' % (eosout,iJob))
+        sub_file.write('cd ${_CONDOR_SCRATCH_DIR} \n')
+        sub_file.write('rm -rf %s\n' % cmssw_name)
+        sub_file.close()
+        os.system('chmod +x %s' % os.path.abspath(sub_file.name))
+
+    # write condor submission script
+    def submit_jobs(lofjobs):
+        script_location = os.path.abspath(options.outdir + options.name + "/my_script.sh")
+        for sub_file in lofjobs:
+            #os.system('rm -f %s.stdout' % sub_file)
+            #os.system('rm -f %s.stderr' % sub_file)
+            #os.system('rm -f %s.log' % sub_file)
+            #os.system('rm -f %s.jdl'% sub_file)
+            condor_file = open('%s.jdl' % sub_file, 'w')
+            condor_file.write('universe = vanilla\n')
+            condor_file.write('Executable = %s\n'% sub_file)
+            condor_file.write('Requirements = OpSys == "LINUX"&& (Arch != "DUMMY" )\n')
+            #condor_file.write('request_disk = 500000\n') # modify these requirements depending on job
+            if(options.mem > 0. ): condor_file.write('request_memory = %i \n' % options.mem)
+            condor_file.write('Should_Transfer_Files = YES\n')
+            input_files = "Transfer_Input_Files = %s, %s " %(script_location, sub_file)
+            for f in options.input:
+                input_files += " , "  + os.path.abspath(options.outdir + options.name + "/" + f) 
+            condor_file.write(input_files + "\n")
+            condor_file.write('WhenToTransferOutput = ON_EXIT \n')
+            condor_file.write('use_x509userproxy = true\n')
+            condor_file.write('x509userproxy = $ENV(X509_USER_PROXY)\n')
+            condor_file.write('Output = %s.stdout\n' % os.path.abspath(condor_file.name))
+            condor_file.write('Error = %s.stdout\n' % os.path.abspath(condor_file.name))
+            condor_file.write('Log = %s.log\n' % os.path.abspath(condor_file.name))
+            condor_file.write('Queue 1\n')
+            condor_file.close()
+            os.system('chmod +x %s'% os.path.abspath(condor_file.name))
+            os.system('condor_submit %s'%(os.path.abspath(condor_file.name)))
+
+
+
+
+    if options.tar:
+        tar_cmd = "tar" 
+        excludeList = options.tarexclude.split(',')
+        if options.case:
+            print("Using CASE tarball options")
+            excludeList = ["CASE/TagNTrain/data",  "CASE/TagNTrain/runs", "CASE/TagNTrain/plots", "CASE/TagNTrain/condor",
+                    "CASE/CASEUtils/H5_maker", "CASE/CASEUtils/fitting/fit_inputs", "CASE/TagNTrain/models/", "*.h5"]
+
+            options.tarname = "CASE"
+            for item in excludeList:
+                #tar_cmd += " --exclude='`%s`' " % ("echo $CMSSW_BASE/src/" + item)
+                tar_cmd += " --exclude='%s' " % (item)
+            tar_cmd += " --exclude='%s' " %'.git' 
+            tar_cmd += " --exclude='%s' " %'*.tgz' 
+            tar_cmd += " --exclude='%s' " %'*.png' 
+            tar_cmd += " -zcvf %s -C %s %s" % (options.tarname + ".tgz", "$CMSSW_BASE/src/", options.tarname)
+
+
+
+        if options.cmssw:
+            options.tarname = "CASE_CMSSW"
+            print("tarring CMSSW")
+            tar_cmd += " --exclude='%s' " %'*.tgz' 
+            tar_cmd += " --exclude='%s' " %'*.png' 
+            tar_cmd += " --exclude='%s' " %'*.root' 
+            tar_cmd += " --exclude='CASE_CMSSW/src/CASE/*' " 
+            #tar_cmd += " --exclude='%s' " %'*.h5' 
+            tar_cmd += " --exclude=PhysicsTools/"
+            tar_cmd += " --exclude='%s' " %'*.git*' 
+            tar_cmd += " -zcf %s -C %s %s" % (options.tarname + ".tgz", "$CMSSW_BASE/../", cmssw_name)
+
+
+        print("Executing tar command %s \n" % tar_cmd)
+        os.system(tar_cmd)
+        cp_cmd = "xrdcp -f %s %s" %(options.tarname + ".tgz", EOS_base + "Condor_inputs/")
+        print(cp_cmd)
+        os.system(cp_cmd)
+        rm_cmd = "rm %s" %(options.tarname + ".tgz")
+        os.system(rm_cmd)
+        sys.exit("Finished tarring")
+
+    elif (options.haddEOS):
+        if(options.outdir != "condor_jobs/"): o_dir = options.outdir
+        else: o_dir = "output_files/" + str(options.year) + "/" 
+        hadd_cmd = "hadd -f " + o_dir + options.name + ".root"
+        xrdfsls = "xrdfs root://cmseos.fnal.gov ls"
+        hadd_cmd += " `%s -u %s | grep '.root' `" %(xrdfsls, EOS_home + 'Condor_outputs/' + options.name)
+        print("Going to execute cmd %s: " % hadd_cmd)
+        os.system(hadd_cmd)
+
+    elif (options.getEOS):
+        print("Getting files and outputting to %s" % options.outdir)
+        result = subprocess.check_output(["./../condor/get_crab_file_list.sh", EOS_home + 'Condor_outputs/' + options.name]).decode("utf-8")
+        print(result)
+        for f in result.splitlines():
+            cmd = "xrdcp  -f %s %s" % (f, options.outdir)
+            #print "Going to execute cmd %s: " % cmd
+            os.system(cmd)
+
+        
+
+
+
+
+    elif options.nJobs > 0:
+    # -- MAIN
+        if(options.name == ""): sys.exit("ERROR: MUST PROVIDE JOB NAME \n")
+        if(os.path.exists(options.outdir + options.name)):
+            os.system('rm -r %s' % (options.outdir + options.name))
+        eos_dir_name = EOS_base + 'Condor_outputs/' + options.name
+        #os.system("eosrm -r %s" % eos_dir_name)
+        os.system('mkdir -p %s' % (options.outdir + options.name))
+        os.system('cp %s %s/my_script.sh' %(options.script, options.outdir + options.name))
+        for f in options.input:
+            os.system('cp %s %s/' %(f, options.outdir + options.name))
+
+        os.system('chmod +x %s/my_script.sh' % (options.outdir + options.name))
+
+        for iJob in range(options.nJobs):
+            eos_file_name = EOS_base + 'Condor_outputs/' + options.name + '/'
+            write_job(options.outdir + options.name, options.name, options.nJobs, iJob, eos_file_name)
+
+    # submit jobs by looping over job scripts in output dir
+    if options.sub:
+        odir = options.outdir + options.name
+
+        # pick up job scripts in output directory (ends in .sh)
+        os.system('xrdfs %s mkdir %s' % (xrd_base, EOS_home + 'Condor_outputs/' + options.name))
+        lofjobs = []
+        for root, dirs, files in os.walk(odir):
+            for f in fnmatch.filter(files, '%s_*.sh' %options.name):
+                lofjobs.append('%s/%s' % (os.path.abspath(root), f))
+        print('Submitting %d jobs from directory %s' % (len(lofjobs), odir))
+        submit_jobs(lofjobs)
+        print("Finished submitting")
+        return
+
+if __name__ == "__main__":
+    parser = condor_options()
+    options = parser.parse_args()
+    doCondor(options)

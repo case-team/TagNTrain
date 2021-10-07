@@ -17,6 +17,8 @@ sig_idx = 1
 roc_plot_name = "%s_s%i_roc_cwola_all_kfold_qt.png" %(j_label, sig_idx)
 sic_plot_name = "%s_s%i_sic_cwola_all_kfold_qt.png" % (j_label, sig_idx)
 
+no_minor_bkgs = True
+
 eta_cut = -1
 
 m_low = 2250.
@@ -108,7 +110,7 @@ if(single_file):
     num_data = -1
     data_start = 0
     data = DataReader(fin=fin, sig_idx = sig_idx, data_start = data_start, data_stop = data_start + num_data, keys = keys, keep_mlow = m_low, keep_mhigh = m_high, 
-            hadronic_only = hadronic_only, d_eta = d_eta, batch_start = batch_start, batch_stop = batch_stop, sig_frac = sig_frac)
+            hadronic_only = hadronic_only, d_eta = d_eta, batch_start = batch_start, batch_stop = batch_stop, sig_frac = sig_frac, no_minor_bkgs = no_minor_bkgs)
     data.read()
     if(include_images): images = data[x_label]
     Y = data['label'].reshape(-1)

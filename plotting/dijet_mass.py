@@ -6,7 +6,6 @@ from optparse import OptionParser
 from optparse import OptionGroup
 
 parser = input_options()
-parser.add_argument("--plot_label", default='', help="extra str for plot label")
 options = parser.parse_args()
 
 fin = options.fin
@@ -16,8 +15,8 @@ model_dir = options.model_dir
 
 
 model_type = options.model_type
-if(len(options.plot_label)> 0 and options.plot_label[-1] != '_'):
-    options.plot_label += '_'
+if(len(options.label)> 0 and options.label[-1] != '_'):
+    options.label += '_'
 
 num_data = options.num_data
 data_start = options.data_start
@@ -63,6 +62,8 @@ batch_size = 1000
 
 
 
+print(Y[Y<0])
+print(Y[Y>0][:20])
 
 
 save_figs = True
@@ -82,6 +83,7 @@ m_range = (1200., 7000.)
 
 sig_events = (Y > 0.9)
 bkg_events = (Y < 0.1)
+minor_bkg_events = (Y < -0.5)
 mjj_dists = []
 j1_pt_dists = []
 j2_pt_dists = []
@@ -91,7 +93,7 @@ dist_labels = []
 #No selection
 mjj_dists.append(mjj[bkg_events])
 make_outline_hist([mjj[bkg_events]],  mjj[sig_events], labels, ['b','r'], 'Dijet Mass (GeV)', "No Selection", n_m_bins, logy = True,
-         save = save_figs,  h_range = m_range, fname=plot_dir + options.plot_label + "nocut_mass.png" )
+         save = save_figs,  h_range = m_range, fname=plot_dir + options.label + "nocut_mass.png" )
 
 
 
@@ -106,13 +108,14 @@ if(m_high< 0):
 in_window = (mjj > m_low) & (mjj < m_high)
 S = mjj[sig_events & in_window].shape[0]
 B = mjj[bkg_events & in_window].shape[0]
+minor_B = mjj[minor_bkg_events & in_window].shape[0]
 
 overall_S = mjj[sig_events].shape[0]
 overall_B = mjj[bkg_events].shape[0]
 
 print("Mean signal mjj is %.0f" % mjj_sig);
 print("Mjj window %f to %f " % (m_low, m_high))
-print("Before selection: %i signal events and %i bkg events in mjj window" % (S,B))
+print("Before selection: %i signal events and %i bkg events in mjj window (%i minor bkg)" % (S,B, minor_B))
 print("S/B %f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
 print("Sig frac (overall) %f " % (float(overall_S)/overall_B))
 
@@ -184,12 +187,12 @@ if(options.labeler_name != ""): #apply selection
         masses = [mjj[bkg_events & pass_cut], mjj[sig_events & pass_cut]]
         mjj_dists.append(mjj[bkg_events & pass_cut])
         make_histogram(masses, labels, ['b','r'], 'Dijet Mass (GeV)', label, n_m_bins, 
-                stacked = True, save = save_figs,  h_range = m_range, fname=plot_dir + options.plot_label + "%.0fpcut_mass.png" %percentile)
+                stacked = True, save = save_figs,  h_range = m_range, fname=plot_dir + options.label + "%.0fpcut_mass.png" %percentile)
         S = mjj[sig_events & in_window & pass_cut].shape[0]
         B  = max(mjj[bkg_events & in_window & pass_cut].shape[0], 1e-5)
         print("S = %.0f, B = %.0f, S/B %.3f, sigificance ~ %.1f " % (S, B, float(S)/ B, S/np.sqrt(B)))
 
 
     make_histogram(mjj_dists, dist_labels, colors_sculpt, 'Dijet Mass (GeV)', "", n_m_bins,
-                   normalize=True, yaxis_label ="Arbitrary Units", save = save_figs,  h_range = m_range, fname=plot_dir + options.plot_label + "qcd_mass_sculpt.png")
+                   normalize=True, yaxis_label ="Arbitrary Units", save = save_figs,  h_range = m_range, fname=plot_dir + options.label + "qcd_mass_sculpt.png")
 

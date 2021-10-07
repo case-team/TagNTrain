@@ -19,6 +19,8 @@ sic_plot_name = "s%i_cwola_event_sic_sig025.png" % sig_idx
 m_low = 3150.
 m_high = 3850.
 
+no_minor_bkgs = True
+
 eta_cut = -1
 
 
@@ -126,7 +128,7 @@ if(single_file):
     num_data = -1
     data_start = 0
     data = DataReader(fin=fin, sig_idx = sig_idx, data_start = data_start, data_stop = data_start + num_data, keys = keys, keep_mlow = m_low, keep_mhigh = m_high, 
-            hadronic_only = hadronic_only, d_eta = d_eta, batch_start = batch_start, batch_stop = batch_stop)
+            hadronic_only = hadronic_only, d_eta = d_eta, batch_start = batch_start, batch_stop = batch_stop, no_minor_bkgs = no_minor_bkgs )
     data.read()
     j1_dense_inputs = data['j1_features']
     j2_dense_inputs = data['j2_features']

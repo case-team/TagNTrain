@@ -14,6 +14,7 @@ def classifier_selection(options):
 
 
 
+    n_points = 200.
 
 
 
@@ -64,8 +65,20 @@ def classifier_selection(options):
 
             #j1_score, j2_score = get_jet_scores(model_dir, f, options.model_type, j1rand_images, j2rand_images, j1rand_dense_inputs, j2rand_dense_inputs, num_models = options.num_models)
             j1_score, j2_score = get_jet_scores("", f, options.model_type, j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, num_models = options.num_models)
+
+            if(options.do_roc):
+                in_window = (mjj > options.mjj_low) & (mjj < options.mjj_high)
+                j1_qs = quantile_transform(j1_score[in_window].reshape(-1,1)).reshape(-1)
+                j2_qs = quantile_transform(j2_score[in_window].reshape(-1,1)).reshape(-1)
+                Y_window = Y[in_window]
+                sig_eff = np.array([(Y_window[(j1_qs > perc) & (j2_qs > perc) & (Y_window==1)].shape[0])/(Y_window[Y_window==1].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
+                bkg_eff = np.array([(Y_window[(j1_qs > perc) & (j2_qs > perc) & (Y_window==0)].shape[0])/(Y_window[Y_window==0].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
         else:
             jj_scores = get_jj_scores("", f, options.model_type, jj_images, jj_dense_inputs, num_models = options.num_models)
+            if(options.do_roc):
+                in_window = (mjj > options.mjj_low) & (mjj < options.mjj_high)
+                bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y[in_window], jj_scores[in_window])
+
 
 
     for eff in options.effs:
@@ -114,6 +127,14 @@ def classifier_selection(options):
             f.create_dataset("event_num", data=event_num_output, chunks = True, maxshape = event_num_shape)
 
 
+        if(options.do_roc):
+            sig_eff = np.clip(sig_eff, 1e-8, 1.)
+            bkg_eff = np.clip(bkg_eff, 1e-8, 1.)
+            f_np = options.output.replace(".h5", "_effs.npz")
+
+            np.savez(f_np, sig_eff = sig_eff, bkg_eff = bkg_eff)
+
+
 
 
     del data
@@ -123,6 +144,7 @@ def classifier_selection(options):
 if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--effs", nargs="+", default = [], type = float)
+    parser.add_argument("--do_roc", default = False, help = "Save info for roc")
     options = parser.parse_args()
 
     classifier_selection(options)

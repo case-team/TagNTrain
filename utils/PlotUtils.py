@@ -45,6 +45,8 @@ def plot_training(hist, fname =""):
 def make_roc_curve(classifiers, y_true, colors = None, logy=True, labels = None, fname=""):
     plt.figure(figsize=fig_size)
 
+    y_true = np.clip(y_true, 0,1)
+
     fs = 18
     fs_leg = 16
     for idx,scores in enumerate(classifiers):
@@ -82,15 +84,56 @@ def make_roc_curve(classifiers, y_true, colors = None, logy=True, labels = None,
     #else: 
         #plt.show(block=False)
 
-def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None, eff_min = 1e-3, ymax = -1, fname=""):
-    plt.figure(figsize=fig_size)
+
+def make_sic_plot(sig_effs, bkg_effs, colors = None, labels = None, eff_min = 1e-3, ymax = -1, fname=""):
+
 
     plt.figure(figsize=fig_size)
 
     fs = 18
     fs_leg = 16
+    sic_max = 10.
 
-    sic_max = 0.
+
+
+    for idx in range(len(sig_effs)):
+        sic = sig_effs[idx] / np.sqrt(bkg_effs[idx])
+
+        lbl = 'auc'
+        clr = 'navy'
+        if(labels != None): lbl = labels[idx]
+        if(colors != None): clr = colors[idx]
+        print(lbl, "max sic: ", np.amax(sic))
+        plt.plot(bkg_effs[idx], sic, lw=2, color=clr, label='%s' % lbl)
+
+
+    
+    plt.xlim([eff_min, 1.0])
+    if(ymax < 0):
+        ymax = sic_max
+        
+    plt.ylim([0,ymax])
+    plt.xscale('log')
+    plt.xlabel('Background Efficiency', fontsize = fs)
+    plt.ylabel('Significance Improvement', fontsize = fs)
+    plt.tick_params(axis='x', labelsize=fs_leg)
+    plt.tick_params(axis='y', labelsize=fs_leg)
+    plt.grid(axis = 'y', linestyle='--', linewidth = 0.5)
+    plt.legend(loc="best", fontsize= fs_leg)
+    if(fname != ""):
+        plt.savefig(fname)
+        print("Saving file to %s " % fname)
+
+
+def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None, eff_min = 1e-3, ymax = -1, fname=""):
+
+    y_true = np.clip(y_true, 0,1)
+    plt.figure(figsize=fig_size)
+
+    fs = 18
+    fs_leg = 16
+
+    sic_max = 10.
 
 
 
