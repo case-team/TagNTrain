@@ -25,14 +25,6 @@ if( len(plot_label) == 0):
 if(plot_label[-1] != '_'):
     plot_label += '_'
 
-num_data = options.num_data
-data_start = options.data_start
-
-use_or = False
-use_j = 0
-
-
-mjj_window = 500.
 
 
 
@@ -83,5 +75,7 @@ make_outline_hist([d_eta[bkg_events]],  d_eta[sig_events], labels, ['b','r'], r'
 
 eff_B = np.sum(d_eta[bkg_events] < eta_cut) / d_eta[bkg_events].shape[0]
 eff_S = np.sum(d_eta[sig_events] < eta_cut) / d_eta[sig_events].shape[0]
+
+print("Before Cut S = %.1f, B = %.1f" % ( d_eta[sig_events].shape[0], d_eta[bkg_events].shape[0]))
 
 print("Testing eta cut %.1f. Eff sig %.2f Eff bkg %.2f. Significance improvement %.2f \n" %  (eta_cut, eff_S, eff_B, eff_S / np.sqrt(eff_B)));

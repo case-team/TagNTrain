@@ -21,16 +21,20 @@ class ModelEnsemble:
                 for i in range(num_models):
                     model_name = "model%i.h5" % i
                     self.model_names.append(location + model_name)
-                    model = tf.keras.models.load_model(location + model_name)
-                    self.model_list.append(model)
+
+            for model_fname in self.model_names:
+                model = tf.keras.models.load_model(model_fname)
+                self.model_list.append(model)
 
         self.num_models = len(self.model_names)
         self.model_type = model_type
 
     def predict(self, X, batch_size = 512):
-        for i in range(self.num_models):
-            #Ys = [quantile_transform(model.predict(X, batch_size = batch_size)) for model in self.model_list]
-            Ys = [model.predict(X, batch_size = batch_size) for model in self.model_list]
-        return np.average(Ys, axis=0).reshape(-1)
-        
+        Ys = [model.predict(X, batch_size = batch_size) for model in self.model_list]
+        ret = np.average(Ys, axis=0)
+        if(len(X.shape) > 2):
+            return ret.reshape(-1, 32,32, 1)
+        else:
+            return ret.reshape(-1)
+
 

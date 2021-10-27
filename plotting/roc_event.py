@@ -4,24 +4,25 @@ from utils.TrainingUtils import *
 import h5py
 import time
 
-fin = "../data/BB_v2_3500_images/BB_images_testset.h5"
-time_start = time.time()
+#fin = "../data/BB_v2_3500_images/BB_images_testset.h5"
 #fin = "../data/BB_v2_2500_images/BB_images_testset.h5"
-batch_start = -1
-batch_stop = -1
+fin = "../data/BB_UL_MC_small_v2_deta_images/"
+time_start = time.time()
+batch_start = 20
+batch_stop = 30
 sig_idx = 1
 #roc_plot_name = "s%i_event_roc_cwola_all_kfold_qt.png" % sig_idx
 #sic_plot_name = "s%i_event_sic_cwola_all_kfold_qt.png" % sig_idx
-roc_plot_name = "s%i_cwola_event_roc_sig025.png" % sig_idx
-sic_plot_name = "s%i_cwola_event_sic_sig025.png" % sig_idx
-#m_low = 2250.
-#m_high = 2750.
-m_low = 3150.
-m_high = 3850.
+roc_plot_name = "s%i_event_roc_ae.png" % sig_idx
+sic_plot_name = "s%i_event_sic_ae.png" % sig_idx
+m_low = 2250.
+m_high = 2750.
+#m_low = 3150.
+#m_high = 3850.
 
 no_minor_bkgs = True
 
-eta_cut = -1
+d_eta = -1
 
 
 single_file = True
@@ -29,15 +30,18 @@ hadronic_only = True
 
 sic_max = 10
 
-plot_dir = "../plots/BB_v2_M3500/sep29/"
-model_dir = "../models/BB_v2_M3500/"
+plot_dir = "../plots/BB_v2_M2500/AE_test/"
+model_dir = "../models/BB_v2_M2500/AE_test/"
 
 #plot_dir = "../runs/cwola_40spb_fullrun/"
 #model_dir = "../runs/cwola_40spb_fullrun/"
 
-#model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
 
 f_models = [
+"jrand_AE_4batch.h5",
+"jrand_AE_8batch.h5",
+"jrand_AE_num_model3_4batch.h5",
+"jrand_AE_num_model3_8batch.h5",
 #"{j_label}_autoencoder_m3500.h5", 
 #"july22/{j_label}_deta_sig00_TNT0_seed1_s3.h5",
 #"july22/{j_label}_deta_sig00_TNT0_seed2_s3.h5",
@@ -45,11 +49,11 @@ f_models = [
 #"july22/{j_label}_deta_sig00_TNT0_seed4_s3.h5",
 #"july22/{j_label}_deta_sig00_TNT0_seed5_s3.h5",
 
-"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed1/",
-"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed2/",
-"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed3/",
-"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed4/",
-"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed5/",
+#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed1/",
+#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed2/",
+#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed3/",
+#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed4/",
+#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed5/",
 
 #"july22/jrand_v2_deta_sig025_TNT0_seed1_s{sig_idx}.h5",
 #"july22/jrand_v2_deta_sig025_TNT0_seed2_s{sig_idx}.h5",
@@ -77,11 +81,11 @@ f_models = [
 ]
 
 labels = [
-        "CWoLa #1",
-        "CWoLa #2",
-        "CWoLa #3",
-        "CWoLa #4",
-        "CWoLa #5",
+#        "CWoLa #1",
+#        "CWoLa #2",
+#        "CWoLa #3",
+#        "CWoLa #4",
+#        "CWoLa #5",
 #        "TNT #1",
 #        "TNT #2",
 #        "TNT #3",
@@ -92,13 +96,18 @@ labels = [
 #        "k-fold 2",
 #        "k-fold 3",
 #        "k-fold 4",
+         "AE 4 batch",
+         "AE 8 batch",
+         "AE 4 batch, 3 models",
+         "AE 8 batch, 3 models",
         ]
 
 
 
 
-model_type = [2,2,2,2,2,2]
-num_models = [2,2,2,2,2,2]
+#model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
+model_type = [1,1,1,1,1,1]
+num_models = [1,1,1,1,1,1]
 rand_sort = [False, False, False, False, False, False]
 
 #f_models = ["autoencoder_m3500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]

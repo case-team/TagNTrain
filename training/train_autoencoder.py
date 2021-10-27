@@ -4,15 +4,6 @@ from utils.TrainingUtils import *
 from optparse import OptionParser
 from optparse import OptionGroup
 
-parser = input_options()
-(options, args) = parser.parse_args()
-
-
-(options, args) = parser.parse_args()
-
-
-
-
 
 
 def train_auto_encoder(options):
@@ -20,12 +11,14 @@ def train_auto_encoder(options):
     if(options.training_j == 1):
         j_label = "j1_"
         x_key = 'j1_images'
+        opp_j_key = "j2_images"
         cnn_shape = (32,32,1)
         print("training autoencoder for j1")
 
     elif (options.training_j ==2):
         j_label = "j2_"
         x_key = 'j2_images'
+        opp_j_key = "j1_images"
         cnn_shape = (32,32,1)
         print("training autoencoder for j2")
     else:
@@ -37,21 +30,22 @@ def train_auto_encoder(options):
     else:
         data_stop = options.data_start + options.num_data
 
-    keep_low = -1.
-    keep_high = -1.
     if(not options.no_mjj_cut):
         window_size = (options.mjj_high - options.mjj_low)/2.
         window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
         window_low_size = window_frac*options.mjj_low / (1 + window_frac)
         window_high_size = window_frac*options.mjj_high / (1 - window_frac)
-        options.keep_low = options.mjj_low - window_low_size
-        options.keep_high = options.mjj_high + window_high_size
-        print("Requiring mjj window from %.0f to %.0f \n" % (options.keep_low, options.keep_high))
+        options.keep_mlow = options.mjj_low - window_low_size
+        options.keep_mhigh = options.mjj_high + window_high_size
+        print("Requiring mjj window from %.0f to %.0f \n" % (options.keep_mlow, options.keep_mhigh))
 
 
 
     import time
     options.keys  = [x_key, 'mjj']
+    if(options.randsort):
+        options.keys.append(opp_j_key)
+
     t1 = time.time()
 
     data, val_data = load_dataset_from_options(options)
@@ -61,20 +55,6 @@ def train_auto_encoder(options):
     mjj_cut = (mjj < options.mjj_low) | (mjj > options.mjj_high)
     data.apply_mask(mjj_cut)
 
-    if(options.val_batch_start >0 and options.val_batch_stop > 0):
-        do_val = True
-        val_data = DataReader(options.fin, keys = keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-            m_low = keep_low, m_high = keep_high, batch_start = options.val_batch_start, batch_stop = options.val_batch_stop, 
-            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta, ptsort = options.ptsort, randsort = options.randsort)
-        val_data.read()
-        val_mjj = val_data['mjj']
-        val_mjj_cut = (val_mjj < options.mjj_low) | (val_mjj > options.mjj_high)
-        val_data.apply_mask(val_mjj_cut)
-    else:
-        do_val = False
-        val_data = None
-
-
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
 
@@ -83,7 +63,7 @@ def train_auto_encoder(options):
     mjj_cut = data['mjj']
 
 
-    print("Signal frac is %.3f \n" % (np.mean(data['label'])))
+    print("Signal frac is %.3f \n" % (np.mean(data['label'] > 0)))
 
 
 
@@ -93,18 +73,24 @@ def train_auto_encoder(options):
 
 # train model
     t_data = data.gen(x_key,x_key, batch_size = options.batch_size)
+    if(options.randsort):
+        t_data.add_dataset(opp_j_key, opp_j_key, dataset = data)
     v_data = None
     if(do_val): 
         nVal = val_data.nTrain
-        v_data = val_data.gen(x_key,x_key, batch_size = options.batch_size)
-        early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1, mode='min', baseline=None)
+        v_data = val_data.gen(x_key, x_key, batch_size = options.batch_size)
+        if(options.randsort):
+            v_data.add_dataset(opp_j_key, opp_j_key, dataset = val_data)
+        early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta = 1e-4, verbose=1, mode='min', baseline=None)
         cbs.append(early_stop)
     else:
         nVal = 0
 
     print("Will train on %i events, validate on %i events" % (data.nTrain, nVal))
-#print(np.mean(data['val_label']))
-#print(np.mean(data['label']))
+    #print(np.mean(data['val_label']))
+    #print(np.mean(data['label']))
+    
+
 
     model_list = []
     histories = []
@@ -153,4 +139,4 @@ def train_auto_encoder(options):
 if(__name__ == "__main__"):
     parser = input_options()
     options = parser.parse_args()
-    tag_and_train(options)
+    train_auto_encoder(options)

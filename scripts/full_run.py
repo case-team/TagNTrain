@@ -9,17 +9,8 @@ import h5py
 import time
 
 
-if(__name__ == "__main__"):
-    parser = input_options()
-    parser.add_argument("--effs", nargs="+", default = [], type = float)
-    parser.add_argument("--kfolds", default = 5, type = int)
-    parser.add_argument("--lfolds", default = 4, type = int)
-    parser.add_argument("--numBatches", default = 40, type = int)
-    parser.add_argument("--do_TNT",  default=False, action = 'store_true',  help="Use TNT (default cwola)")
-    parser.add_argument("--condor", default = False, action = 'store_true')
-    parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
-    parser.add_argument("--reload", default = False, action = 'store_true', help = "Reload based on previously saved options")
-    options = parser.parse_args()
+
+def full_run(options):
 
     if(options.output[-1] != '/'):
         options.output += '/'
@@ -35,6 +26,7 @@ if(__name__ == "__main__"):
             rel_opts = get_options_from_pkl(options.output + "run_opts.pkl")
             rel_opts.step = options.step
             if(len(options.effs) >0): rel_opts.effs = options.effs
+            if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
             options = rel_opts
     else:
         #save options
@@ -102,15 +94,22 @@ if(__name__ == "__main__"):
     #Do trainings
     if(do_train):
         for k,k_options in enumerate(kfold_options):
-            k_options.label = options.label + "_j1_kfold%i" % k
-            k_options.output = options.output + "j1_kfold%i/" % k
-            k_options.training_j = 1
-            create_model_ensemble(k_options)
+            if(not options.randsort):
+                k_options.label = options.label + "_j1_kfold%i" % k
+                k_options.output = options.output + "j1_kfold%i/" % k
+                k_options.training_j = 1
+                create_model_ensemble(k_options)
 
-            k_options.label = options.label + "_j2_kfold%i" % k
-            k_options.output = options.output + "j2_kfold%i/" % k
-            k_options.training_j = 2
-            create_model_ensemble(k_options)
+                k_options.label = options.label + "_j2_kfold%i" % k
+                k_options.output = options.output + "j2_kfold%i/" % k
+                k_options.training_j = 2
+                create_model_ensemble(k_options)
+            else:
+                k_options.label = options.label + "_jrand_kfold%i" % k
+                k_options.output = options.output + "jrand_kfold%i/" % k
+                k_options.training_j = 1
+                create_model_ensemble(k_options)
+
 
 
 
@@ -121,14 +120,21 @@ if(__name__ == "__main__"):
                 c_opts = condor_options().parse_args([])
                 c_opts.getEOS = True
 
-                #c_opts.name = "j1_kfold%i" % k
-                c_opts.name = options.label + "_j1_kfold%i" % k
-                c_opts.outdir = options.output + "j1_kfold%i/" % k
-                doCondor(c_opts)
-                #c_opts.name = "j2_kfold%i" % k
-                c_opts.name = options.label + "_j2_kfold%i" % k
-                c_opts.outdir = options.output + "j2_kfold%i/" % k
-                doCondor(c_opts)
+                if(not options.randsort):
+                    #c_opts.name = "j1_kfold%i" % k
+                    c_opts.name = options.label + "_j1_kfold%i" % k
+                    c_opts.outdir = options.output + "j1_kfold%i/" % k
+                    doCondor(c_opts)
+                    #c_opts.name = "j2_kfold%i" % k
+                    c_opts.name = options.label + "_j2_kfold%i" % k
+                    c_opts.outdir = options.output + "j2_kfold%i/" % k
+                    doCondor(c_opts)
+                else:
+                    c_opts.name = options.label + "_jrand_kfold%i" % k
+                    c_opts.outdir = options.output + "jrand_kfold%i/" % k
+                    doCondor(c_opts)
+
+                
 
     #select events
     if(do_selection):
@@ -137,7 +143,8 @@ if(__name__ == "__main__"):
             selection_options = copy.deepcopy(k_options)
             selection_options.data_batch_list = k_options.holdouts
             selection_options.val_batch_list = None
-            selection_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
+            if(not options.randsort): selection_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
+            else: selection_options.labeler_name = k_options.output + "jrand_kfold%i/" % k
             selection_options.output = k_options.output + "fit_inputs_kfold%i.h5" % k
             selection_options.do_roc = True
             selection_options.num_models = options.lfolds
@@ -146,6 +153,7 @@ if(__name__ == "__main__"):
             classifier_selection(selection_options)
 
         #merge different selections
+        print("Merge cmd: " + merge_cmd)
         subprocess.call(merge_cmd ,shell = True)
 
     if(do_roc):
@@ -174,3 +182,15 @@ if(__name__ == "__main__"):
     print("Total time taken was %s" % ( stop_time - start_time))
 
 
+if(__name__ == "__main__"):
+    parser = input_options()
+    parser.add_argument("--effs", nargs="+", default = [], type = float)
+    parser.add_argument("--kfolds", default = 5, type = int)
+    parser.add_argument("--lfolds", default = 4, type = int)
+    parser.add_argument("--numBatches", default = 40, type = int)
+    parser.add_argument("--do_TNT",  default=False, action = 'store_true',  help="Use TNT (default cwola)")
+    parser.add_argument("--condor", default = False, action = 'store_true')
+    parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
+    parser.add_argument("--reload", default = False, action = 'store_true', help = "Reload based on previously saved options")
+    options = parser.parse_args()
+    full_run(options)

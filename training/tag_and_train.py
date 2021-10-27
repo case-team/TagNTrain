@@ -58,8 +58,8 @@ def tag_and_train(options):
 
         window_low_size = window_frac*options.mjj_low / (1 + window_frac)
         window_high_size = window_frac*options.mjj_high / (1 - window_frac)
-        options.keep_mlow = options.mjj_mlow - window_low_size
-        options.keep_mhigh = options.mjj_mhigh + window_high_size
+        options.keep_mlow = options.mjj_low - window_low_size
+        options.keep_mhigh = options.mjj_high + window_high_size
 
         print("Mjj keep low %.0f keep high %.0f \n" % ( options.keep_mlow, options.keep_mhigh))
 
@@ -72,6 +72,7 @@ def tag_and_train(options):
         if(not options.no_ptrw): options.keys.append('jet_kinematics')
         x_key = j_label +  'images'
         l_key = opp_j_label +  'images'
+        l_key2 = j_label + "images"
     else:
         options.keys = ['mjj', 'j1_features', 'j2_features']
         if(not options.no_ptrw): options.keys.append('jet_kinematics')
@@ -84,7 +85,8 @@ def tag_and_train(options):
                 l_key2 = j_label + "images"
                 x_key2 = opp_j_label +  'features'
         else:
-            l_key = opp_j_label +  'features'
+            if(options.use_images): l_key = opp_j_label +  'images'
+            else: l_key = opp_j_label +  'features'
             if(options.randsort): 
                 l_key2 = j_label +  'features'
                 x_key2 = opp_j_label +  'features'
@@ -140,8 +142,8 @@ def tag_and_train(options):
         sig_region_cut2 = np.percentile(labeler_scores2, options.sig_cut)
         bkg_region_cut2 = np.percentile(labeler_scores2, options.bkg_cut)
         print("Labeler2: cut high %.3e, cut low %.3e " % (sig_region_cut2, bkg_region_cut2))
-        j1_bins, j1_ratio = make_ratio_histogram([labeler_scores, labeler_scores2], ["J1 scores", "J2 scores"], ["r", "b"], 'Score', "", 30,
-                        normalize=False, weights = None, save = True, fname="jrand_labeler_scores_cmp.png")
+        #j1_bins, j1_ratio = make_ratio_histogram([labeler_scores, labeler_scores2], ["J1 scores", "J2 scores"], ["r", "b"], 'Score', "", 30,
+                        #normalize=False, weights = None, save = True, fname="jrand_labeler_scores_cmp.png")
 
 
         data2.make_Y_TNT(sig_region_cut = sig_region_cut2, bkg_region_cut = bkg_region_cut2, cut_var = labeler_scores2, 
@@ -254,11 +256,11 @@ def tag_and_train(options):
 
             preds = model.predict_proba(data[x_key][:10])
             if np.any(np.isnan(preds)): 
-                print("Got output Nans. Should rerun with a different seed")
-                sys.exit(1)
+                print("Got output Nan for idx %i. Should rerun with a different seed" % model_idx )
+                #sys.exit(1)
 
 
-        if(options.num_models == 1):
+        if(options.num_models == 1 or not do_val ):
             best_model = model_list[0]
         else:
 
@@ -269,14 +271,16 @@ def tag_and_train(options):
             val_bkg_events = val_data_plain[2] < 0.1
             for model_idx in range(options.num_models):
                 preds = model_list[model_idx].predict(val_data_plain[0])
-                loss = bce(preds.reshape(-1), val_data_plain[2].reshape(-1), weights = val_data_plain[3])
+                if(np.any(np.isnan(preds))):
+                    loss = true_loss = auc = eff_cut_metric =  -1
 
-
-                true_loss = auc = -1
-                if(np.sum(val_data_plain[1]) > 10):
-                    true_loss = bce(preds.reshape(-1), val_data_plain[1].reshape(-1))
-                    auc = roc_auc_score(val_data_plain[1], preds)
-                eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.01)
+                else:
+                    loss = bce(preds.reshape(-1), val_data_plain[2].reshape(-1), weights = val_data_plain[3])
+                    true_loss = auc = -1
+                    if(np.sum(val_data_plain[1]) > 10):
+                        true_loss = bce(preds.reshape(-1), val_data_plain[1].reshape(-1))
+                        auc = roc_auc_score(val_data_plain[1], preds)
+                    eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.01)
                 print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
                 loss = -eff_cut_metric
                 if(loss < min_loss):

@@ -19,7 +19,7 @@ def append_h5(f, name, data):
     f[name][prev_size:] = data
 
 class MyGenerator(tf.keras.utils.Sequence):
-    def __init__(self, f, n, batch_size, key1, key2, key3, mask = None):
+    def __init__(self, f, n, batch_size, key1, key2, key3 = None, mask = None):
         self.f = [f]
         self.n = [n]
         self.batch_size = batch_size
@@ -34,9 +34,10 @@ class MyGenerator(tf.keras.utils.Sequence):
         self.key1 = [key1]
         self.key2 = [key2]
         self.key3 = [key3]
+        print("init", key1, key2, key3)
 
 
-    def add_dataset(self, key1,key2, key3, f2 = None, n2 = None, mask = None, dataset = None):
+    def add_dataset(self, key1,key2, key3 = None, f2 = None, n2 = None, mask = None, dataset = None):
         if(dataset is not None):
 
             n2 = dataset.f_storage[key1].shape[0]
@@ -95,11 +96,11 @@ class MyGenerator(tf.keras.utils.Sequence):
 
 
 
+
         if(mask is None or  mask.shape[0] == 0):
-            if(self.key3 is None):
+            if(key3 is None):
                 return (f[key1][start:stop], f[key2][start:stop])
             else:
-
                 return (f[key1][start:stop], f[key2][start:stop], f[key3][start:stop])
         else:
             mask_local = mask[start:stop]
@@ -150,7 +151,8 @@ class DataReader:
 
 
 
-        if(kwargs['keys'] is None):
+        keys = kwargs.get('keys', None)
+        if(keys is None):
             self.keys = ['j1_images', 'j2_images', 'mjj']
         else:
             self.keys = copy.deepcopy(kwargs.get('keys'))
@@ -605,6 +607,8 @@ class DataReader:
         return h5_gen
 
     def labeler_scores(self, model, key, chunk_size = 10000):
+        print(list(self.f_storage.keys()))
+        print("key", key)
         
         n_objs = self.f_storage[key].shape[0]
         n_chunks = int(np.ceil(n_objs / chunk_size))
