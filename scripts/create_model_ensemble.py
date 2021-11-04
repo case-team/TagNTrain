@@ -70,7 +70,6 @@ def create_model_ensemble(options):
         c_opts.script = "../condor/scripts/train_from_pkl.sh"
         c_opts.name = options.label
         c_opts.sub = True
-        #c_opts.sub = False
         c_opts.input = opts_list
         doCondor(c_opts)
         for fname in opts_list:

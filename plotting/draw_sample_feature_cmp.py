@@ -10,9 +10,9 @@ from optparse import OptionGroup
 parser = input_options()
 options = parser.parse_args()
 
-if(options.plot_dir[-1] != '/'): options.plot_dir +='/'
+if(options.output[-1] != '/'): options.output +='/'
 
-os.system("mkdir %s" %options.plot_dir)
+os.system("mkdir %s" %options.output)
 
 
 
@@ -105,12 +105,12 @@ print_signal_fractions(data['label'], data[Y_label])
 
 
 
-data.make_ptrw(Y_label, use_weights = not options.no_sample_weights, save_plots = True, plot_dir = options.plot_dir)
+data.make_ptrw(Y_label, use_weights = not options.no_sample_weights, save_plots = True, plot_dir = options.output)
 
-feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "LSF3", "DeepB", "nPFCands", "pt"]
+feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "DeepB", "nPFCands", "pt"]
 
 n_bins = 20
-colors = ['b', 'r']
+colors = ['b', 'green']
 labels = ["Signal Region", "Bkg Region"]
 
 
@@ -140,70 +140,78 @@ print("\n There are %i events in the signal region and %i in the bkg region \n" 
 print("\n There are %i events in the low-mjj bkg region and %i in the high-mjj bkg region \n" % (np.sum(bkg_mjjs < options.mjj_low), np.sum(bkg_mjjs > options.mjj_high )))
 
 
-j1_ptrw_sig_region_weights = data['j1_ptrw'][sig_region]
-j1_ptrw_bkg_region_weights = data['j1_ptrw'][bkg_region] 
 
-j2_ptrw_sig_region_weights = data['j2_ptrw'][sig_region] 
-j2_ptrw_bkg_region_weights = data['j2_ptrw'][bkg_region]
+true_bkg = (data['label'] < 0.1).reshape(-1)
+true_sig = (data['label'] > 0.9).reshape(-1)
+
+j1_ptrw_sig_region_weights = data['j1_ptrw'][sig_region & true_bkg]
+j1_ptrw_bkg_region_weights = data['j1_ptrw'][bkg_region & true_bkg] 
+j1_ptrw_signal = data['j1_ptrw'][sig_region & true_sig]
+
+j2_ptrw_sig_region_weights = data['j2_ptrw'][sig_region & true_bkg] 
+j2_ptrw_bkg_region_weights = data['j2_ptrw'][bkg_region & true_bkg]
+j2_ptrw_signal = data['j2_ptrw'][sig_region & true_sig]
 
 
 if(not options.no_sample_weights):
-    sig_region_weights = data['weight'][sig_region]
-    bkg_region_weights = data['weight'][bkg_region]
+    sig_region_weights = data['weight'][sig_region & true_bkg]
+    bkg_region_weights = data['weight'][bkg_region & true_bkg]
 
     weights_noptrw = [sig_region_weights, bkg_region_weights]
-    print(weights_noptrw[0][:10], weights_noptrw[1][:10])
 else:
     weights_noptrw = None
 
 ratio_range = 0.4
 
 
-
-sig_region_mjj = data['mjj'][sig_region]
-bkg_region_mjj = data['mjj'][bkg_region]
+sig_region_mjj = data['mjj'][sig_region & true_bkg]
+bkg_region_mjj = data['mjj'][bkg_region & true_bkg]
 
 
 j1_bins, j1_ratio = make_ratio_histogram([sig_region_mjj, bkg_region_mjj], labels, 
         colors, 'Mjj', "", n_bins, ratio_range = ratio_range, weights = weights_noptrw, errors = True, 
-        normalize=True, save = True, fname=options.plot_dir + 'mjj' + ".png")
-
+        normalize=True, save = True, fname=options.output + 'mjj' + ".png")
 
 
 for i in range(len(feature_names)):
-
-
     feat_name = feature_names[i]
 
     if(do_both_js or options.training_j == 1 or True):
         if(feat_name == 'pt'): j1_feats = j1_pts
         else: j1_feats = data["j1_features"][:,i]
 
-        j1_sig_region_feats = j1_feats[sig_region]
-        j1_bkg_region_feats = j1_feats[bkg_region]
+        j1_sig_region_feats = j1_feats[sig_region & true_bkg]
+        j1_bkg_region_feats = j1_feats[bkg_region & true_bkg]
+        j1_signal_feats = j1_feats[sig_region & true_sig]
 
 
         j1_bins, j1_ratio = make_ratio_histogram([j1_sig_region_feats, j1_bkg_region_feats], labels, 
                 colors, 'J1 ' +feat_name, "No pt Reweighting", n_bins, ratio_range = ratio_range, weights = weights_noptrw, errors = True, 
-                            normalize=True, save = True, fname=options.plot_dir + "j1_" + feat_name + ".png")
+                            extras = [(j1_signal_feats, j1_ptrw_signal, "Signal")],
+                            normalize=True, save = True, fname=options.output + "j1_" + feat_name + ".png")
 
         j1_bins, j1_ratio = make_ratio_histogram([j1_sig_region_feats, j1_bkg_region_feats], labels, 
                 colors, 'J1 ' +feat_name, "With pt Reweighting", n_bins, ratio_range = ratio_range, weights = [j1_ptrw_sig_region_weights, j1_ptrw_bkg_region_weights], errors = True,
-                            normalize=True, save = True, fname=options.plot_dir + "j1_" + feat_name + "_ptrw" + ".png")
+                        extras = [(j1_signal_feats, j1_ptrw_signal, "Signal")],
+                            normalize=True, save = True, fname=options.output + "j1_" + feat_name + "_ptrw" + ".png")
 
     if(do_both_js or options.training_j == 2 or True):
         if(feat_name == 'pt'): j2_feats = j2_pts
         else: j2_feats = data["j2_features"][:,i]
 
-        j2_sig_region_feats = j2_feats[sig_region]
-        j2_bkg_region_feats = j2_feats[bkg_region]
+        j2_sig_region_feats = j2_feats[sig_region & true_bkg]
+        j2_bkg_region_feats = j2_feats[bkg_region & true_bkg]
+        j2_signal_feats = j2_feats[sig_region & true_sig]
+
         j2_bins, j2_ratio = make_ratio_histogram([j2_sig_region_feats, j2_bkg_region_feats], labels, 
                 colors, 'J2 ' +feat_name, "No pt Reweighting", n_bins, ratio_range = ratio_range, weights = weights_noptrw, errors = True, 
-                            normalize=True, save = True, fname=options.plot_dir + "j2_" + feat_name + ".png")
+                        extras = [(j2_signal_feats, j2_ptrw_signal, "Signal")],
+                            normalize=True, save = True, fname=options.output + "j2_" + feat_name + ".png")
 
 
         j2_bins, j2_ratio = make_ratio_histogram([j2_sig_region_feats, j2_bkg_region_feats], labels, 
                 colors, 'J2 ' +feat_name, "With pt Reweighting", n_bins, ratio_range = ratio_range, weights = [j2_ptrw_sig_region_weights, j2_ptrw_bkg_region_weights], errors = True,
-                            normalize=True, save = True, fname=options.plot_dir + "j2_" + feat_name + "_ptrw" + ".png")
+                        extras = [(j2_signal_feats, j2_ptrw_signal, "Signal")],
+                            normalize=True, save = True, fname=options.output + "j2_" + feat_name + "_ptrw" + ".png")
 
 

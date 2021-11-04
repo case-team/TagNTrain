@@ -50,6 +50,9 @@ def classifier_selection(options):
     if('jj_dense_inputs' in options.keys):
         jj_dense_inputs = data['jj_features']
     batch_size = 1024
+    sig_effs = []
+    bkg_effs = []
+    overall_effs = []
 
     if(len(options.effs) ==1 and options.effs[0] == 100.):
         scores = None
@@ -68,14 +71,11 @@ def classifier_selection(options):
 
             if(options.do_roc):
                 in_window = (mjj > options.mjj_low) & (mjj < options.mjj_high)
-                j1_qs = quantile_transform(j1_score[in_window].reshape(-1,1)).reshape(-1)
-                j2_qs = quantile_transform(j2_score[in_window].reshape(-1,1)).reshape(-1)
+                j1_qs = quantile_transform(j1_score[in_window].reshape(-1,1), copy = True).reshape(-1)
+                j2_qs = quantile_transform(j2_score[in_window].reshape(-1,1), copy = True).reshape(-1)
                 Y_inwindow = Y[in_window]
                 #sig_effs = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==1)].shape[0])/(Y_inwindow[Y_nwindow==1].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
                 #bkg_effs = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==0)].shape[0])/(Y_inwindow[Y_inwindow==0].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
-                sig_effs = []
-                bkg_effs = []
-                overall_effs = []
                 for perc in np.arange(0., 1., 1./n_points):
                     mask = (j1_qs > perc) &  (j2_qs > perc)
                     eff = np.mean(mask)
@@ -95,6 +95,18 @@ def classifier_selection(options):
 
 
     for eff in options.effs:
+
+        use_sidebands = True
+        window_size = (options.mjj_high - options.mjj_low)/2.
+        window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
+
+        window_low_size = window_frac*options.mjj_low / (1 + window_frac)
+        window_high_size = window_frac*options.mjj_high / (1 - window_frac)
+        sb_mlow = options.mjj_low - window_low_size
+        sb_mhigh = options.mjj_high + window_high_size
+
+        in_sb = ((mjj> sb_mlow) & (mjj < options.mjj_low)) | ((mjj > options.mjj_high) & (mjj < sb_mhigh))
+
         print("Will select events with efficiency %.3f" % eff)
         percentile_cut = 100. - eff
         if('{eff}' in options.output):
@@ -105,36 +117,58 @@ def classifier_selection(options):
         if(eff == 100.):
             mask = mjj> 0.
         elif(options.model_type <3):
-            mask = make_selection(j1_score, j2_score, percentile_cut)
+            if(use_sidebands):
+                mask = make_selection(j1_score, j2_score, percentile_cut, mask = in_sb)
+            else:
+                mask = make_selection(j1_score, j2_score, percentile_cut, mask = None)
+
         else:
-            thresh = np.percentile(jj_scores, percentile_cut)
+            if(use_sidebands):
+                thresh = np.percentile(jj_scores[in_sb], percentile_cut)
+            else:
+                thresh = np.percentile(jj_scores, percentile_cut)
+
             mask = scores > thresh
 
-        sig_eff = float(( Y[(Y > 0.9) & mask]).shape[0]) / (Y[Y > 0.9]).shape[0]
+
+
         mjj_output = mjj[mask]
         is_sig_output = Y[mask]
         event_num_output = event_num[mask]
         print("Selected %i events" % mjj_output.shape[0])
 
+        in_window_all = (mjj > options.mjj_low) & (mjj < options.mjj_high)
         in_window = (mjj_output > options.mjj_low) & (mjj_output < options.mjj_high)
         sig_events = is_sig_output > 0.9
         bkg_events = is_sig_output < 0.1
         S = mjj_output[sig_events & in_window].shape[0]
         B = mjj_output[bkg_events & in_window].shape[0]
 
-        sig_eff_window = S / (Y[Y > 0.9]).shape[0]
+        nsig = (Y[Y > 0.9]).shape[0] 
+        nbkg = (Y[Y < 0.1]).shape[0] 
+
+        if(nsig > 0):
+            sig_eff = float(( Y[(Y > 0.9) & mask]).shape[0]) / nsig
+            sig_eff_window = S / nsig
+        else:
+            sig_eff = sig_eff_window = -1.
+
+        bkg_eff = float(( Y[(Y < 0.1) & mask]).shape[0]) / nbkg
+        minor_bkg_eff = float(( Y [(Y< -0.1) & mask]).shape[0]) / Y[ (Y < -0.1)].shape[0]
+        bkg_eff_window =  B/ Y[(Y< 0.1) & in_window_all].shape[0]
 
 
         print("Mjj window %f to %f " % (options.mjj_low, options.mjj_high))
         print("S/B %f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
         print("Sig Eff %.3f, with window %.3f " % (sig_eff, sig_eff_window))
+        print("Bkg eff %.3f, in mjj window %.3f " % (bkg_eff, bkg_eff_window))
+        print("Minor bkg eff %.3f" % minor_bkg_eff)
         print("Outputting to %s \n\n" % output_name)
 
 
         with h5py.File(output_name, "w") as f:
             
             mjj_shape = list(mjj_output.shape)
-            print(mjj_shape)
             is_sig_shape = list(is_sig_output.shape)
             event_num_shape = list(event_num_output.shape)
 
@@ -155,6 +189,18 @@ def classifier_selection(options):
 
             np.savez(f_np, sig_eff = sig_effs, bkg_eff = bkg_effs, overall_eff = overall_effs)
 
+        make_mjj_eff_plot = True
+        if(make_mjj_eff_plot):
+            f_plt = options.output.replace(".h5", "_mjj_eff_plot.png")
+            print("Creating %s" % f_plt)
+            n_bins = 20
+            ratio_range = [0.0, 0.03]
+            make_ratio_histogram([mjj_output, mjj], ["Selected", "Inclusive"], 
+                ['blue', 'green'], "Mjj", "", n_bins, ratio_range = ratio_range, weights = None, errors = True, 
+                            normalize=False, save = True, fname=f_plt, logy = True, max_rw = -1)
+
+
+
 
 
 
@@ -163,9 +209,15 @@ def classifier_selection(options):
 
 
 if(__name__ == "__main__"):
-    parser = input_options()
-    parser.add_argument("--effs", nargs="+", default = [], type = float)
-    parser.add_argument("--do_roc", default = False, help = "Save info for roc")
-    options = parser.parse_args()
+    if(len(sys.argv) ==2): #use a dict of parameters
+        fname = sys.argv[1]
+        options = get_options_from_pkl(fname)
+
+
+    else:
+        parser = input_options()
+        parser.add_argument("--effs", nargs="+", default = [], type = float)
+        parser.add_argument("--do_roc", default = False, help = "Save info for roc")
+        options = parser.parse_args()
 
     classifier_selection(options)

@@ -51,6 +51,8 @@ def input_options():
     parser.add_argument("--num_models", type = int, default = 1,  help="How many networks to train (if >1 will save the one with best validation loss)")
     parser.add_argument("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
 
+    parser.add_argument("--keep_LSF", default = False, action = "store_true", help="Keep LSF for dense inputs")
+
 
     parser.add_argument("--local_storage", default =False, action="store_true",  help="Store temp files locally not on gpuscratch")
     parser.add_argument("--sig_cut", type=int, default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")

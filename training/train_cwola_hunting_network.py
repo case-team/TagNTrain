@@ -29,14 +29,12 @@ def train_cwola_hunting_network(options):
         img_key = 'jj_images'
         feat_key = 'jj_features'
         cnn_shape = (32,32,2)
-        dense_shape = 16
         print("training classifier for both jets")
     elif(options.training_j == 1):
         j_label = "j1_"
         img_key = 'j1_images'
         feat_key = 'j1_features'
         cnn_shape = (32,32,1)
-        dense_shape = 8
         print("training classifier for j1")
 
     elif (options.training_j ==2):
@@ -44,7 +42,6 @@ def train_cwola_hunting_network(options):
         img_key = 'j2_images'
         feat_key = 'j2_features'
         cnn_shape = (32,32,1)
-        dense_shape = 8
         print("training classifier for j2")
     else:
         print("Training jet not 1 or 2! Exiting")
@@ -140,6 +137,7 @@ def train_cwola_hunting_network(options):
                 else:
                     model = CNN_large(cnn_shape)
             else:
+                dense_shape = data[x_key].shape[-1]
                 model = dense_net(dense_shape)
 
             model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'])
@@ -163,8 +161,10 @@ def train_cwola_hunting_network(options):
             for model_idx in range(options.num_models):
                 preds = model_list[model_idx].predict(val_data[x_key])
                 loss = bce(preds.reshape(-1), val_data['Y_mjj'][()].reshape(-1), weights = val_data[sample_weights])
-                true_loss = bce(preds.reshape(-1), val_data['label'][()].reshape(-1))
-                auc = roc_auc_score(np.clip(val_data['label'], 0, 1), preds)
+                true_loss = auc = -1
+                if(np.sum(val_data['label'] > 0) > 10):
+                    true_loss = bce(preds.reshape(-1), val_data['label'][()].reshape(-1))
+                    auc = roc_auc_score(np.clip(val_data['label'], 0, 1), preds)
                 eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.01)
                 print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
                 loss = -eff_cut_metric

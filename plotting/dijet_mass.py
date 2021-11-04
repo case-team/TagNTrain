@@ -62,10 +62,6 @@ batch_size = 1000
 
 
 
-print(Y[Y<0])
-print(Y[Y>0][:20])
-
-
 save_figs = True
 labels = ['background', 'signal']
 #colors = ['b', 'r', 'g', 'purple', 'pink', 'black', 'magenta', 'pink']
@@ -110,12 +106,15 @@ S = mjj[sig_events & in_window].shape[0]
 B = mjj[bkg_events & in_window].shape[0]
 minor_B = mjj[minor_bkg_events & in_window].shape[0]
 
+eff_S_in_window = S / mjj[sig_events].shape[0]
+
 overall_S = mjj[sig_events].shape[0]
 overall_B = mjj[bkg_events].shape[0]
 
 print("Mean signal mjj is %.0f" % mjj_sig);
 print("Mjj window %f to %f " % (m_low, m_high))
 print("Before selection: %i signal events and %i bkg events in mjj window (%i minor bkg)" % (S,B, minor_B))
+print("Frac. of signal in mjj window is %.3f " % eff_S_in_window)
 print("S/B %f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
 print("Sig frac (overall) %f " % (float(overall_S)/overall_B))
 

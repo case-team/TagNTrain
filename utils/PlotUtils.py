@@ -246,7 +246,8 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
     #else: plt.show(block=False)
     return fig
 
-def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, weights = None, fname="", ratio_range = -1, errors = False):
+def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, 
+        weights = None, fname="", ratio_range = -1, errors = False, extras = None, logy = False, max_rw = 5):
     h_type= 'step'
     alpha = 1.
     fontsize = 16
@@ -262,14 +263,21 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
     ns, bins, patches  = ax0.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, 
             density = normalize, weights = weights, histtype=h_type)
 
+    if(extras is not None):
+        ecolors = ['red', 'orange', 'cyan']
+        for e_i, extra in enumerate(extras):
+            ax0.hist(extra[0], bins= num_bins, range = h_range, color = ecolors[e_i], label = extra[2], density = normalize, weights = extra[1], histtype=h_type)
+
+
     plt.xlim([low, high])
-    max_rw = 5.
+    if(logy): plt.yscale("log")
     ax0.legend(loc='upper right')
     plt.title(title, fontsize=fontsize)
     n0 = np.clip(ns[0], 1e-8, None)
     n1 = np.clip(ns[1], 1e-8, None)
     ratio =  n0/ n1
-    ratio = np.clip(ratio, 1./max_rw, max_rw)
+    if(max_rw > 0):
+        ratio = np.clip(ratio, 1./max_rw, max_rw)
 
     ratio_err = None
     #if(errors):
@@ -308,12 +316,17 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
     ax1 = plt.subplot(gs[1])
 
     ax1.errorbar(bincenters, ratio, yerr = ratio_err, alpha=alpha, fmt='ko')
+
     plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
     ax1.set_ylabel("Ratio")
     ax1.set_xlabel(axis_label)
 
-    if(ratio_range > 0):
-        plt.ylim([1-ratio_range, 1+ratio_range])
+
+    if(type(ratio_range) == list):
+        plt.ylim(ratio_range[0], ratio_range[1])
+    else:
+        if(ratio_range > 0):
+            plt.ylim([1-ratio_range, 1+ratio_range])
 
     plt.grid(axis='y')
 

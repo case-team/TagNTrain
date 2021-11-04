@@ -8,6 +8,39 @@ import subprocess
 import h5py
 import time
 
+def check_all_models_there(model_dir, num_models):
+    #TODO Fix it so there aren't Nan's...
+    print("Checking %s" % model_dir)
+    missing_models = []
+    files = os.listdir(model_dir)
+    for i in range(num_models):
+        model_name = "model%i.h5" % i
+        if(model_name not in files):
+            print("Missing %s " % model_name)
+            missing_models.append(i)
+
+    if(len(missing_models) == num_models):
+        print("Missing all models! Something wrong in training?? This is bad !!!")
+        sys.exit(1)
+    else:
+        for i in missing_models:
+            cpy_i = (i + 1) % num_models
+            for idx in range(num_models):
+                if(cpy_i not in missing_models): break
+                else:
+                    cpy_i = (cpy_i +1) % num_models
+
+            cpy_name = "model%i.h5" % cpy_i
+            dest_name = "model%i.h5" % i
+            cpy_cmd = "cp %s %s" % (model_dir + cpy_name, model_dir + dest_name)
+            print("Copying : " + cpy_cmd)
+            os.system(cpy_cmd)
+
+
+
+
+
+
 
 
 def full_run(options):
@@ -27,6 +60,10 @@ def full_run(options):
             rel_opts.step = options.step
             if(len(options.effs) >0): rel_opts.effs = options.effs
             if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
+            if(options.counting_fit): rel_opts.counting_fit = True
+            else: rel_opts.counting_fit = False
+            rel_opts.condor = options.condor
+            rel_opts.keep_LSF = options.keep_LSF #quick fix
             options = rel_opts
     else:
         #save options
@@ -35,7 +72,7 @@ def full_run(options):
 
 
  
-
+    print("Condor %i" % options.condor)
 
 
     if(options.numBatches % options.kfolds != 0):
@@ -49,21 +86,23 @@ def full_run(options):
         print("Number of batches per kfold(%i) must be multiple of number of lfolds (%i)" % (batches_per_kfold, options.lfolds))
         sys.exit(1)
 
-    if(options.step not in ["train", "get", "select", "fit", "roc", "all"]):
+    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "all"]):
         print("Invalid option %s" % options.step)
         sys.exit(1)
 
     #parse what to do 
-    get_condor = do_train = do_selection = do_fit = False
+    get_condor = do_train = do_merge = do_selection = do_fit = False
     do_train = options.step == "train"
     get_condor = options.step == "get"
     do_selection = options.step == "select"
+    do_merge = options.step == "merge"
     do_fit = options.step == "fit"
     do_roc = options.step == "roc"
     if(options.step == "all"):
         do_train = do_selection = do_fit = do_roc = True
 
-    get_condor = get_condor | (do_selection and options.condor)
+    get_condor = get_condor or (do_selection and options.condor)
+    do_merge = do_merge or do_fit
 
 
     options.num_val_batch = batches_per_kfold // options.lfolds
@@ -138,23 +177,66 @@ def full_run(options):
 
     #select events
     if(do_selection):
-        merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs
         for k,k_options in enumerate(kfold_options):
             selection_options = copy.deepcopy(k_options)
             selection_options.data_batch_list = k_options.holdouts
             selection_options.val_batch_list = None
-            if(not options.randsort): selection_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
-            else: selection_options.labeler_name = k_options.output + "jrand_kfold%i/" % k
+            selection_options.num_models = options.lfolds
+
+            if(not options.randsort): 
+                selection_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
+                check_all_models_there(selection_options.labeler_name.format(j_label = "j1"), selection_options.num_models)
+                check_all_models_there(selection_options.labeler_name.format(j_label = "j2"), selection_options.num_models)
+            else: 
+                selection_options.labeler_name = k_options.output + "jrand_kfold%i/" % k
+                check_all_models_there(selection_options.labeler_name, selection_options.num_models)
+
             selection_options.output = k_options.output + "fit_inputs_kfold%i.h5" % k
             selection_options.do_roc = True
-            selection_options.num_models = options.lfolds
-            merge_cmd += selection_options.output + " " 
 
-            classifier_selection(selection_options)
+            if((not options.condor)): #run selection locally
+                classifier_selection(selection_options)
 
-        #merge different selections
-        print("Merge cmd: " + merge_cmd)
-        subprocess.call(merge_cmd ,shell = True)
+            else: #submit to condor
+                selection_options.output = "fit_inputs_kfold%i.h5" % k
+                selection_options.local_storage = True
+                selection_options.fin = "../data/BB/"
+                selection_options_dict = selection_options.__dict__
+                selection_opts_fname  = options.output + "select_opts_%i.pkl" % k
+                write_options_to_pkl(selection_options_dict,  selection_opts_fname)
+
+
+                condor_dir = options.output + "selection_condor_jobs/"
+                if( not os.path.exists(condor_dir)): os.system("mkdir %s" % condor_dir)
+                c_opts = condor_options().parse_args([])
+                c_opts.nJobs = 1
+                c_opts.outdir = condor_dir
+
+                base_script = "../condor/scripts/select_from_pkl.sh"
+                select_script = condor_dir + "select%i_script.sh" % k 
+                os.system("cp %s %s" % (base_script, select_script))
+                os.system("sed -i s/BSTART/%i/g %s" % (selection_options.data_batch_list[0], select_script))
+                os.system("sed -i s/BSTOP/%i/g %s" % (selection_options.data_batch_list[-1] + 1, select_script))
+                os.system("sed -i s/KFOLDNUM/%i/g %s" % (k, select_script))
+                c_opts.script = select_script
+
+                c_opts.name = options.label + "_select_kfold%i" % k 
+                c_opts.sub = True
+                #c_opts.sub = False
+
+                #tar models together
+                tarname = options.output + "models.tar"
+                print(tarname)
+                os.system("tar -cf %s %s --exclude=*/condor_jobs/*" %(tarname, options.output + "j*/"))
+
+                inputs_list = [selection_opts_fname, tarname]
+                c_opts.input = inputs_list
+
+
+                doCondor(c_opts)
+
+
+    #merge different selections
 
     if(do_roc):
         sig_effs = []
@@ -164,17 +246,46 @@ def full_run(options):
         for k,k_options in enumerate(kfold_options):
             np_fname = k_options.output + "fit_inputs_kfold%i_effs.npz" % k
             np_file = np.load(np_fname)
-            sig_effs.append(np_file["sig_eff"])
-            bkg_effs.append(np_file["bkg_eff"])
+            
+            sig_effs.append(np.clip(np_file["sig_eff"], 1e-6, 1.))
+            bkg_effs.append(np.clip(np_file["bkg_eff"], 1e-6, 1.))
 
         sic_fname = options.output + options.label + "_sic.png"
         make_sic_plot(sig_effs, bkg_effs, colors = colors, labels = labels, fname = sic_fname)
 
+    if(do_merge):
+
+        if(options.condor):
+            for k,k_options in enumerate(kfold_options):
+
+                c_opts = condor_options().parse_args([])
+                c_opts.getEOS = True
+                c_opts.outdir = options.output
+                c_opts.name = options.label + "_select_kfold%i" % k 
+                doCondor(c_opts)
+
+        #merge selections
+        merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs
+        for k,k_options in enumerate(kfold_options):
+            merge_cmd += k_options.output + "fit_inputs_kfold%i.h5 " % k 
+
+        print("Merge cmd: " + merge_cmd)
+        subprocess.call(merge_cmd ,shell = True)
+
 
     if(do_fit):
+
+
+
+
         #Do fit
+        counting_str = ""
+        if(options.counting_fit):
+            counting_str = "_counting"
         fit_cmd = ("cd ../fitting; source deactivate;" 
-                  "eval `scramv1 runtime -sh`; python dijetfit.py -i %s -p %s; cd -; source deactivate; source activate mlenv0" % (base_path + fit_inputs, base_path + options.output))
+                  "eval `scramv1 runtime -sh`; python dijetfit%s.py -i %s -p %s; cd -;"
+                  "source deactivate; source activate mlenv0" % 
+                  ( counting_str, base_path + fit_inputs, base_path + options.output))
         print(fit_cmd)
         subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
 
@@ -189,8 +300,11 @@ if(__name__ == "__main__"):
     parser.add_argument("--lfolds", default = 4, type = int)
     parser.add_argument("--numBatches", default = 40, type = int)
     parser.add_argument("--do_TNT",  default=False, action = 'store_true',  help="Use TNT (default cwola)")
-    parser.add_argument("--condor", default = False, action = 'store_true')
+    parser.add_argument("--condor", dest = 'condor', action = 'store_true')
+    parser.add_argument("--no-condor", dest = 'condor', action = 'store_false')
+    parser.set_defaults(condor=False)
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
+    parser.add_argument("--counting_fit", default = False,  action = 'store_true', help = 'Do counting version of dijet fit')
     parser.add_argument("--reload", default = False, action = 'store_true', help = "Reload based on previously saved options")
     options = parser.parse_args()
     full_run(options)

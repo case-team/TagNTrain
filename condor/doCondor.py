@@ -128,7 +128,7 @@ def doCondor(options):
             condor_file.write('Should_Transfer_Files = YES\n')
             input_files = "Transfer_Input_Files = %s, %s " %(script_location, sub_file)
             for f in options.input:
-                input_files += " , "  + os.path.abspath(options.outdir + options.name + "/" + f) 
+                input_files += " , "  + os.path.abspath(options.outdir + options.name + "/" + f.split("/")[-1]) 
             condor_file.write(input_files + "\n")
             condor_file.write('WhenToTransferOutput = ON_EXIT \n')
             condor_file.write('use_x509userproxy = true\n')

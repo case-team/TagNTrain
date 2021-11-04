@@ -84,26 +84,35 @@ class RocCallback(tf.keras.callbacks.Callback):
     def on_batch_end(self, batch, logs={}):
         return
 
-
-def make_selection(j1_scores, j2_scores, percentile):
+def make_selection(j1_scores, j2_scores, percentile, mask = None):
 # make a selection with a given efficiency using both scores (and)
 
     n_points = 1000
-    j1_qs = quantile_transform(j1_scores.reshape(-1,1)).reshape(-1)
-    j2_qs = quantile_transform(j2_scores.reshape(-1,1)).reshape(-1)
+    if(mask is None):
+        j1_select_scores = j1_scores
+        j2_select_scores = j2_scores
+    else:
+        j1_select_scores = j1_scores[mask]
+        j2_select_scores = j2_scores[mask]
+
+    j1_qs = quantile_transform(j1_select_scores.reshape(-1,1), copy = True).reshape(-1)
+    j2_qs = quantile_transform(j2_select_scores.reshape(-1,1), copy = True).reshape(-1)
+
 
     threshs = [thresh for thresh in np.arange(0., 1., 1./n_points)]
 
 
-    #for thresh in threshs:
-    #    temp1 = j1_qs > thresh
-    #    temp2 = j2_qs > thresh
-    #    print(thresh, j1_qs[:10], j1_qs.shape)
     combined_effs = np.array([np.mean(((j1_qs > thresh) & (j2_qs > thresh))) for thresh in threshs])
-    cut_idx = np.argwhere(combined_effs < (100. - percentile)/100.)[0][0]
-    mask = (j1_qs > threshs[cut_idx]) & (j2_qs > threshs[cut_idx])
-    print("Cut idx %i, eff %.3e " %(cut_idx, combined_effs[cut_idx]))
-    print(np.mean(mask))
+    cut_idx = np.argwhere(combined_effs <= (100. - percentile)/100.)[0][0]
+    cut_percentile = threshs[cut_idx]
+
+    j1_cut = np.percentile(j1_select_scores, 100.*cut_percentile)
+    j2_cut = np.percentile(j2_select_scores, 100.*cut_percentile)
+
+
+    mask = (j1_scores > j1_cut) & (j2_scores > j2_cut)
+    print("Cut idx %i, cut_percentile %.3f, j1_cut %.3f , j2_cut %.3f, eff %.3e " %(cut_idx, cut_percentile, j1_cut, j2_cut, combined_effs[cut_idx]))
+    print("Overall eff:", np.mean(mask))
     return mask
 
 def print_signal_fractions(y_true, y):

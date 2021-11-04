@@ -220,7 +220,6 @@ def tag_and_train(options):
         random.seed(seed)
 
         cnn_shape = (32,32,1)
-        dense_shape = 8
         model_list = []
 
         for model_idx in range(options.num_models):
@@ -230,6 +229,7 @@ def tag_and_train(options):
                 if(options.use_images):
                     model = CNN(cnn_shape)
                 else:
+                    dense_shape = data[x_key].shape[-1]
                     model = dense_net(dense_shape)
 
                 model.summary()
@@ -273,11 +273,10 @@ def tag_and_train(options):
                 preds = model_list[model_idx].predict(val_data_plain[0])
                 if(np.any(np.isnan(preds))):
                     loss = true_loss = auc = eff_cut_metric =  -1
-
                 else:
                     loss = bce(preds.reshape(-1), val_data_plain[2].reshape(-1), weights = val_data_plain[3])
                     true_loss = auc = -1
-                    if(np.sum(val_data_plain[1]) > 10):
+                    if(np.sum(val_data_plain[1] > 0) > 10):
                         true_loss = bce(preds.reshape(-1), val_data_plain[1].reshape(-1))
                         auc = roc_auc_score(val_data_plain[1], preds)
                     eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.01)
@@ -297,7 +296,7 @@ def tag_and_train(options):
             msg = "End of training. "
             y_pred_val = best_model.predict_proba(val_data_plain[0])
             roc_val = roc_auc_score(val_data_plain[1], y_pred_val)
-            phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data_plain[1]))
+            phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data_plain[1] > 0))
             msg += phrase
             print(msg, end =100*' ' + '\n')
 

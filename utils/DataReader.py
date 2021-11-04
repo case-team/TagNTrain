@@ -18,6 +18,12 @@ def append_h5(f, name, data):
     f[name].resize(( prev_size + data.shape[0]), axis=0)
     f[name][prev_size:] = data
 
+def remove_LSF(feats, keep_LSF = False):
+    #LSF is 5th col
+    if(keep_LSF): return feats
+    keep_idxs = [0,1,2,3,5,6]
+    return feats[:,keep_idxs]
+
 class MyGenerator(tf.keras.utils.Sequence):
     def __init__(self, f, n, batch_size, key1, key2, key3 = None, mask = None):
         self.f = [f]
@@ -146,6 +152,9 @@ class DataReader:
         batch_start = kwargs.get('batch_start', -1)
         batch_stop = kwargs.get('batch_stop', -1)
 
+        self.keep_LSF = kwargs.get('keep_LSF', False)
+
+
         print("Creating dataset. Mass range %.0f - %.0f. Delta Eta cut %.1f" % (self.keep_mlow, self.keep_mhigh, self.d_eta))
 
 
@@ -235,25 +244,26 @@ class DataReader:
 
         if('swapped_js' not in self.keys and self.swapped_js): self.keys.append('swapped_js')
 
+
     def get_key(self,f, cstart, cstop, mask, key):
         if(key == 'mjj'):
             data = f["jet_kinematics"][cstart:cstop][mask,0]
 
         elif(key == 'j1_features'):
             j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
-            j1_feats = f['jet1_extraInfo'][cstart:cstop][mask]
+            j1_feats = remove_LSF(f['jet1_extraInfo'][cstart:cstop][mask], self.keep_LSF)
             data = np.append(j1_m, j1_feats, axis = 1)
             
         elif(key == 'j2_features'):
             j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
-            j2_feats = f['jet2_extraInfo'][cstart:cstop][mask]
+            j2_feats = remove_LSF(f['jet2_extraInfo'][cstart:cstop][mask], self.keep_LSF)
             data = np.append(j2_m, j2_feats, axis = 1)
 
         elif(key == 'jj_features'):
             j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
-            j1_feats = f['jet1_extraInfo'][cstart:cstop][mask]
+            j1_feats = remove_LSF(f['jet1_extraInfo'][cstart:cstop][mask], keep_LSF)
             j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
-            j2_feats = f['jet2_extraInfo'][cstart:cstop][mask]
+            j2_feats = remove_LSF(f['jet2_extraInfo'][cstart:cstop][mask], self.keep_LSF)
             data = np.concatenate((j1_m, j1_feats, j2_m, j2_feats), axis = 1)
 
 
