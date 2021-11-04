@@ -230,8 +230,10 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
     alpha = 1.
     n_stacks = len(stacks)
     fig = plt.figure(figsize=fig_size)
-    plt.hist(stacks, bins=num_bins, range=h_range, color=colors[:n_stacks], alpha=0.2,label=labels[:n_stacks], density = normalize, histtype='barstacked')
-    plt.hist(outlines, bins=num_bins, range=h_range, color=colors[n_stacks:], alpha=1.,label=labels[n_stacks:], density = normalize, histtype='step')
+    if(n_stacks > 0):
+        plt.hist(stacks, bins=num_bins, range=h_range, color=colors[:n_stacks], alpha=0.2,label=labels[:n_stacks], density = normalize, histtype='barstacked')
+    if(len(outlines) > 0):
+        plt.hist(outlines, bins=num_bins, range=h_range, color=colors[n_stacks:], alpha=1.,label=labels[n_stacks:], density = normalize, histtype='step')
     plt.xlabel(xaxis_label, fontsize =fontsize)
     plt.tick_params(axis='x', labelsize=fontsize)
     if(logy): plt.yscale('log')
@@ -361,6 +363,23 @@ def make_scatter_plot(x, y, color, axis_names, fname= ""  ):
     ax.set_ylabel(axis_names[1], fontsize=14)
     plt.tick_params(axis='y', labelsize=12)
     plt.tick_params(axis='x', labelsize=12)
+    if(fname != ""):
+        print("saving %s" % fname)
+        plt.savefig(fname)
+
+def horizontal_bar_chart(vals, labels, fname = "", xaxis_label = ""):
+    fig, ax = plt.subplots()
+
+    order = np.flip(vals.argsort())
+    labels = np.array(labels)
+
+    y_pos = np.arange(len(vals))
+    ax.barh(y_pos, vals[order], align = 'center')
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels[order])
+    ax.invert_yaxis()
+    ax.set_xlabel(xaxis_label)
+
     if(fname != ""):
         print("saving %s" % fname)
         plt.savefig(fname)
