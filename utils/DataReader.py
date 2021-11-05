@@ -5,6 +5,7 @@ import tensorflow as tf
 import copy
 import os
 from .PlotUtils import *
+from sklearn.preprocessing import StandardScaler
 
 def expandable_shape(d_shape):
     c_shape = list(d_shape)
@@ -18,11 +19,6 @@ def append_h5(f, name, data):
     f[name].resize(( prev_size + data.shape[0]), axis=0)
     f[name][prev_size:] = data
 
-def remove_LSF(feats, keep_LSF = False):
-    #LSF is 5th col
-    if(keep_LSF): return feats
-    keep_idxs = [0,1,2,3,5,6]
-    return feats[:,keep_idxs]
 
 class MyGenerator(tf.keras.utils.Sequence):
     def __init__(self, f, n, batch_size, key1, key2, key3 = None, mask = None):
@@ -153,6 +149,7 @@ class DataReader:
         batch_stop = kwargs.get('batch_stop', -1)
 
         self.keep_LSF = kwargs.get('keep_LSF', False)
+        self.clip_feats = kwargs.get('clip_feats', False)
 
 
         print("Creating dataset. Mass range %.0f - %.0f. Delta Eta cut %.1f" % (self.keep_mlow, self.keep_mhigh, self.d_eta))
@@ -221,6 +218,25 @@ class DataReader:
 
         return new
 
+    def process_feats(self, feats):
+        #LSF is 4th col
+        nonLSF_idxs = [0,1,2,3,5,6]
+        b_idx = -2
+        lsf_idx = 4
+        if(self.keep_LSF): 
+            rfeats = feats
+            if(self.clip_feats):
+                rfeats[:,lsf_idx] = np.clip(rfeats[:,lsf_idx], 0., 1.)
+
+        else: 
+            rfeats = feats [:,nonLSF_idxs]
+
+        if(self.clip_feats):
+            rfeats[:,b_idx] = np.clip(rfeats[:,b_idx], 0., None)
+
+        return rfeats
+
+
     def read(self):
         self.loading_images = False
         for key in self.keys:
@@ -251,19 +267,19 @@ class DataReader:
 
         elif(key == 'j1_features'):
             j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
-            j1_feats = remove_LSF(f['jet1_extraInfo'][cstart:cstop][mask], self.keep_LSF)
+            j1_feats = self.process_feats(f['jet1_extraInfo'][cstart:cstop][mask])
             data = np.append(j1_m, j1_feats, axis = 1)
             
         elif(key == 'j2_features'):
             j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
-            j2_feats = remove_LSF(f['jet2_extraInfo'][cstart:cstop][mask], self.keep_LSF)
+            j2_feats = self.process_feats(f['jet2_extraInfo'][cstart:cstop][mask])
             data = np.append(j2_m, j2_feats, axis = 1)
 
         elif(key == 'jj_features'):
             j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
-            j1_feats = remove_LSF(f['jet1_extraInfo'][cstart:cstop][mask], keep_LSF)
+            j1_feats = self.process_feats(f['jet1_extraInfo'][cstart:cstop][mask])
             j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
-            j2_feats = remove_LSF(f['jet2_extraInfo'][cstart:cstop][mask], self.keep_LSF)
+            j2_feats = self.process_feats(f['jet2_extraInfo'][cstart:cstop][mask])
             data = np.concatenate((j1_m, j1_feats, j2_m, j2_feats), axis = 1)
 
 
@@ -428,6 +444,24 @@ class DataReader:
 
         f.close()
 
+    #depricated
+    def standard_scaler(self, key, weights_key = None, scaler = None):
+        data = self.__getitem__(key)
+        weights = None
+        if(scaler is None):
+            scaler = StandardScaler()
+            if(weights_key is not None):
+                weights = self.__getitem__(weights_key)
+            scaler.fit(data, sample_weight = weights)
+
+
+        if(self.mask.shape[0] != 0):
+            self.f_storage[key][self.mask] = scaler.transform(data)
+        else:
+            self.f_storage[key][()] = scaler.transform(data)
+        return scaler
+
+
     def make_Y_mjj(self, mjj_low, mjj_high):
         self.keys.append('Y_mjj')
         mjj = self.f_storage['mjj'][()]
@@ -587,12 +621,11 @@ class DataReader:
         if(key not in self.keys):
             print("Key %s not in list of preloaded keys!" % key, self.keys)
             exit(1)
-        mask_ = self.mask
 
-        if(mask_.shape[0] == 0):
+        if(self.mask.shape[0] == 0):
             return self.f_storage[key][()]
         else:
-            return self.f_storage[key][()][mask_]
+            return self.f_storage[key][()][self.mask]
 
     def gen(self, key1, key2, key3 = None, batch_size = 256):
         if(not self.ready):

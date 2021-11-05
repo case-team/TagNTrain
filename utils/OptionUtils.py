@@ -52,6 +52,8 @@ def input_options():
     parser.add_argument("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
 
     parser.add_argument("--keep_LSF", default = False, action = "store_true", help="Keep LSF for dense inputs")
+    parser.add_argument("--clip_feats", default = False, action = "store_true", help="Clip input feature values to avoid negatives")
+    parser.add_argument("--scaler", default = False, action = "store_true", help="Use sk learn standard scaler on dense inputs")
 
 
     parser.add_argument("--local_storage", default =False, action="store_true",  help="Store temp files locally not on gpuscratch")

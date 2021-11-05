@@ -174,9 +174,18 @@ def tag_and_train(options):
             val_data.make_ptrw('Y_TNT', save_plots = False)
             if(options.randsort): val_data2.make_ptrw('Y_TNT2', save_plots = False, extra_str = '2')
 
-
-
-
+    print(data[x_key][0])
+    print(val_data[x_key][0])
+    if(options.scaler):
+        print("Scaling!")
+        scaler = data.standard_scaler(x_key, weights_key = sample_weights)
+        if(options.randsort): data2.standard_scaler(x_key2, weights_key = sample_weights2, scaler = scaler)
+        if(do_val):
+            val_data.standard_scaler(x_key, weights_key = sample_weights, scaler = scaler)
+            if(options.randsort): val_data2.standard_scaler(x_key2, weights_key = sample_weights2, scaler = scaler)
+    
+    print(data[x_key][0])
+    print(val_data[x_key][0])
 
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
@@ -305,6 +314,10 @@ def tag_and_train(options):
             f_model = f_model.format(seed = seed)
         print("Saving model to : ", f_model)
         best_model.save(f_model)
+        if(options.scaler):
+            scaler_fname = fname.replace(".h5", "_scaler.bin")
+            sklearn.externals.joblib.dump(scaler, scaler_fname, compress=True)
+
 
         #training_plot = options.plot_dir + j_label + plot_prefix + "training_history.png"
         #plot_training(history.history, fname = training_plot)

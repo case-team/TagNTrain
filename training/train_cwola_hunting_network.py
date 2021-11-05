@@ -108,6 +108,16 @@ def train_cwola_hunting_network(options):
         cbs.append(roc)
 
 
+    print(data[x_key][0])
+    print(val_data[x_key][0])
+    if(options.scaler):
+        print("Scaling!")
+        scaler = data.standard_scaler(x_key, weights_key = sample_weights)
+        if(do_val):
+            val_data.standard_scaler(x_key, weights_key = sample_weights, scaler = scaler)
+    
+    print(data[x_key][0])
+    print(val_data[x_key][0])
 
 
 
@@ -190,6 +200,9 @@ def train_cwola_hunting_network(options):
             f_model = f_model.format(seed = seed)
         print("Saving model to : ", f_model)
         best_model.save(f_model)
+        if(options.scaler):
+            scaler_fname = fname.replace(".h5", "_scaler.bin")
+            sklearn.externals.joblib.dump(scaler, scaler_fname, compress=True)
 
     del data
     if(val_data is not None): del val_data

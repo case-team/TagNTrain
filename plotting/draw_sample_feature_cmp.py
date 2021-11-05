@@ -107,7 +107,10 @@ print_signal_fractions(data['label'], data[Y_label])
 
 data.make_ptrw(Y_label, use_weights = not options.no_sample_weights, save_plots = True, plot_dir = options.output)
 
-feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "DeepB", "nPFCands", "pt"]
+if(options.keep_LSF):
+    feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "LSF3", "DeepB", "nPFCands", "pt"]
+else:
+    feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "DeepB", "nPFCands", "pt"]
 
 n_bins = 20
 colors = ['b', 'green']
@@ -179,6 +182,8 @@ for i in range(len(feature_names)):
     if(do_both_js or options.training_j == 1 or True):
         if(feat_name == 'pt'): j1_feats = j1_pts
         else: j1_feats = data["j1_features"][:,i]
+        #if('LSF' in feat_name):
+            #print(j1_feats[:50])
 
         j1_sig_region_feats = j1_feats[sig_region & true_bkg]
         j1_bkg_region_feats = j1_feats[bkg_region & true_bkg]

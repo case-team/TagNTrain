@@ -103,6 +103,16 @@ def get_sig_eff(outdir):
         sig_eff = f[eff_key][0]
         return sig_eff
 
+def get_signif(outdir):
+    fname = outdir + "fit_results.pkl"
+    if(not os.path.exists(fname)):
+        print("Can't find fit inputs " + fname)
+        return 0.
+
+    fit_results = get_options_from_pkl(fname)
+    return fit_results.signif
+
+
 def limit_set(options):
 
     if(options.output[-1] != '/'):
@@ -178,14 +188,27 @@ def limit_set(options):
             t_opts.reload = True
             t_opts.condor = True
             full_run(t_opts)
+    if(do_fit):
+        for spb in options.spbs:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "fit"
+            t_opts.reload = True
+            t_opts.condor = False
+            full_run(t_opts)
+
 
     if(do_plot):
         sig_effs = []
+        signifs = []
         for spb in options.spbs:
             sig_eff = get_sig_eff(options.output + "spb%i/" % spb)
+            signif = get_signif(options.output + "spb%i/" % spb)
+
             sig_effs.append(sig_eff)
+            signifs.append(signif)
 
         print(sig_effs)
+        print(signifs)
         sig_effs = np.array(sig_effs)
         np.savez(f_sig_effs, sig_eff = sig_effs)
 
