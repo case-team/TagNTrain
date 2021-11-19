@@ -12,77 +12,120 @@ def spb_opts(options, spb):
 
 def make_limit_plot(options, sig_effs):
     fout = options.output + options.label + "_limit_plot.png"
+    if(options.num_events): fout = options.output + options.label + "_limit_plot_numevents.png"
 
     lumi = 28.
     n_evts_exc = 80.
     n_evts_exc_no_sel = 800.
 
+    dedicated_lim = -1
     if(options.sig_idx ==1):
         preselection_eff = 0.92 * 0.88
         sig_eff_no_cut = 0.85
+        hadronic_only = 1.0
+        dedicated_lim = 1 * (138./lumi)**0.5
+        dedicated_label = "Dedicated Search, B2G-20-009 (%.1f fb)" % dedicated_lim
     elif(options.sig_idx == 3):
         preselection_eff = 0.76*0.59
-        sig_eff_no_cut =  0.5
+        dedicated_lim = 8 * (138./lumi)**0.5
+        dedicated_label = "Dedicated Search, B2G-21-002 (%.1f fb)" % dedicated_lim
+        if(options.hadronic_only):
+            hadronic_only = 0.36
+            sig_eff_no_cut =  0.88
+        else:
+            hadronic_only = 1.0
+            sig_eff_no_cut =  0.5
     else:
         print("Sig preselection stuff not computed for sig %i" % options.sig_idx)
         sys.exit(1)
 
 
 
-    injected_xsecs = np.array([( spb*options.numBatches / lumi / preselection_eff) for spb in options.spbs])
-    excluded_xsecs = np.array([(n_evts_exc / (sig_eff * preselection_eff * lumi)) for sig_eff in sig_effs])
-    no_sel_limit = n_evts_exc_no_sel / (preselection_eff * sig_eff_no_cut * lumi)
-    print("Limit without NN selection: %.1f" % no_sel_limit)
+    injected_xsecs = np.array([( spb*options.numBatches / lumi / preselection_eff / hadronic_only) for spb in options.spbs])
+    excluded_xsecs = np.array([(n_evts_exc / (hadronic_only * sig_eff * preselection_eff * lumi)) for sig_eff in sig_effs])
+    no_sel_limit = n_evts_exc_no_sel / (preselection_eff * sig_eff_no_cut * lumi * hadronic_only)
+
+    injected_nsig  = np.array( [spb * options.numBatches  for spb in options.spbs])
+    excluded_nsig = np.array([n_evts_exc / sig_eff  for sig_eff in sig_effs])
+    no_sel_limit_nsig = n_evts_exc_no_sel / (sig_eff_no_cut)
+
+
+    if(options.num_events): 
+        xs = injected_nsig
+        ys = excluded_nsig
+        no_sel_y = no_sel_limit_nsig
+    else:
+        xs = injected_xsecs
+        ys = excluded_xsecs
+        no_sel_y = no_sel_limit
+
 
 
 
     best_lim = 999999
-    for i,s_inj in enumerate(injected_xsecs):
-        s_excl = excluded_xsecs[i]
-        lim = max(s_inj, s_excl)
+    print(len(xs))
+    for i,x in enumerate(xs):
+        y = ys[i]
+        lim = max(x, y)
         if(lim < best_lim):
             best_lim = lim
             best_i = i
 
-        print(options.spbs[i], s_inj, s_excl)
+        print(options.spbs[i], x,y)
 
+    if(options.num_events): 
+        best_lim_label = "Best Limit (%.1f events)" % best_lim
+    else:
+        best_lim_label = "Best Limit (%.1f fb)" % best_lim
+
+    print("Limit without NN selection: %.1f" % no_sel_y)
     print("Best lim : %.3f"  % best_lim)
         
     fig_size = (12,9)
     plt.figure(figsize=fig_size)
     size = 0.4
 
-    x_stop = max(injected_xsecs)
+    x_stop = max(xs)
     xline = np.arange(0,x_stop,x_stop/10)
     plt.plot(xline, xline, linestyle = "--", color = "black", linewidth = 2, label = "Excluded = Injected")
-    if(no_sel_limit >0):
-        plt.plot(xline, [no_sel_limit]*10, linestyle = "--", color = "green", linewidth = 2, label = "Inclusive Limit (%.1f fb)" % no_sel_limit)
+    if(no_sel_y >0):
+        label = "Inclusive Limit (%.1f fb)" % no_sel_y
+        if(options.num_events): label = "Inclusive Limit (%.1f events)" % no_sel_y
+        plt.plot(xline, [no_sel_y]*10, linestyle = "--", color = "green", linewidth = 2, label = label)
+    if(dedicated_lim > 0):
+        plt.plot(xline, [dedicated_lim]*10, linestyle = "--", color = "cyan", linewidth = 2, label = dedicated_label)
 
-    vertical_line = injected_xsecs[best_i] > excluded_xsecs[best_i]
-    lim_line_max = min(injected_xsecs[best_i], excluded_xsecs[best_i])*0.97
 
-    best_lim_label = "Best Limit (%.1f fb)" % best_lim
+
+    vertical_line = xs[best_i] > ys[best_i]
+    lim_line_max = min(xs[best_i], ys[best_i])*0.97
+
     if(vertical_line):
         plt.plot([best_lim, best_lim], [0., lim_line_max], linestyle="--", color = "red", linewidth =2, label = best_lim_label)
     else: #horizontal line
         plt.plot( [0., lim_line_max], [best_lim, best_lim], linestyle="--", color = "red", linewidth =2, label = best_lim_label)
 
-    plt.scatter(injected_xsecs, excluded_xsecs, c ='b' , s=40.0, label="Injections")
+    plt.scatter(xs, ys, c ='b' , s=40.0, label="Injections")
 
-    off_plots = excluded_xsecs > (x_stop * 1.2)
+    off_plots = ys > (x_stop * 1.2)
 
     num_off = np.sum(off_plots)
 
     off_ys = [x_stop * 1.18] * num_off
 
-    plt.scatter(injected_xsecs[off_plots], off_ys, c = 'b', s = 40.0, marker ="^")
+    plt.scatter(xs[off_plots], off_ys, c = 'b', s = 40.0, marker ="^")
 
 
     plt.ylim([0., x_stop * 1.2])
     plt.xlim([0., x_stop * 1.2])
 
-    plt.xlabel("Injected cross section (fb)", fontsize=20)
-    plt.ylabel(" 'Excluded' cross section (fb)", fontsize=20)
+    if(not options.num_events):
+        plt.xlabel("Injected cross section (fb)", fontsize=20)
+        plt.ylabel(" 'Excluded' cross section (fb)", fontsize=20)
+    else:
+        plt.xlabel("Injected Number of Events", fontsize=20)
+        plt.ylabel(" 'Excluded' Number of Events", fontsize=20)
+
     plt.tick_params(axis='y', labelsize=16)
     plt.tick_params(axis='x', labelsize=16)
 
@@ -129,6 +172,7 @@ def limit_set(options):
             rel_opts = get_options_from_pkl(options.output + "run_opts.pkl")
             print(rel_opts.__dict__)
             rel_opts.keep_LSF = options.keep_LSF #quick fix
+            rel_opts.num_events = options.num_events #quick fix
             rel_opts.step = options.step
             if(len(options.effs) >0): rel_opts.effs = options.effs
             if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
@@ -159,6 +203,7 @@ def limit_set(options):
     do_merge = options.step == "merge"
     do_fit = options.step == "fit"
     do_plot = options.step == "plot"
+    do_roc = options.step == "roc"
 
     get_condor = get_condor or do_selection
     f_sig_effs = options.output + "sig_effs.npz"
@@ -196,6 +241,13 @@ def limit_set(options):
             t_opts.condor = False
             full_run(t_opts)
 
+    if(do_roc):
+        for spb in options.spbs:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "roc"
+            t_opts.reload = True
+            t_opts.condor = False
+            full_run(t_opts)
 
     if(do_plot):
         sig_effs = []
@@ -228,6 +280,9 @@ if(__name__ == "__main__"):
     parser.add_argument("--do_TNT",  default=False, action = 'store_true',  help="Use TNT (default cwola)")
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
     parser.add_argument("--counting_fit", default = False,  action = 'store_true', help = 'Do counting version of dijet fit')
-    parser.add_argument("--reload", default = False, action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--num_events", default = False, action = 'store_true', help = "Make limit plot in terms of num events (removes common prefactors)")
+    parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
+    parser.set_defaults(reload=True)
     options = parser.parse_args()
     limit_set(options)

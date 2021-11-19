@@ -23,9 +23,8 @@ def create_model_ensemble(options):
     print("Will train %i models for the ensemble. %i total batches, %i validation batchsize" % (num_ensemble_models, num_total_batches, options.num_val_batch))
     print("Will save to %s" % options.output)
     if('{seed}' in options.output):
-        for seed in options.seeds:
-            dirname = options.output.format(seed = seed)
-            os.system("mkdir %s" % dirname)
+        dirname = options.output.format(seed = options.seed)
+        os.system("mkdir %s" % dirname)
     else:
         if(not os.path.exists(options.output)): os.system("mkdir %s" % options.output)
 

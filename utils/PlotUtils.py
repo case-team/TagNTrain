@@ -49,23 +49,42 @@ def make_roc_curve(classifiers, y_true, colors = None, logy=True, labels = None,
 
     fs = 18
     fs_leg = 16
+    sig_effs = []
+    bkg_effs = []
+    aucs = []
     for idx,scores in enumerate(classifiers):
 
         fpr, tpr, thresholds = roc_curve(y_true, scores)
         roc_auc = auc(fpr, tpr)
-        ys = fpr
-        if(logy): 
-            #guard against division by 0
-            fpr = np.clip(fpr, 1e-8, 1.)
-            ys = 1./fpr
+        sig_effs.append(tpr)
+        bkg_effs.append(fpr)
 
-        lbl = 'auc'
+    make_roc_plot(sig_effs, bkg_effs, colors = colors, labels = labels, logy = logy, fname = fname)
+        
+def make_roc_plot(sig_effs, bkg_effs, colors = None, logy = True, labels = None, fname = ""):
+
+    plt.figure(figsize=fig_size)
+    fs = 18
+    fs_leg = 16
+    sic_max = 10.
+
+    for idx in range(len(sig_effs)):
+        tpr = sig_effs[idx]
+        fpr = bkg_effs[idx]
+        auc_ = auc(fpr, tpr)
+
+        fpr = np.clip(fpr, 1e-8, 1.)
+        #guard against division by 0
+        ys = 1./fpr
+
+        lbl = 'auc %.3f' % auc_
         clr = 'navy'
-        if(labels != None): lbl = labels[idx]
-        if(colors != None): clr = colors[idx]
+        if(labels is not None): lbl = labels[idx] + " = %.3f" % auc_
+        if(colors is not None): clr = colors[idx]
 
-        print(lbl, " ", roc_auc)
-        plt.plot(tpr, ys, lw=2, color=clr, label='%s = %.3f' % (lbl, roc_auc))
+        print(lbl)
+
+        plt.plot(tpr, ys, lw=2, color=clr, label=lbl)
 
 
 
@@ -76,7 +95,6 @@ def make_roc_curve(classifiers, y_true, colors = None, logy=True, labels = None,
     plt.ylim([1., 1e4])
     plt.ylabel('QCD Rejection Rate', fontsize=fs)
 
-    plt.ylabel('QCD Rejection Rate', fontsize=fs)
     plt.legend(loc="upper right", fontsize = fs_leg)
     if(fname != ""): 
         print("Saving roc plot to %s" % fname)

@@ -11,6 +11,8 @@ import random
 
 
 def train_cwola_hunting_network(options):
+    print(options.__dict__)
+
     window_size = (options.mjj_high - options.mjj_low)/2.
     window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
 
@@ -95,7 +97,7 @@ def train_cwola_hunting_network(options):
     v_data = None
 
     cbs = [tf.keras.callbacks.History()]
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=options.num_epoch/10, verbose=1, mode='min')
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)
 
     nVal = 0
@@ -108,17 +110,6 @@ def train_cwola_hunting_network(options):
         cbs.append(roc)
 
 
-    print(data[x_key][0])
-    print(val_data[x_key][0])
-    if(options.scaler):
-        print("Scaling!")
-        scaler = data.standard_scaler(x_key, weights_key = sample_weights)
-        if(do_val):
-            val_data.standard_scaler(x_key, weights_key = sample_weights, scaler = scaler)
-    
-    print(data[x_key][0])
-    print(val_data[x_key][0])
-
 
 
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
@@ -127,65 +118,69 @@ def train_cwola_hunting_network(options):
 
     print("Will train on %i events, validate on %i events" % (data.nTrain, nVal))
     print(data[x_key][0].shape)
+    
+    #vary seed for different k-folds
+    batch_sum = np.sum(data.batch_list)
 
+    seed = options.seed + batch_sum
+    print("Seed is %i" % seed)
+    np.random.seed(seed)
+    tf.set_random_seed(seed)
+    os.environ['PYTHONHASHSEED']=str(seed)
+    random.seed(seed)
 
-    for seed in options.seeds:
-        np.random.seed(seed)
-        tf.set_random_seed(seed)
-        os.environ['PYTHONHASHSEED']=str(seed)
-        random.seed(seed)
+    model_list = []
 
-        model_list = []
+    print("Will train %i models" % options.num_models)
+    for model_idx in range(options.num_models):
+        print("Creating model %i" % model_idx)
 
-        print("Will train %i models" % options.num_models)
-        for model_idx in range(options.num_models):
-            print("Creating model %i" % model_idx)
-
-            if(options.use_images):
-                if(not options.large):
-                    model = CNN(cnn_shape)
-                else:
-                    model = CNN_large(cnn_shape)
+        if(options.use_images):
+            if(not options.large):
+                model = CNN(cnn_shape)
             else:
-                dense_shape = data[x_key].shape[-1]
-                model = dense_net(dense_shape)
-
-            model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'])
-            if(model_idx == 0): model.summary()
-
-            history = model.fit(t_data, 
-                    epochs = options.num_epoch, 
-                    validation_data = v_data,
-                    callbacks = cbs,
-                    verbose = 2 )
-            model_list.append(model)
-
-        if(options.num_models == 1):
-            best_model = model_list[0]
+                model = CNN_large(cnn_shape)
         else:
-            min_loss = 9999999
-            best_i = -1
+            dense_shape = data[x_key].shape[-1]
+            model = dense_net(dense_shape)
 
-            val_sig_events = val_data['Y_mjj'] > 0.9
-            val_bkg_events = val_data['Y_mjj'] < 0.1
-            for model_idx in range(options.num_models):
-                preds = model_list[model_idx].predict(val_data[x_key])
-                loss = bce(preds.reshape(-1), val_data['Y_mjj'][()].reshape(-1), weights = val_data[sample_weights])
-                true_loss = auc = -1
-                if(np.sum(val_data['label'] > 0) > 10):
-                    true_loss = bce(preds.reshape(-1), val_data['label'][()].reshape(-1))
-                    auc = roc_auc_score(np.clip(val_data['label'], 0, 1), preds)
-                eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.01)
-                print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
-                loss = -eff_cut_metric
-                if(loss < min_loss):
-                    min_loss = loss
-                    best_i = model_idx
-            print("Selecting model %i " % best_i)
-            best_model = model_list[best_i]
+        model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'])
+        if(model_idx == 0): model.summary()
+
+        history = model.fit(t_data, 
+                epochs = options.num_epoch, 
+                validation_data = v_data,
+                callbacks = cbs,
+                verbose = 2 )
+        model_list.append(model)
+
+    if(options.num_models == 1):
+        best_model = model_list[0]
+    else:
+        min_loss = 9999999
+        best_i = -1
+
+        val_sig_events = val_data['Y_mjj'] > 0.9
+        val_bkg_events = val_data['Y_mjj'] < 0.1
+        for model_idx in range(options.num_models):
+            preds = model_list[model_idx].predict(val_data[x_key])
+            loss = bce(preds.reshape(-1), val_data['Y_mjj'][()].reshape(-1), weights = val_data[sample_weights])
+            true_loss = auc = -1
+            if(np.sum(val_data['label'] > 0) > 10):
+                true_loss = bce(preds.reshape(-1), val_data['label'][()].reshape(-1))
+                auc = roc_auc_score(np.clip(val_data['label'], 0, 1), preds)
+            eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.10, 
+                    weights = val_data[sample_weights][val_bkg_events], labels = val_data['label'][val_sig_events])
+            print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
+            loss = -eff_cut_metric
+            if(loss < min_loss):
+                min_loss = loss
+                best_i = model_idx
+        print("Selecting model %i " % best_i)
+        best_model = model_list[best_i]
 
 
-        if(do_val):
+        if(do_val and np.sum(val_data['label'] > 0) > 10):
             msg = "End of training. "
             y_pred_val = best_model.predict_proba(val_data[x_key])
             roc_val = roc_auc_score(np.clip(val_data['label'], 0, 1), y_pred_val)
@@ -200,9 +195,6 @@ def train_cwola_hunting_network(options):
             f_model = f_model.format(seed = seed)
         print("Saving model to : ", f_model)
         best_model.save(f_model)
-        if(options.scaler):
-            scaler_fname = fname.replace(".h5", "_scaler.bin")
-            sklearn.externals.joblib.dump(scaler, scaler_fname, compress=True)
 
     del data
     if(val_data is not None): del val_data

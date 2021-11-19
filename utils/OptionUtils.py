@@ -46,20 +46,31 @@ def input_options():
     parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
     parser.add_argument("--sig_per_batch", type = float, default = -1.,  help="Reduce signal to this number of events in each batch (< 0 to not use )")
     parser.add_argument("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays of signal")
-    parser.add_argument("--seeds", nargs="+", type = int, default = [123456],  help="RNG seeds for models")
+    parser.add_argument("--seed", type = int, default = 123456,  help="RNG seeds for models")
     parser.add_argument("--BB_seed", type = int, default = 123456,  help="RNG seed for dataset")
     parser.add_argument("--num_models", type = int, default = 1,  help="How many networks to train (if >1 will save the one with best validation loss)")
     parser.add_argument("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
 
-    parser.add_argument("--keep_LSF", default = False, action = "store_true", help="Keep LSF for dense inputs")
-    parser.add_argument("--clip_feats", default = False, action = "store_true", help="Clip input feature values to avoid negatives")
-    parser.add_argument("--scaler", default = False, action = "store_true", help="Use sk learn standard scaler on dense inputs")
+    parser.add_argument("--keep_LSF",  action = "store_true", help="Keep LSF for dense inputs")
+    parser.add_argument("--no_LSF", dest = 'keep_LSF', action = "store_false", help="Dont Keep LSF for dense inputs")
+    parser.set_defaults(keep_LSF=True)
+    parser.add_argument("--clip_feats", action = "store_true", help="Clip input feature values to avoid negatives")
+    parser.add_argument("--no_clip_feats", dest = 'clip_feats', action = "store_false", help="Clip input feature values to avoid negatives")
+    parser.set_defaults(clip_feats=True)
+    parser.add_argument("--clip_pts", action = "store_true", help="Clip pts when doing reweighting to avoid outliers")
+    parser.add_argument("--no_clip_pts", dest = 'clip_pts', action = "store_false", help="Clip pts when doing reweighting to avoid outliers")
+    parser.set_defaults(clip_pts=True)
+
+    parser.add_argument("--nsubj_ratios", dest = 'nsubj_ratios', action = "store_true", help="Nsubj ratios as input features")
+    parser.add_argument("--no_nsubj_ratios", dest = 'nnsubj_ratios', action = "store_false", help="Clip input feature values to avoid negatives")
+    parser.set_defaults(nsubj_ratios=True)
 
 
     parser.add_argument("--local_storage", default =False, action="store_true",  help="Store temp files locally not on gpuscratch")
     parser.add_argument("--sig_cut", type=int, default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")
     parser.add_argument("--bkg_cut", type=int, default = 40,  help="What classifier percentile to use to define bkg-rich region in TNT")
 
+    parser.add_argument("--eff_cut", type=float, default = 0.01,  help="What classifier percentile to use for eff_cut computation")
 
     parser.add_argument("--ptsort", default = False, action="store_true",  help="Sort j1 and j2 by pt rather than by jet mass")
     parser.add_argument("--randsort", default = False, action="store_true",  help="Sort j1 and j2 randomly rather than by jet mass")
@@ -129,8 +140,8 @@ def get_options_from_pkl(fname):
 
     return options
 
-def write_options_to_pkl(options, fname):
-    with open(fname, "wb") as f:
+def write_options_to_pkl(options, fname, write_mode = "wb"):
+    with open(fname, write_mode) as f:
         pickle.dump(options, f)
     return
 

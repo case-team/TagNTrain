@@ -64,11 +64,13 @@ def full_run(options):
             else: rel_opts.counting_fit = False
             rel_opts.condor = options.condor
             rel_opts.keep_LSF = options.keep_LSF #quick fix
+            rel_opts.redo_roc = options.redo_roc #quick fix
+            rel_opts.output = options.output #allows renaming / moving directories
             options = rel_opts
     else:
         #save options
         options_dict = options.__dict__
-        write_options_to_pkl(options_dict, options.output + "run_opts.pkl" )
+        write_options_to_pkl(options_dict, options.output + "run_opts.pkl", write_mode = "xb" )
 
 
  
@@ -163,14 +165,17 @@ def full_run(options):
                     #c_opts.name = "j1_kfold%i" % k
                     c_opts.name = options.label + "_j1_kfold%i" % k
                     c_opts.outdir = options.output + "j1_kfold%i/" % k
+                    if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
                     doCondor(c_opts)
                     #c_opts.name = "j2_kfold%i" % k
                     c_opts.name = options.label + "_j2_kfold%i" % k
                     c_opts.outdir = options.output + "j2_kfold%i/" % k
+                    if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
                     doCondor(c_opts)
                 else:
                     c_opts.name = options.label + "_jrand_kfold%i" % k
                     c_opts.outdir = options.output + "jrand_kfold%i/" % k
+                    if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
                     doCondor(c_opts)
 
                 
@@ -246,12 +251,44 @@ def full_run(options):
         for k,k_options in enumerate(kfold_options):
             np_fname = k_options.output + "fit_inputs_kfold%i_effs.npz" % k
             np_file = np.load(np_fname)
-            
-            sig_effs.append(np.clip(np_file["sig_eff"], 1e-6, 1.))
-            bkg_effs.append(np.clip(np_file["bkg_eff"], 1e-6, 1.))
+            sig_eff = np.clip(np_file["sig_eff"], 1e-6, 1.)
+            bkg_eff = np.clip(np_file["bkg_eff"], 1e-6, 1.)
+            roc_label = ""
+            if(options.redo_roc):
+                print("Recomputing roc")
+                j1_qs = np_file['j1_quantiles']
+                j2_qs = np_file['j2_quantiles']
+                Y = np_file['Y']
+                sig_eff = []
+                bkg_eff = []
+                n_points = 200.
+                roc_label = "_max"
+                qcd_only = Y > -0.1
+                #scores = np.minimum(j1_qs,j2_qs)
+                scores = np.maximum(j1_qs,j2_qs)
+                #scores = j1_qs*j2_qs
+                bkg_eff, sig_eff, thresholds = roc_curve(Y[qcd_only], scores[qcd_only], drop_intermediate = True)
+                print(sig_eff.shape)
 
-        sic_fname = options.output + options.label + "_sic.png"
+                #for perc in np.arange(0., 1., 1./n_points):
+                #    mask = (j1_qs > perc) & (j2_qs > perc)
+                #    sig_eff_ = np.mean(mask & (Y ==1)) / np.mean(Y == 1)
+                #    bkg_eff_ = np.mean(mask & (Y ==0)) / np.mean(Y == 0)
+
+                #    sig_eff.append(sig_eff_)
+                #    bkg_eff.append(bkg_eff_)
+
+                sig_eff = np.clip(sig_eff, 1e-6, 1.)
+                bkg_eff = np.clip(bkg_eff, 1e-6, 1.)
+
+            
+            sig_effs.append(sig_eff)
+            bkg_effs.append(bkg_eff)
+
+        sic_fname = options.output + options.label + roc_label + "_sic.png"
+        roc_fname = options.output + options.label + roc_label + "_roc.png"
         make_sic_plot(sig_effs, bkg_effs, colors = colors, labels = labels, fname = sic_fname)
+        make_roc_plot(sig_effs, bkg_effs, colors = colors, labels = labels, fname = roc_fname)
 
     if(do_merge):
 
@@ -305,6 +342,9 @@ if(__name__ == "__main__"):
     parser.set_defaults(condor=False)
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
     parser.add_argument("--counting_fit", default = False,  action = 'store_true', help = 'Do counting version of dijet fit')
-    parser.add_argument("--reload", default = False, action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--redo_roc", default = False,  action = 'store_true', help = 'Remake roc')
+    parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
+    parser.set_defaults(reload=True)
     options = parser.parse_args()
     full_run(options)

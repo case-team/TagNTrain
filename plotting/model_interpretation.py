@@ -42,6 +42,8 @@ def model_interp(options):
     num_top = 100
     num_rand = 100
 
+    if(not os.path.exists(options.output)):
+        subprocess.call("mkdir %s" % options.output, shell = True)
     
     if('j_label' in options.labeler_name):
         j1_fname = options.labeler_name.format(j_label = "j1")
@@ -78,10 +80,12 @@ def model_interp(options):
     #j1_model = tf.keras.models.load_model(j1_model_name)
     #j2_model = tf.keras.models.load_model(j2_model_name)
 
-    if(options.keep_LSF):
-        feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "LSF", "DeepB", "nPFCands"]
+    if(options.nsubj_ratios):
+        feature_names = ["jet_mass", "tau1", "tau21", "tau32", "tau43", "LSF", "DeepB", "nPFCands"]
     else:
-        feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "DeepB", "nPFCands"]
+        feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "LSF", "DeepB", "nPFCands"]
+    if(not options.keep_LSF):
+        feature_names.remove("LSF")
 
 
     Y = data['label']
@@ -133,11 +137,12 @@ def model_interp(options):
                         save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
         print(title)
 
-    for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
-        title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j1_nsubj[idx], std_j1_nsubj[idx], mean_top_j1_nsubj[idx], std_top_j1_nsubj[idx])
-        make_outline_hist( [], (j1_feats[:,idx+2]/j1_feats[:,idx+1], j1_feats[top_j1_scores_idxs][:,idx+2]/j1_feats[top_j1_scores_idxs][:,idx+1]), 
-                plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
-        print(title)
+    if(not options.nsubj_ratios):
+        for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
+            title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j1_nsubj[idx], std_j1_nsubj[idx], mean_top_j1_nsubj[idx], std_top_j1_nsubj[idx])
+            make_outline_hist( [], (j1_feats[:,idx+2]/j1_feats[:,idx+1], j1_feats[top_j1_scores_idxs][:,idx+2]/j1_feats[top_j1_scores_idxs][:,idx+1]), 
+                    plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
+            print(title)
 
     print("J2: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j2_scores_idxs] > 0)))
     for idx,feat in enumerate(feature_names):
@@ -146,11 +151,12 @@ def model_interp(options):
                         save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
         print(title)
 
-    for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
-        title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j2_nsubj[idx], std_j2_nsubj[idx], mean_top_j2_nsubj[idx], std_top_j2_nsubj[idx])
-        make_outline_hist( [], (j2_feats[:,idx+2]/j2_feats[:,idx+1], j2_feats[top_j2_scores_idxs][:,idx+2]/j2_feats[top_j2_scores_idxs][:,idx+1]), 
-                plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
-        print(title)
+    if(not options.nsubj_ratios):
+        for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
+            title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j2_nsubj[idx], std_j2_nsubj[idx], mean_top_j2_nsubj[idx], std_top_j2_nsubj[idx])
+            make_outline_hist( [], (j2_feats[:,idx+2]/j2_feats[:,idx+1], j2_feats[top_j2_scores_idxs][:,idx+2]/j2_feats[top_j2_scores_idxs][:,idx+1]), 
+                    plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
+            print(title)
 
 
     if(include_bkg_like):

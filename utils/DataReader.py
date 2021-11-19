@@ -150,6 +150,8 @@ class DataReader:
 
         self.keep_LSF = kwargs.get('keep_LSF', False)
         self.clip_feats = kwargs.get('clip_feats', False)
+        self.nsubj_ratios = kwargs.get('nsubj_ratios', False)
+        self.clip_pts = kwargs.get('clip_pts', False)
 
 
         print("Creating dataset. Mass range %.0f - %.0f. Delta Eta cut %.1f" % (self.keep_mlow, self.keep_mhigh, self.d_eta))
@@ -219,20 +221,28 @@ class DataReader:
         return new
 
     def process_feats(self, feats):
-        #LSF is 4th col
+        #Features are tau1, tau2, tau3, tau4, LSF, DeepB, nPF
         nonLSF_idxs = [0,1,2,3,5,6]
         b_idx = -2
         lsf_idx = 4
+        rfeats = np.copy(feats)
         if(self.keep_LSF): 
-            rfeats = feats
             if(self.clip_feats):
                 rfeats[:,lsf_idx] = np.clip(rfeats[:,lsf_idx], 0., 1.)
 
         else: 
-            rfeats = feats [:,nonLSF_idxs]
+            rfeats = rfeats [:,nonLSF_idxs]
 
         if(self.clip_feats):
             rfeats[:,b_idx] = np.clip(rfeats[:,b_idx], 0., None)
+
+        if(self.nsubj_ratios):
+            #Make tau2 tau3 and tau4  variables tau21, tau32, tau43 respectively
+            eps = 1e-8
+            rfeats[:,1] = feats[:,1] / (feats[:,0] + eps)
+            rfeats[:,2] = feats[:,2] / (feats[:,1] + eps)
+            rfeats[:,3] = feats[:,3] / (feats[:,2] + eps)
+
 
         return rfeats
 
@@ -562,6 +572,10 @@ class DataReader:
         print("Doing reweighting based on jet pt")
         j1_pts = self.f_storage['jet_kinematics'][:,2]
         j2_pts = self.f_storage['jet_kinematics'][:,6]
+
+        if(self.clip_pts):
+            j1_pts = np.clip(j1_pts, 0.1*self.mjj_sig, 0.9 * self.mjj_sig)
+            j2_pts = np.clip(j2_pts, 0.1*self.mjj_sig, 0.9 * self.mjj_sig)
 
         if(self.swapped_js):
             #meaning of j1 and j2 swapped for some events

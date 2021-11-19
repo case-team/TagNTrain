@@ -15,6 +15,10 @@ import h5py
 
 
 def tag_and_train(options):
+    print(options.__dict__)
+
+
+
     if(options.use_images): network_type = "CNN"
     else: network_type = "dense"
 
@@ -135,7 +139,6 @@ def tag_and_train(options):
 
     data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high)
     print_signal_fractions(data['label'], data['Y_TNT'])
-    #options.batch_size *= 1./((sig_region_cut + bkg_region_cut)/200)
 
     if(options.randsort):
         labeler_scores2 = data2.labeler_scores(labeler, l_key2)
@@ -174,25 +177,16 @@ def tag_and_train(options):
             val_data.make_ptrw('Y_TNT', save_plots = False)
             if(options.randsort): val_data2.make_ptrw('Y_TNT2', save_plots = False, extra_str = '2')
 
-    print(data[x_key][0])
-    print(val_data[x_key][0])
-    if(options.scaler):
-        print("Scaling!")
-        scaler = data.standard_scaler(x_key, weights_key = sample_weights)
-        if(options.randsort): data2.standard_scaler(x_key2, weights_key = sample_weights2, scaler = scaler)
-        if(do_val):
-            val_data.standard_scaler(x_key, weights_key = sample_weights, scaler = scaler)
-            if(options.randsort): val_data2.standard_scaler(x_key2, weights_key = sample_weights2, scaler = scaler)
-    
-    print(data[x_key][0])
-    print(val_data[x_key][0])
-
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
     cbs = [tf.keras.callbacks.History()]
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=10, verbose=1, mode='min')
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)
-
+    
+    batch_size_scale = 1./(( (100. - options.sig_cut) + options.bkg_cut)/200.)
+    print("Scaling batch size by %.2f to account for masking" % batch_size_scale)
+    options.batch_size *= int(batch_size_scale)
+    print(options.batch_size)
 
 
     # train model
@@ -220,88 +214,89 @@ def tag_and_train(options):
 
     print("Will train on %i events, validate on %i events" % (t_data.nTotal, n_val))
 
+    batch_sum = np.sum(data.batch_list)
 
+    seed = options.seed + batch_sum
+    print("Seed is %i" % seed)
+    np.random.seed(seed)
+    tf.set_random_seed(seed)
+    os.environ['PYTHONHASHSEED']=str(seed)
+    random.seed(seed)
 
-    for seed in options.seeds:
-        np.random.seed(seed)
-        tf.set_random_seed(seed)
-        os.environ['PYTHONHASHSEED']=str(seed)
-        random.seed(seed)
+    cnn_shape = (32,32,1)
+    model_list = []
 
-        cnn_shape = (32,32,1)
-        model_list = []
-
-        for model_idx in range(options.num_models):
-            print("Creating model %i" % model_idx)
-            if(options.model_start == ""):
-                print("Creating new model based on seed %i " % seed)
-                if(options.use_images):
-                    model = CNN(cnn_shape)
-                else:
-                    dense_shape = data[x_key].shape[-1]
-                    model = dense_net(dense_shape)
-
-                model.summary()
-                model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy']
-                        )
+    for model_idx in range(options.num_models):
+        print("Creating model %i" % model_idx)
+        if(options.model_start == ""):
+            if(options.use_images):
+                model = CNN(cnn_shape)
             else:
-                print("Starting with model from %s " % options.model_start)
-                model = tf.keras.models.load_model(options.model_dir + j_label + options.model_start)
+                dense_shape = data[x_key].shape[-1]
+                model = dense_net(dense_shape)
 
-
-
-            #additional_val = AdditionalValidationSets([(X_val, Y_true_val, "Val_true_sig")], options.batch_size = 500)
-
-            #cbs = [callbacks.History(), additional_val, roc1, roc2] 
-
-
-
-            history = model.fit(t_data, 
-                    epochs = options.num_epoch, 
-                    validation_data = v_data,
-                    callbacks = cbs,
-                    verbose = 2 )
-            model_list.append(model)
-
-            preds = model.predict_proba(data[x_key][:10])
-            if np.any(np.isnan(preds)): 
-                print("Got output Nan for idx %i. Should rerun with a different seed" % model_idx )
-                #sys.exit(1)
-
-
-        if(options.num_models == 1 or not do_val ):
-            best_model = model_list[0]
+            model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy']
+                    )
+            if(model_idx == 0): model.summary()
         else:
-
-            min_loss = 9999999
-            best_i = -1
-
-            val_sig_events = val_data_plain[2] > 0.9
-            val_bkg_events = val_data_plain[2] < 0.1
-            for model_idx in range(options.num_models):
-                preds = model_list[model_idx].predict(val_data_plain[0])
-                if(np.any(np.isnan(preds))):
-                    loss = true_loss = auc = eff_cut_metric =  -1
-                else:
-                    loss = bce(preds.reshape(-1), val_data_plain[2].reshape(-1), weights = val_data_plain[3])
-                    true_loss = auc = -1
-                    if(np.sum(val_data_plain[1] > 0) > 10):
-                        true_loss = bce(preds.reshape(-1), val_data_plain[1].reshape(-1))
-                        auc = roc_auc_score(val_data_plain[1], preds)
-                    eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.01)
-                print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
-                loss = -eff_cut_metric
-                if(loss < min_loss):
-                    min_loss = loss
-                    best_i = model_idx
-            print("Selecting model %i " % best_i)
-            best_model = model_list[best_i]
+            print("Starting with model from %s " % options.model_start)
+            model = tf.keras.models.load_model(options.model_dir + j_label + options.model_start)
 
 
 
+        #additional_val = AdditionalValidationSets([(X_val, Y_true_val, "Val_true_sig")], options.batch_size = 500)
+
+        #cbs = [callbacks.History(), additional_val, roc1, roc2] 
 
 
-        if(do_val and np.sum(val_data_plain[1]) > 10):
+
+        history = model.fit(t_data, 
+                epochs = options.num_epoch, 
+                validation_data = v_data,
+                callbacks = cbs,
+                verbose = 2 )
+        model_list.append(model)
+
+        preds = model.predict_proba(data[x_key][:10])
+        if np.any(np.isnan(preds)): 
+            print("Got output Nan for idx %i. Should rerun with a different seed" % model_idx )
+            #sys.exit(1)
+
+
+    if(options.num_models == 1 or not do_val ):
+        best_model = model_list[0]
+    else:
+
+        min_loss = 9999999
+        best_i = -1
+
+        val_sig_events = val_data_plain[2] > 0.9
+        val_bkg_events = val_data_plain[2] < 0.1
+        for model_idx in range(options.num_models):
+            preds = model_list[model_idx].predict(val_data_plain[0])
+            if(np.any(np.isnan(preds))):
+                loss = true_loss = auc = eff_cut_metric =  -1
+            else:
+                loss = bce(preds.reshape(-1), val_data_plain[2].reshape(-1), weights = val_data_plain[3])
+                true_loss = auc = -1
+                if(np.sum(val_data_plain[1] > 0) > 10):
+                    true_loss = bce(preds.reshape(-1), val_data_plain[1].reshape(-1))
+                    auc = roc_auc_score(val_data_plain[1], preds)
+            eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = options.eff_cut, 
+                    weights = val_data_plain[3][val_bkg_events], labels = val_data_plain[1][val_sig_events])
+            print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
+            loss = -eff_cut_metric
+            if(loss < min_loss):
+                min_loss = loss
+                best_i = model_idx
+        print("Selecting model %i " % best_i)
+        best_model = model_list[best_i]
+
+
+
+
+
+        if(do_val and np.sum(val_data_plain[1] > 0) > 10):
             msg = "End of training. "
             y_pred_val = best_model.predict_proba(val_data_plain[0])
             roc_val = roc_auc_score(val_data_plain[1], y_pred_val)
@@ -314,9 +309,6 @@ def tag_and_train(options):
             f_model = f_model.format(seed = seed)
         print("Saving model to : ", f_model)
         best_model.save(f_model)
-        if(options.scaler):
-            scaler_fname = fname.replace(".h5", "_scaler.bin")
-            sklearn.externals.joblib.dump(scaler, scaler_fname, compress=True)
 
 
         #training_plot = options.plot_dir + j_label + plot_prefix + "training_history.png"

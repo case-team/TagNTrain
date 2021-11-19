@@ -55,7 +55,7 @@ def classifier_selection(options):
     overall_effs = []
 
     if(len(options.effs) ==1 and options.effs[0] == 100.):
-        scores = None
+        jj_scores = None
 
     else:
         if('sig_idx' in options.labeler_name): 
@@ -68,29 +68,34 @@ def classifier_selection(options):
 
             #j1_score, j2_score = get_jet_scores(model_dir, f, options.model_type, j1rand_images, j2rand_images, j1rand_dense_inputs, j2rand_dense_inputs, num_models = options.num_models)
             j1_score, j2_score = get_jet_scores("", f, options.model_type, j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, num_models = options.num_models)
+            j1_qs = quantile_transform(j1_score.reshape(-1,1), copy = True).reshape(-1)
+            j2_qs = quantile_transform(j2_score.reshape(-1,1), copy = True).reshape(-1)
 
-            if(options.do_roc):
-                in_window = (mjj > options.mjj_low) & (mjj < options.mjj_high)
-                j1_qs = quantile_transform(j1_score[in_window].reshape(-1,1), copy = True).reshape(-1)
-                j2_qs = quantile_transform(j2_score[in_window].reshape(-1,1), copy = True).reshape(-1)
-                Y_inwindow = Y[in_window]
-                #sig_effs = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==1)].shape[0])/(Y_inwindow[Y_nwindow==1].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
-                #bkg_effs = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==0)].shape[0])/(Y_inwindow[Y_inwindow==0].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
-                for perc in np.arange(0., 1., 1./n_points):
-                    mask = (j1_qs > perc) &  (j2_qs > perc)
-                    eff = np.mean(mask)
-                    sig_eff = np.mean(mask & (Y_inwindow ==1)) / np.mean(Y_inwindow == 1)
-                    bkg_eff = np.mean(mask & (Y_inwindow ==0)) / np.mean(Y_inwindow == 0)
+            #combine scores into one
+            #jj_scores = np.minimum(j1_qs, j2_qs)
+            jj_scores = j1_qs * j2_qs
 
-                    sig_effs.append(sig_eff)
-                    bkg_effs.append(bkg_eff)
-                    overall_effs.append(eff)
+
+
+                #old method
+                #sig_eff = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==1)].shape[0])/(Y_inwindow[Y_nwindow==1].shape[0]) for perc in np.arange(0.,1., 1./n_points)])-
+                #bkg_eff = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==0)].shape[0])/(Y_inwindow[Y_inwindow==0].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
+                #for perc in np.arange(0., 1., 1./n_points):
+                #    mask = (j1_qs > perc) &  (j2_qs > perc)
+                #    eff = np.mean(mask)
+                #    sig_eff_ = np.mean(mask & (Y_inwindow ==1)) / np.mean(Y_inwindow == 1)
+                #    bkg_eff_ = np.mean(mask & (Y_inwindow ==0)) / np.mean(Y_inwindow == 0)
+
+                #    sig_eff.append(sig_eff_)
+                #    bkg_eff.append(bkg_eff_)
+                #    overall_effs.append(eff)
 
         else:
             jj_scores = get_jj_scores("", f, options.model_type, jj_images, jj_dense_inputs, num_models = options.num_models)
-            if(options.do_roc):
-                in_window = (mjj > options.mjj_low) & (mjj < options.mjj_high)
-                bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y[in_window], jj_scores[in_window])
+
+        if(options.do_roc):
+            in_window_and_nominor_bkg = (mjj > options.mjj_low) & (mjj < options.mjj_high) & (Y > -0.1)
+            bkg_eff_roc, sig_eff_roc, thresholds = roc_curve(Y[in_window_and_nominor_bkg], jj_scores[in_window_and_nominor_bkg], drop_intermediate = True)
 
 
 
@@ -116,19 +121,13 @@ def classifier_selection(options):
 
         if(eff == 100.):
             mask = mjj> 0.
-        elif(options.model_type <3):
-            if(use_sidebands):
-                mask = make_selection(j1_score, j2_score, percentile_cut, mask = in_sb)
-            else:
-                mask = make_selection(j1_score, j2_score, percentile_cut, mask = None)
-
         else:
             if(use_sidebands):
                 thresh = np.percentile(jj_scores[in_sb], percentile_cut)
             else:
                 thresh = np.percentile(jj_scores, percentile_cut)
 
-            mask = scores > thresh
+            mask = jj_scores > thresh
 
 
 
@@ -187,7 +186,8 @@ def classifier_selection(options):
             #bkg_eff = np.clip(bkg_eff, 1e-8, 1.)
             f_np = options.output.replace(".h5", "_effs.npz")
 
-            np.savez(f_np, sig_eff = sig_effs, bkg_eff = bkg_effs, overall_eff = overall_effs)
+            np.savez(f_np, sig_eff = sig_eff_roc, bkg_eff = bkg_eff_roc,
+                    j1_quantiles = j1_qs[in_window_and_nominor_bkg], j2_quantiles = j2_qs[in_window_and_nominor_bkg], Y = Y[in_window_and_nominor_bkg])
 
         make_mjj_eff_plot = True
         if(make_mjj_eff_plot):
