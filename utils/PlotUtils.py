@@ -196,7 +196,7 @@ def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None
         plt.savefig(fname)
         print("Saving file to %s " % fname)
 
-def make_histogram(entries, labels, colors, xaxis_label, title, num_bins, logy = False, normalize = False, stacked = False, save=False, h_type = 'step', 
+def make_histogram(entries, labels, colors, xaxis_label="", title ="", num_bins = 10, logy = False, normalize = False, stacked = False, h_type = 'step', 
         h_range = None, fontsize = 16, fname="", yaxis_label = ""):
     alpha = 1.
     if(stacked): 
@@ -212,7 +212,7 @@ def make_histogram(entries, labels, colors, xaxis_label, title, num_bins, logy =
         plt.tick_params(axis='y', labelsize=fontsize)
     plt.title(title, fontsize=fontsize)
     plt.legend(loc='upper right', fontsize = fontsize)
-    if(save): 
+    if(fname != ""): 
         plt.savefig(fname)
         print("saving fig %s" %fname)
     #else: plt.show(block=False)

@@ -73,7 +73,7 @@ def model_interp(options):
 
 
     j1_model = ModelEnsemble(location = j1_fname, num_models = options.num_models)
-    j2_model = ModelEnsemble(location = j1_fname, num_models = options.num_models)
+    j2_model = ModelEnsemble(location = j2_fname, num_models = options.num_models)
 
     #j1_model_name = j1_fname + "/model0.h5"
     #j2_model_name = j2_fname + "/model0.h5"
@@ -112,20 +112,30 @@ def model_interp(options):
     std_top_j1 = np.std(j1_feats[top_j1_scores_idxs], axis=0)
     std_top_j2 = np.std(j2_feats[top_j2_scores_idxs], axis=0)
 
-    def avg_nsubj_ratios(feats):
-        mean_tau21 = np.mean(feats[:,2]/feats[:,1])
-        mean_tau32 = np.mean(feats[:,3]/feats[:,2])
-        mean_tau43 = np.mean(feats[:,4]/feats[:,3])
+    def avg_nsubj_ratios(options, feats):
+        if(not options.nsubj_ratios):
+            eps = 1e-8
+            tau21 = feats[:,2] / (feats[:,1] + eps)
+            tau32 = feats[:,3] / (feats[:,2] + eps)
+            tau43 = feats[:,4] / (feats[:,3] + eps)
+        else:
+            tau21 = feats[:,2]
+            tau32 = feats[:,3]
+            tau43 = feats[:,4]
 
-        std_tau21 = np.std(feats[:,2]/feats[:,1])
-        std_tau32 = np.std(feats[:,3]/feats[:,2])
-        std_tau43 = np.std(feats[:,4]/feats[:,3])
+        mean_tau21 = np.mean(tau21)
+        mean_tau32 = np.mean(tau32)
+        mean_tau43 = np.mean(tau43)
+
+        std_tau21 = np.std(tau21)
+        std_tau32 = np.std(tau32)
+        std_tau43 = np.std(tau43)
         return ((mean_tau21,mean_tau32,mean_tau43), (std_tau21, std_tau32, std_tau43))
 
-    mean_j1_nsubj, std_j1_nsubj = avg_nsubj_ratios(j1_feats)
-    mean_top_j1_nsubj, std_top_j1_nsubj = avg_nsubj_ratios(j1_feats[top_j1_scores_idxs])
-    mean_j2_nsubj, std_j2_nsubj = avg_nsubj_ratios(j2_feats)
-    mean_top_j2_nsubj, std_top_j2_nsubj = avg_nsubj_ratios(j2_feats[top_j2_scores_idxs])
+    mean_j1_nsubj, std_j1_nsubj = avg_nsubj_ratios(options, j1_feats)
+    mean_top_j1_nsubj, std_top_j1_nsubj = avg_nsubj_ratios(options, j1_feats[top_j1_scores_idxs])
+    mean_j2_nsubj, std_j2_nsubj = avg_nsubj_ratios(options, j2_feats)
+    mean_top_j2_nsubj, std_top_j2_nsubj = avg_nsubj_ratios(options, j2_feats[top_j2_scores_idxs])
 
     print("J1: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j1_scores_idxs] > 0)))
     plot_labels = ("All", "Most Signal-like (Top %i)" % num_top)

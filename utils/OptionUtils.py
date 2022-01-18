@@ -37,12 +37,14 @@ def input_options():
     parser.add_argument("--mjj_low", type=int, default = 2250,  help="Low mjj cut value")
     parser.add_argument("--mjj_high", type=int, default = 2750, help="High mjj cut value")
     parser.add_argument("--mjj_sig", type=int, default = 2500, help="Signal mass (used for signal filtering)")
-    parser.add_argument("--d_eta", type=float, default = -1, help="Delta eta cut")
+    parser.add_argument("--deta", type=float, default = -1, help="Delta eta cut")
     parser.add_argument("--no_ptrw", default = False, action="store_true",  help="Don't reweight events to have matching pt distributions in sig-rich and bkg-rich samples")
     parser.add_argument("--no_sample_weights", default = False, action="store_true", help="Don't do weighting of different signal / bkg regions")
+    parser.add_argument("--deta_min", default = -1, type = float, help = "Minimum dEta")
 
     parser.add_argument("--large", default = False, action = "store_true", help="Use larger NN archetecture")
     parser.add_argument("--sig_idx", type = int, default = 1,  help="What index of signal to use")
+    parser.add_argument("--sig_file", type = str, default = "",  help="Load signal from separate file")
     parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
     parser.add_argument("--sig_per_batch", type = float, default = -1.,  help="Reduce signal to this number of events in each batch (< 0 to not use )")
     parser.add_argument("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays of signal")
@@ -62,7 +64,7 @@ def input_options():
     parser.set_defaults(clip_pts=True)
 
     parser.add_argument("--nsubj_ratios", dest = 'nsubj_ratios', action = "store_true", help="Nsubj ratios as input features")
-    parser.add_argument("--no_nsubj_ratios", dest = 'nnsubj_ratios', action = "store_false", help="Clip input feature values to avoid negatives")
+    parser.add_argument("--no_nsubj_ratios", dest = 'nsubj_ratios', action = "store_false", help="Clip input feature values to avoid negatives")
     parser.set_defaults(nsubj_ratios=True)
 
 
@@ -74,6 +76,10 @@ def input_options():
 
     parser.add_argument("--ptsort", default = False, action="store_true",  help="Sort j1 and j2 by pt rather than by jet mass")
     parser.add_argument("--randsort", default = False, action="store_true",  help="Sort j1 and j2 randomly rather than by jet mass")
+
+    parser.add_argument("--TNT_bkg_cut", default = 3, type = int,  
+            help="What type of mass window for bkg-like sample (0: AE cut and SB, 1:AE cut only, SB and SR, 2: AE cut and SR, 3: AE cut or SR)")
+    parser.add_argument("--AE_size", default = 6, type = int,  help="Size of AE latent space")
     return parser
 
 def load_dataset_from_options(options):
@@ -109,7 +115,7 @@ def load_dataset_from_options(options):
         #val_data = DataReader(fin = options.fin, keys = options.keys, sig_idx = options.sig_idx, sig_frac = options.sig_frac, 
         #        data_start = options.data_start, data_stop = options.data_start + options.num_data, 
         #    keep_mlow = options.keep_mlow, keep_mhigh = options.keep_mhigh, batch_list = val_batch_list, hadronic_only = options.hadronic_only, 
-        #    mjj_sig = options.mjj_sig, BB_seed = options.BB_seed, d_eta = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
+        #    mjj_sig = options.mjj_sig, BB_seed = options.BB_seed, deta = options.deta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
         val_data.read()
     else:
         val_data = None
@@ -122,7 +128,7 @@ def load_dataset_from_options(options):
     #data = DataReader(fin = options.fin, keys = options.keys, sig_idx = options.sig_idx, sig_frac = options.sig_frac, 
     #    data_start = options.data_start, data_stop = options.data_start + options.num_data, 
     #    keep_mlow = options.keep_mlow, keep_mhigh = options.keep_mhigh, batch_list = data_batch_list, hadronic_only = options.hadronic_only, 
-    #    mjj_sig = options.mjj_sig, BB_seed = options.BB_seed, d_eta = options.d_eta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
+    #    mjj_sig = options.mjj_sig, BB_seed = options.BB_seed, deta = options.deta, local_storage = options.local_storage, randsort = options.randsort, sig_per_batch = options.sig_per_batch)
 
     data.read()
 

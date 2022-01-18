@@ -13,8 +13,8 @@ batch_stop = 30
 sig_idx = 1
 #roc_plot_name = "s%i_event_roc_cwola_all_kfold_qt.png" % sig_idx
 #sic_plot_name = "s%i_event_sic_cwola_all_kfold_qt.png" % sig_idx
-roc_plot_name = "s%i_event_roc_ae.png" % sig_idx
-sic_plot_name = "s%i_event_sic_ae.png" % sig_idx
+roc_plot_name = "s%i_event_roc_ae_latent_cmp.png" % sig_idx
+sic_plot_name = "s%i_event_sic_ae_latent_cmp.png" % sig_idx
 m_low = 2250.
 m_high = 2750.
 #m_low = 3150.
@@ -22,7 +22,7 @@ m_high = 2750.
 
 no_minor_bkgs = True
 
-d_eta = -1
+d_eta = 1.3
 
 
 single_file = True
@@ -30,18 +30,23 @@ hadronic_only = True
 
 sic_max = 10
 
-plot_dir = "../plots/BB_v2_M2500/AE_test/"
-model_dir = "../models/BB_v2_M2500/AE_test/"
+plot_dir = "../plots/dec1_ae_eta_dep/"
+model_dir = "../models/AEs/nov29/"
 
 #plot_dir = "../runs/cwola_40spb_fullrun/"
 #model_dir = "../runs/cwola_40spb_fullrun/"
 
 
 f_models = [
-"jrand_AE_4batch.h5",
-"jrand_AE_8batch.h5",
-"jrand_AE_num_model3_4batch.h5",
-"jrand_AE_num_model3_8batch.h5",
+"all_latent4_4batch.h5",
+"all_4batch.h5",
+"all_latent8_4batch.h5",
+"all_latent10_4batch.h5",
+#"all_8batch.h5",
+#"deta_4batch.h5",
+#"deta_8batch.h5",
+#"deta_nov29_8batch.h5",
+#"deta_nov29_24batch.h5",
 #"{j_label}_autoencoder_m3500.h5", 
 #"july22/{j_label}_deta_sig00_TNT0_seed1_s3.h5",
 #"july22/{j_label}_deta_sig00_TNT0_seed2_s3.h5",
@@ -81,25 +86,16 @@ f_models = [
 ]
 
 labels = [
-#        "CWoLa #1",
-#        "CWoLa #2",
-#        "CWoLa #3",
-#        "CWoLa #4",
-#        "CWoLa #5",
-#        "TNT #1",
-#        "TNT #2",
-#        "TNT #3",
-#        "TNT #4",
-#        "TNT #5",
-#        "k-fold 0",
-#        "k-fold 1",
-#        "k-fold 2",
-#        "k-fold 3",
-#        "k-fold 4",
-         "AE 4 batch",
-         "AE 8 batch",
-         "AE 4 batch, 3 models",
-         "AE 8 batch, 3 models",
+         "AE Latent Size 4",
+         "AE Latent Size 6",
+         "AE Latent Size 8",
+         "AE Latent Size 10",
+#         "AE 8 batch (dEta cut, rotated images)",
+#         "AE 24 batch (dEta cut, rotated images)",
+#         "AE 4 batch",
+#         "AE 8 batch",
+#         "AE 4 batch (dEta cut)",
+#         "AE 8 batch (dEta cut)",
         ]
 
 
@@ -137,7 +133,7 @@ if(single_file):
     num_data = -1
     data_start = 0
     data = DataReader(fin=fin, sig_idx = sig_idx, data_start = data_start, data_stop = data_start + num_data, keys = keys, keep_mlow = m_low, keep_mhigh = m_high, 
-            hadronic_only = hadronic_only, d_eta = d_eta, batch_start = batch_start, batch_stop = batch_stop, no_minor_bkgs = no_minor_bkgs )
+            hadronic_only = hadronic_only, deta = deta, batch_start = batch_start, batch_stop = batch_stop, no_minor_bkgs = no_minor_bkgs )
     data.read()
     j1_dense_inputs = data['j1_features']
     j2_dense_inputs = data['j2_features']

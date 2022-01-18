@@ -9,6 +9,7 @@ from optparse import OptionGroup
 
 parser = input_options()
 parser.add_argument("--draw_sig", default = False, action = 'store_true', help = "Include signal on feature comparison plots")
+parser.add_argument("--do_ttbar", default = False, action = 'store_true', help = "TTbar")
 options = parser.parse_args()
 
 if(options.output[-1] != '/'): options.output +='/'
@@ -41,9 +42,20 @@ print("Keep low %.0f keep high %.0f \n" % ( options.keep_mlow, options.keep_mhig
 options.keys = ['mjj', 'j1_features', 'j2_features', 'jet_kinematics']
 
 do_TNT = False
-if(options.labeler_name != ''): #doing TNT
+if(options.do_ttbar):
     do_TNT = True
     do_both_js = False
+    options.keep_mlow = 1400.
+    options.keep_mhigh = 9999.
+    options.ptsort = True
+
+    j_label = "j1_"
+    opp_j_label = "j2_"
+
+elif(options.labeler_name != ''): #doing TNT
+    do_TNT = True
+    do_both_js = False
+    options.sig_per_batch = 0
     if(options.training_j == 1):
         j_label = "j1_"
         opp_j_label = "j2_"
@@ -67,8 +79,14 @@ import time
 t1 = time.time()
 data, _ = load_dataset_from_options(options)
 
+if(options.do_ttbar):
+    print("Doing ttbar regions")
+    filter_frac = data.make_Y_ttbar(data['j2_features'])
+    Y_label = 'Y_ttbar'
+    Y = data['label'] == -2
 
-if(do_TNT):
+
+elif(do_TNT):
     print("Doing Tag N' Train regions")
     print("\n Loading labeling model from %s \n" % options.labeler_name)
     Y_label = 'Y_TNT'
@@ -85,11 +103,14 @@ if(do_TNT):
     bkg_region_cut = np.percentile(labeler_scores, options.bkg_cut)
 
     print("cut high %.3e, cut low %.3e " % (sig_region_cut, bkg_region_cut))
+    Y = data['label']
 
-    data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high)
+    data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high,
+            bkg_cut_type = options.TNT_bkg_cut)
 else:
     print("Doing CWoLa regions")
     Y_label = 'Y_mjj'
+    Y = data['label']
     data.make_Y_mjj(options.mjj_low, options.mjj_high)
 
 t2 = time.time()
@@ -97,7 +118,7 @@ print("load time  %s " % (t2 -t1))
 
 
 
-print_signal_fractions(data['label'], data[Y_label])
+print_signal_fractions(Y, data[Y_label])
 
 
 #print(data['jet_kinematics'][:10])
@@ -147,12 +168,16 @@ bkg_mjjs = data['mjj'][bkg_region]
 
 
 print("\n There are %i events in the signal region and %i in the bkg region \n" % (np.sum(sig_region), np.sum(bkg_region)))
-print("\n There are %i events in the low-mjj bkg region and %i in the high-mjj bkg region \n" % (np.sum(bkg_mjjs < options.mjj_low), np.sum(bkg_mjjs > options.mjj_high )))
+if(not options.do_ttbar):
+    print("\n There are %i events in the low-mjj bkg region and %i in the high-mjj bkg region \n" % (np.sum(bkg_mjjs < options.mjj_low), np.sum(bkg_mjjs > options.mjj_high )))
 
 
 
-true_bkg = (data['label'] < 0.1).reshape(-1)
-true_sig = (data['label'] > 0.9).reshape(-1)
+true_bkg = (Y < 0.1).reshape(-1)
+true_sig = (Y > 0.9).reshape(-1)
+
+if(options.draw_sig):
+    print("Drawing based on %.0f signal events" % np.sum(sig_region & true_sig))
 
 j1_ptrw_sig_region_weights = data['j1_ptrw'][sig_region & true_bkg]
 j1_ptrw_bkg_region_weights = data['j1_ptrw'][bkg_region & true_bkg] 

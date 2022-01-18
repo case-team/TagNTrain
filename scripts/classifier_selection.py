@@ -184,14 +184,15 @@ def classifier_selection(options):
         if(options.do_roc):
             #sig_eff = np.clip(sig_eff, 1e-8, 1.)
             #bkg_eff = np.clip(bkg_eff, 1e-8, 1.)
-            f_np = options.output.replace(".h5", "_effs.npz")
+            f_np = output_name.replace(".h5", "_effs.npz")
+            print("Creating %s" % f_np)
 
             np.savez(f_np, sig_eff = sig_eff_roc, bkg_eff = bkg_eff_roc,
                     j1_quantiles = j1_qs[in_window_and_nominor_bkg], j2_quantiles = j2_qs[in_window_and_nominor_bkg], Y = Y[in_window_and_nominor_bkg])
 
         make_mjj_eff_plot = True
         if(make_mjj_eff_plot):
-            f_plt = options.output.replace(".h5", "_mjj_eff_plot.png")
+            f_plt = output_name.replace(".h5", "_mjj_eff_plot.png")
             print("Creating %s" % f_plt)
             n_bins = 20
             ratio_range = [0.0, 0.03]

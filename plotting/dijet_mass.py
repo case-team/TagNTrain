@@ -6,10 +6,12 @@ from optparse import OptionParser
 from optparse import OptionGroup
 
 parser = input_options()
+parser.add_argument("--do_ttbar", default=False, action = 'store_true',  help="Draw ttbar")
 options = parser.parse_args()
 
+
 fin = options.fin
-plot_dir = options.plot_dir
+plot_dir = options.output
 model_dir = options.model_dir
 
 
@@ -18,8 +20,8 @@ model_type = options.model_type
 if(len(options.label)> 0 and options.label[-1] != '_'):
     options.label += '_'
 
-num_data = options.num_data
-data_start = options.data_start
+if(options.do_ttbar):
+    options.sig_per_batch = 0
 
 use_or = False
 use_j = 0
@@ -42,15 +44,19 @@ use_dense = (model_type == 2 or model_type == 4)
 if(options.labeler_name != ""):
     options.keys = ['j1_features', 'j2_features', 'j1_images', 'j2_images', 'jet_kinematics']
 else: 
-    options.keys = ['jet_kinematics']
+    options.keys = ['jet_kinematics', 'j1_features', 'j2_features']
 
 j1_images = j2_images = jj_images = j1_dense_inputs = j2_dense_inputs = jj_dense_inputs = None
 
 data, _ = load_dataset_from_options(options)
+
 Y = data['label'].reshape(-1)
 mjj = data['jet_kinematics'][:,0]
-j1_m = data['jet_kinematics'][:,5]
-j2_m = data['jet_kinematics'][:,9]
+j1_m = data['j1_features'][:,0]
+j2_m = data['j2_features'][:,0]
+print(Y.shape)
+print(data['jet_kinematics'].shape)
+print(data['j1_features'].shape)
 
 if(options.labeler_name != ""):
     j1_images = data['j1_images']
@@ -80,6 +86,11 @@ m_range = (1200., 7000.)
 sig_events = (Y > 0.9)
 bkg_events = (Y < 0.1)
 minor_bkg_events = (Y < -0.5)
+
+if(options.do_ttbar):
+    bkg_events = Y == 0
+    sig_events = Y == -2
+
 mjj_dists = []
 j1_pt_dists = []
 j2_pt_dists = []
@@ -111,6 +122,7 @@ eff_S_in_window = S / mjj[sig_events].shape[0]
 overall_S = mjj[sig_events].shape[0]
 overall_B = mjj[bkg_events].shape[0]
 
+print("Total number of signal events : %i" % np.sum(Y == 1))
 print("Mean signal mjj is %.0f" % mjj_sig);
 print("Mjj window %f to %f " % (m_low, m_high))
 print("Before selection: %i signal events and %i bkg events in mjj window (%i minor bkg)" % (S,B, minor_B))

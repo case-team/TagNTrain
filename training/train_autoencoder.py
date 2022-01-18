@@ -12,14 +12,12 @@ def train_auto_encoder(options):
         j_label = "j1_"
         x_key = 'j1_images'
         opp_j_key = "j2_images"
-        cnn_shape = (32,32,1)
         print("training autoencoder for j1")
 
     elif (options.training_j ==2):
         j_label = "j2_"
         x_key = 'j2_images'
         opp_j_key = "j1_images"
-        cnn_shape = (32,32,1)
         print("training autoencoder for j2")
     else:
         print("Training jet not 1 or 2! Exiting")
@@ -51,9 +49,14 @@ def train_auto_encoder(options):
     data, val_data = load_dataset_from_options(options)
     do_val = val_data is not None
 
+    #restrict to sidebands only
     mjj = data['mjj']
     mjj_cut = (mjj < options.mjj_low) | (mjj > options.mjj_high)
-    data.apply_mask(mjj_cut)
+    filter_frac = data.apply_mask(mjj_cut)
+    batch_size_scale = 1./filter_frac
+    print("Scaling batch size by %.2f to account for masking" % batch_size_scale)
+    options.batch_size = int(options.batch_size * batch_size_scale)
+    print(options.batch_size)
 
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
@@ -98,7 +101,8 @@ def train_auto_encoder(options):
     print("Will train %i models" % options.num_models)
     for model_idx in range(options.num_models):
         print("Creating model %i" % model_idx)
-        model = auto_encoder_large(cnn_shape)
+        model = auto_encoder_large(data[x_key][0].shape, compressed_size = options.AE_size)
+        #model = auto_encoder(data[x_key][0].shape, compressed_size = options.AE_size)
         model.compile(optimizer=myoptimizer,loss= tf.keras.losses.mean_squared_error)
         if(model_idx == 0): model.summary()
 

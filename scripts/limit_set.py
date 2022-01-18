@@ -6,6 +6,7 @@ def spb_opts(options, spb):
     t_opts.sig_per_batch = spb
     t_opts.output = options.output + "spb" +  str(spb) + "/"
     t_opts.label = options.label + "_spb" +  str(spb)
+    t_opts.redo_roc = False
 
     return t_opts
 
@@ -166,7 +167,7 @@ def limit_set(options):
 
     if(options.reload):
         if(not os.path.exists(options.output + "run_opts.pkl")):
-            print("Reload options specified but file %s doesn't exist. Exiting" % (options.output+"run_opts.pkl"))
+            print("Reload options specified but file %s doesn't exist (add --new to create new directory). Exiting" % (options.output+"run_opts.pkl"))
             sys.exit(1)
         else:
             rel_opts = get_options_from_pkl(options.output + "run_opts.pkl")

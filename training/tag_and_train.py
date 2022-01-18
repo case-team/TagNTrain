@@ -15,6 +15,7 @@ import h5py
 
 
 def tag_and_train(options):
+    print("\n")
     print(options.__dict__)
 
 
@@ -137,7 +138,8 @@ def tag_and_train(options):
 
     print("Labeler: cut high %.3e, cut low %.3e " % (sig_region_cut, bkg_region_cut))
 
-    data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high)
+    filter_frac = data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high, 
+            bkg_cut_type = options.TNT_bkg_cut)
     print_signal_fractions(data['label'], data['Y_TNT'])
 
     if(options.randsort):
@@ -150,16 +152,17 @@ def tag_and_train(options):
 
 
         data2.make_Y_TNT(sig_region_cut = sig_region_cut2, bkg_region_cut = bkg_region_cut2, cut_var = labeler_scores2, 
-                         mjj_low = options.mjj_low, mjj_high = options.mjj_high, extra_str = '2')
+                         mjj_low = options.mjj_low, mjj_high = options.mjj_high, extra_str = '2', bkg_cut_type = options.TNT_bkg_cut)
         print_signal_fractions(data2['label'], data2['Y_TNT2'])
 
     if(do_val):
         val_labeler_scores = val_data.labeler_scores(labeler,  l_key)
-        val_data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = val_labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high)
+        val_data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = val_labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high,
+            bkg_cut_type = options.TNT_bkg_cut)
         if(options.randsort):
             val_labeler_scores2 = val_data2.labeler_scores(labeler, l_key2)
             val_data2.make_Y_TNT(sig_region_cut = sig_region_cut2, bkg_region_cut = bkg_region_cut2, cut_var = val_labeler_scores2, 
-                                 mjj_low = options.mjj_low, mjj_high = options.mjj_high, extra_str = '2')
+                                 mjj_low = options.mjj_low, mjj_high = options.mjj_high, extra_str = '2', bkg_cut_type = options.TNT_bkg_cut)
 
 
 
@@ -183,9 +186,10 @@ def tag_and_train(options):
     early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)
     
-    batch_size_scale = 1./(( (100. - options.sig_cut) + options.bkg_cut)/200.)
+    #batch_size_scale = 1./(( (100. - options.sig_cut) + options.bkg_cut)/200.)
+    batch_size_scale = 1./filter_frac
     print("Scaling batch size by %.2f to account for masking" % batch_size_scale)
-    options.batch_size *= int(batch_size_scale)
+    options.batch_size = int(options.batch_size * batch_size_scale)
     print(options.batch_size)
 
 
@@ -223,13 +227,13 @@ def tag_and_train(options):
     os.environ['PYTHONHASHSEED']=str(seed)
     random.seed(seed)
 
-    cnn_shape = (32,32,1)
     model_list = []
 
     for model_idx in range(options.num_models):
         print("Creating model %i" % model_idx)
         if(options.model_start == ""):
             if(options.use_images):
+                cnn_shape = (32,32,1)
                 model = CNN(cnn_shape)
             else:
                 dense_shape = data[x_key].shape[-1]
@@ -296,23 +300,23 @@ def tag_and_train(options):
 
 
 
-        if(do_val and np.sum(val_data_plain[1] > 0) > 10):
-            msg = "End of training. "
-            y_pred_val = best_model.predict_proba(val_data_plain[0])
-            roc_val = roc_auc_score(val_data_plain[1], y_pred_val)
-            phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data_plain[1] > 0))
-            msg += phrase
-            print(msg, end =100*' ' + '\n')
+    if(do_val and np.sum(val_data_plain[1] > 0) > 10):
+        msg = "End of training. "
+        y_pred_val = best_model.predict_proba(val_data_plain[0])
+        roc_val = roc_auc_score(val_data_plain[1], y_pred_val)
+        phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data_plain[1] > 0))
+        msg += phrase
+        print(msg, end =100*' ' + '\n')
 
-        f_model = options.output
-        if('{seed}' in options.output):
-            f_model = f_model.format(seed = seed)
-        print("Saving model to : ", f_model)
-        best_model.save(f_model)
+    f_model = options.output
+    if('{seed}' in options.output):
+        f_model = f_model.format(seed = seed)
+    print("Saving model to : ", f_model)
+    best_model.save(f_model)
 
 
-        #training_plot = options.plot_dir + j_label + plot_prefix + "training_history.png"
-        #plot_training(history.history, fname = training_plot)
+    #training_plot = options.plot_dir + j_label + plot_prefix + "training_history.png"
+    #plot_training(history.history, fname = training_plot)
     del data
     if(data2 is not None): del data2
     if(val_data is not None): del val_data

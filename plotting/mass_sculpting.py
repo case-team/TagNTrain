@@ -22,7 +22,7 @@ parser.add_option("--mjj_high", type='int', default = -1, help="High mjj cut val
 parser.add_option("-s", "--signal", type='int', default=1, help="Which signal type to use ")
 parser.add_option("--sig_frac",  type='float', default=-1., help="Filter signal to this amount (negative to do nothing)")
 parser.add_option("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays")
-parser.add_option("--d_eta", type='float', default = -1, help="Delta eta cut")
+parser.add_option("--deta", type='float', default = -1, help="Delta eta cut")
 
 
 (options, args) = parser.parse_args()

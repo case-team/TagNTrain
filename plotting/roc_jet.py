@@ -73,8 +73,8 @@ f"{j_label}_kfold4/",
 
         ] 
 model_type = [2,2,2,2,2,2] 
-#num_ensemble = [5,5,5,5,5,5]
-num_ensemble = [4,4,4,4,4]
+#num_models = [5,5,5,5,5,5]
+num_models = [4,4,4,4,4]
 labels = [
 #"TNT #1",  
 #"TNT #2",  
@@ -110,7 +110,7 @@ if(single_file):
     num_data = -1
     data_start = 0
     data = DataReader(fin=fin, sig_idx = sig_idx, data_start = data_start, data_stop = data_start + num_data, keys = keys, keep_mlow = m_low, keep_mhigh = m_high, 
-            hadronic_only = hadronic_only, d_eta = d_eta, batch_start = batch_start, batch_stop = batch_stop, sig_frac = sig_frac, no_minor_bkgs = no_minor_bkgs)
+            hadronic_only = hadronic_only, deta = deta, batch_start = batch_start, batch_stop = batch_stop, sig_frac = sig_frac, no_minor_bkgs = no_minor_bkgs)
     data.read()
     if(include_images): images = data[x_label]
     Y = data['label'].reshape(-1)
@@ -148,7 +148,7 @@ model_scores = []
 for idx,f in enumerate(f_models):
 
     scores = get_single_jet_scores(model_dir + f_models[idx], model_type[idx], j_images = images, j_dense_inputs = dense_inputs, 
-            num_models = num_ensemble[idx], batch_size = 512)
+            num_models = num_models[idx], batch_size = 512)
     #hist_scores = [scores[bkg_events], scores[sig_events]]
     #make_histogram(hist_scores, hist_labels, hist_colors, 'Labeler Score', "", 100,
             #normalize = True, save = True, fname = plot_dir + f.replace('.h5', '').replace("/", "") +"_scores.png")

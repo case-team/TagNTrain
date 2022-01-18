@@ -4,6 +4,7 @@ from utils.TrainingUtils import *
 from optparse import OptionParser
 from optparse import OptionGroup
 import random
+import time
 
 
 
@@ -55,12 +56,10 @@ def train_cwola_hunting_network(options):
         options.keys.append('jet_kinematics')
 
     if(options.use_images):
-        import time
         options.keys.append(img_key)
         x_key = img_key
 
     else:
-        import time
         options.keys.append(feat_key)
         x_key = feat_key
         
@@ -180,21 +179,21 @@ def train_cwola_hunting_network(options):
         best_model = model_list[best_i]
 
 
-        if(do_val and np.sum(val_data['label'] > 0) > 10):
-            msg = "End of training. "
-            y_pred_val = best_model.predict_proba(val_data[x_key])
-            roc_val = roc_auc_score(np.clip(val_data['label'], 0, 1), y_pred_val)
-            phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data['label'] > 0))
-            msg += phrase
-            print(msg, end =100*' ' + '\n')
+    if(do_val and np.sum(val_data['label'] > 0) > 10):
+        msg = "End of training. "
+        y_pred_val = best_model.predict_proba(val_data[x_key])
+        roc_val = roc_auc_score(np.clip(val_data['label'], 0, 1), y_pred_val)
+        phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data['label'] > 0))
+        msg += phrase
+        print(msg, end =100*' ' + '\n')
 
-        #plot_training(history.history, options.plot_dir + j_label + "training_history.png")
+    #plot_training(history.history, options.plot_dir + j_label + "training_history.png")
 
-        f_model = options.output
-        if('{seed}' in options.output):
-            f_model = f_model.format(seed = seed)
-        print("Saving model to : ", f_model)
-        best_model.save(f_model)
+    f_model = options.output
+    if('{seed}' in options.output):
+        f_model = f_model.format(seed = seed)
+    print("Saving model to : ", f_model)
+    best_model.save(f_model)
 
     del data
     if(val_data is not None): del val_data

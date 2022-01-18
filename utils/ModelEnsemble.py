@@ -33,7 +33,8 @@ class ModelEnsemble:
         Ys = [model.predict(X, batch_size = batch_size) for model in self.model_list]
         ret = np.average(Ys, axis=0)
         if(len(X.shape) > 2):
-            return ret.reshape(-1, 32,32, 1)
+            npix = X.shape[1]
+            return ret.reshape(-1, npix,npix, 1)
         else:
             return ret.reshape(-1)
 

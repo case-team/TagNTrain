@@ -102,6 +102,8 @@ def full_run(options):
     do_roc = options.step == "roc"
     if(options.step == "all"):
         do_train = do_selection = do_fit = do_roc = True
+    if(options.step == "roc" and options.condor):
+        do_merge = True
 
     get_condor = get_condor or (do_selection and options.condor)
     do_merge = do_merge or do_fit
@@ -111,7 +113,6 @@ def full_run(options):
 
     total_batch_list = list(range(options.numBatches))
 
-    fit_inputs = options.output + "fit_inputs.h5"
     base_path = os.path.abspath(".") + "/"
 
     start_time = time.time()
@@ -196,14 +197,14 @@ def full_run(options):
                 selection_options.labeler_name = k_options.output + "jrand_kfold%i/" % k
                 check_all_models_there(selection_options.labeler_name, selection_options.num_models)
 
-            selection_options.output = k_options.output + "fit_inputs_kfold%i.h5" % k
+            selection_options.output = k_options.output + "fit_inputs_kfold%i_eff{eff}.h5" % k
             selection_options.do_roc = True
 
             if((not options.condor)): #run selection locally
                 classifier_selection(selection_options)
 
             else: #submit to condor
-                selection_options.output = "fit_inputs_kfold%i.h5" % k
+                selection_options.output = "fit_inputs_kfold%i_eff{eff}.h5" % k
                 selection_options.local_storage = True
                 selection_options.fin = "../data/BB/"
                 selection_options_dict = selection_options.__dict__
@@ -219,9 +220,18 @@ def full_run(options):
 
                 base_script = "../condor/scripts/select_from_pkl.sh"
                 select_script = condor_dir + "select%i_script.sh" % k 
+
                 os.system("cp %s %s" % (base_script, select_script))
                 os.system("sed -i s/BSTART/%i/g %s" % (selection_options.data_batch_list[0], select_script))
                 os.system("sed -i s/BSTOP/%i/g %s" % (selection_options.data_batch_list[-1] + 1, select_script))
+                f_select_script = open(select_script, "a")
+
+                for eff in options.effs:
+                    f_select_script.write("xrdcp -f %s ${1}" % selection_options.output.format(eff=eff))
+
+                f_select_script.write("xrdcp -f %s ${1}" % selection_options.output.format(eff=options.effs[0]).replace(".h5", "_eff.npz"))
+
+
                 os.system("sed -i s/KFOLDNUM/%i/g %s" % (k, select_script))
                 c_opts.script = select_script
 
@@ -241,6 +251,51 @@ def full_run(options):
                 doCondor(c_opts)
 
 
+
+    if(do_merge):
+
+        if(options.condor):
+            for k,k_options in enumerate(kfold_options):
+
+                c_opts = condor_options().parse_args([])
+                c_opts.getEOS = True
+                c_opts.outdir = options.output
+                c_opts.name = options.label + "_select_kfold%i" % k 
+                doCondor(c_opts)
+
+        #merge selections
+        for eff in effs:
+            fit_inputs = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
+            merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs
+            for k,k_options in enumerate(kfold_options):
+                merge_cmd += k_options.output + "fit_inputs_kfold{k}_eff{eff}.h5 ".format(k = k, eff = eff)
+
+        print("Merge cmd: " + merge_cmd)
+        subprocess.call(merge_cmd ,shell = True)
+
+
+    if(do_fit):
+
+
+
+
+        #Do fit
+        counting_str = ""
+        if(options.counting_fit):
+            counting_str = "_counting"
+        for eff in effs:
+            fit_inputs = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
+            fit_cmd = ("cd ../fitting; source deactivate;" 
+                      "eval `scramv1 runtime -sh`; python dijetfit%s.py -i %s -p %s; cd -;"
+                      "source deactivate; source activate mlenv0" % 
+                      ( counting_str, base_path + fit_inputs, base_path + options.output))
+            print(fit_cmd)
+            subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
+
+    stop_time = time.time()
+    print("Total time taken was %s" % ( stop_time - start_time))
+
+
     #merge different selections
 
     if(do_roc):
@@ -249,7 +304,7 @@ def full_run(options):
         labels = [ "kfold %i" % k for  k in range(options.kfolds)]
         colors = ["g", "b", "r", "gray", "purple", "pink", "orange", "m", "skyblue", "yellow"]
         for k,k_options in enumerate(kfold_options):
-            np_fname = k_options.output + "fit_inputs_kfold%i_effs.npz" % k
+            np_fname = options.output + "fit_inputs_kfold{k}_eff{eff}_effs.npz".format(k=k, eff = options.effs[0])
             np_file = np.load(np_fname)
             sig_eff = np.clip(np_file["sig_eff"], 1e-6, 1.)
             bkg_eff = np.clip(np_file["bkg_eff"], 1e-6, 1.)
@@ -289,45 +344,6 @@ def full_run(options):
         roc_fname = options.output + options.label + roc_label + "_roc.png"
         make_sic_plot(sig_effs, bkg_effs, colors = colors, labels = labels, fname = sic_fname)
         make_roc_plot(sig_effs, bkg_effs, colors = colors, labels = labels, fname = roc_fname)
-
-    if(do_merge):
-
-        if(options.condor):
-            for k,k_options in enumerate(kfold_options):
-
-                c_opts = condor_options().parse_args([])
-                c_opts.getEOS = True
-                c_opts.outdir = options.output
-                c_opts.name = options.label + "_select_kfold%i" % k 
-                doCondor(c_opts)
-
-        #merge selections
-        merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs
-        for k,k_options in enumerate(kfold_options):
-            merge_cmd += k_options.output + "fit_inputs_kfold%i.h5 " % k 
-
-        print("Merge cmd: " + merge_cmd)
-        subprocess.call(merge_cmd ,shell = True)
-
-
-    if(do_fit):
-
-
-
-
-        #Do fit
-        counting_str = ""
-        if(options.counting_fit):
-            counting_str = "_counting"
-        fit_cmd = ("cd ../fitting; source deactivate;" 
-                  "eval `scramv1 runtime -sh`; python dijetfit%s.py -i %s -p %s; cd -;"
-                  "source deactivate; source activate mlenv0" % 
-                  ( counting_str, base_path + fit_inputs, base_path + options.output))
-        print(fit_cmd)
-        subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
-
-    stop_time = time.time()
-    print("Total time taken was %s" % ( stop_time - start_time))
 
 
 if(__name__ == "__main__"):
