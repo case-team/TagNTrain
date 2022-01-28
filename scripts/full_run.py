@@ -353,6 +353,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--lfolds", default = 4, type = int)
     parser.add_argument("--numBatches", default = 40, type = int)
     parser.add_argument("--do_TNT",  default=False, action = 'store_true',  help="Use TNT (default cwola)")
+    parser.add_argument("--do_ttbar",  default=False, action = 'store_true',  help="Do ttbar CR training")
     parser.add_argument("--condor", dest = 'condor', action = 'store_true')
     parser.add_argument("--no-condor", dest = 'condor', action = 'store_false')
     parser.set_defaults(condor=False)

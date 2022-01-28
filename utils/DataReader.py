@@ -134,6 +134,7 @@ class DataReader:
         self.sig_file = kwargs.get('sig_file', '')
         self.sig_frac = kwargs.get('sig_frac', -1.)
         self.sig_per_batch = kwargs.get('sig_per_batch', -1)
+        self.spb_before_selection = kwargs.get('spb_before_selection', False)
         self.data_start = kwargs.get('data_start', 0)
         self.data_stop = kwargs.get('data_stop', -1)
         self.hadronic_only = kwargs.get('hadronic_only', False)
@@ -268,7 +269,8 @@ class DataReader:
 
         if(self.sep_signal):
             self.nsig_in_file = self.sig_file_h5['event_info'].shape[0]
-            self.sig_chunk_size = int(self.nsig_in_file / (2. * len(self.batch_list)))
+            #self.sig_chunk_size = int(self.nsig_in_file / (2. * len(self.batch_list)))
+            self.sig_chunk_size = int(self.nsig_in_file / (len(self.batch_list)))
             self.sig_marker = 0
 
         if(self.multi_batch):
@@ -450,21 +452,39 @@ class DataReader:
                 if(self.hadronic_only):
                     is_lep = self.sig_file_h5['event_info'][s_start:s_stop:,4] # stored as a float
                     sig_mask_temp = sig_mask_temp & (is_lep < 0.1)
+                    print("Hadronic only mask has mean %.3f " % np.mean(is_lep < 0.1))
 
+                sig_mjj_eff = sig_deta_eff = 1.
                 if(self.keep_mlow > 0. and self.keep_mhigh >0.):
                     mjj = self.sig_file_h5["jet_kinematics"][s_start:s_stop,0]
                     mjj_mask = (mjj > self.keep_mlow) & (mjj < self.keep_mhigh)
                     sig_mask_temp = sig_mask_temp & mjj_mask
+                    sig_mjj_eff = np.mean(mjj_mask)
+                    if(self.hadronic_only):
+                        sig_mjj_eff = np.mean(mjj_mask[is_lep < 0.1]) #compute mjj eff for hadronic only
+
                 if(self.deta > 0. or self.deta_min > 0.):
                     deta = self.sig_file_h5['jet_kinematics'][s_start:s_stop,1]
-                    if(self.deta > 0.): sig_mask_temp = sig_mask_temp & (deta < self.deta)
-                    if(self.deta_min > 0.): sig_mask_temp = sig_mask_temp & (deta > self.deta_min)
+                    deta_mask = deta > -99999
+                    if(self.deta > 0.): deta_mask = deta_mask & (deta < self.deta)
+                    if(self.deta_min > 0.): deta_mask = deta_mask & (deta > self.deta_min)
+                    sig_mask_temp = sig_mask_temp & deta_mask
+                    sig_deta_eff = np.mean(deta_mask)
+                    if(self.hadronic_only):
+                        sig_deta_eff = np.mean(deta_mask[is_lep < 0.1]) #compute deta eff for hadronic only
 
                 #TODO pick signal events with a weighted random sampling (if systematics)
                 idx_list = np.arange(0, self.sig_chunk_size)
-                if(idx_list[sig_mask_temp].shape[0] < self.sig_per_batch):
-                    print("Not enough signal in chunk after selection (%i, want %i)! Exiting" % (idx_list[sig_mask_temp].shape[0], self.sig_per_batch))
-                sig_idxs = idx_list[sig_mask_temp][:self.sig_per_batch]
+                num_sig_inj = self.sig_per_batch
+
+                if(self.spb_before_selection):
+                    num_sig_inj = int(self.sig_per_batch * sig_mjj_eff * sig_deta_eff)
+                    print("Sig mjj eff %.4f deta eff %.4f. Spb now %i" % (sig_mjj_eff, sig_deta_eff, num_sig_inj))
+                if(idx_list[sig_mask_temp].shape[0] < num_sig_inj):
+                    print("Not enough signal in chunk after selection (%i, want %i)! Exiting" % (idx_list[sig_mask_temp].shape[0], num_sig_inj))
+                    sys.exit(1)
+
+                sig_idxs = idx_list[sig_mask_temp][:num_sig_inj]
                 sig_final_mask = np.zeros(self.sig_chunk_size, dtype = bool)
                 sig_final_mask[sig_idxs] = True
 
@@ -473,12 +493,12 @@ class DataReader:
                     j2_pt_sig = self.sig_file_h5['jet_kinematics'][s_start:s_stop][sig_final_mask, 6]
                     swapping_idxs = np.append(swapping_idxs, j2_pt_sig > j1_pt_sig, axis=0)
                 elif(self.randsort):
-                    swapping_idxs = np.append(swapping_idxs, np.random.choice(a=[True,False], size = self.sig_per_batch), axis=0)
+                    swapping_idxs = np.append(swapping_idxs, np.random.choice(a=[True,False], size = num_sig_inj), axis=0)
 
 
             #combine labels
             if(self.sep_signal): 
-                extra_labels = np.expand_dims(np.ones(self.sig_per_batch, dtype=np.int8),axis=-1)
+                extra_labels = np.expand_dims(np.ones(num_sig_inj, dtype=np.int8),axis=-1)
                 t_labels = np.append(t_labels, extra_labels, axis=0)
             #print("# sig events: ", np.sum(t_labels == 1))
             self.nEvents += t_labels.shape[0]
@@ -514,7 +534,7 @@ class DataReader:
                     else: opp_key = 'j1' + key[2:]
                     opp_data = self.get_key(f,cstart, cstop, mask, opp_key)
                     if(self.sep_signal): opp_data = np.append(opp_data, self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, opp_key), axis=0)
-                    data[swapping_idxs] = opp_data[swapping_idxs]
+                    data[swapping_idxs] = opp_data[shuffle_order][swapping_idxs]
 
 
 
@@ -903,8 +923,6 @@ def get_signal_mask(labels, mask, num_sig, BB_seed=12345):
     if(num_drop < 0): return keep_idxs
     all_idxs = np.arange(num_events, dtype=np.int32)
     sig_idxs = all_idxs[mask][labels[mask].reshape(-1) > 0]
-    print(sig_idxs.shape, sig_idxs[:10])
-    print(num_drop)
     drop_sigs = np.random.choice(sig_idxs, num_drop, replace = False)
     keep_idxs[drop_sigs] = False
     return keep_idxs

@@ -80,6 +80,7 @@ if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--num_val_batch", type=int, default=5, help="How many batches to use for validation")
     parser.add_argument("--do_TNT",  default=False, action = 'store_true',  help="Use TNT (default cwola)")
+    parser.add_argument("--do_ttbar",  default=False, action = 'store_true',  help="Do ttbar CR training")
     parser.add_argument("--condor",  default=False, action = 'store_true',  help="Submit all NN trainings to condor")
     options = parser.parse_args()
     create_model_ensemble(options)

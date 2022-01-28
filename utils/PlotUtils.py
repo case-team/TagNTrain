@@ -197,16 +197,23 @@ def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None
         print("Saving file to %s " % fname)
 
 def make_histogram(entries, labels, colors, xaxis_label="", title ="", num_bins = 10, logy = False, normalize = False, stacked = False, h_type = 'step', 
-        h_range = None, fontsize = 16, fname="", yaxis_label = ""):
+        h_range = None, fontsize = 16, fname="", yaxis_label = "", ymax = -1):
     alpha = 1.
     if(stacked): 
         h_type = 'barstacked'
         alpha = 0.2
     fig = plt.figure(figsize=fig_size)
-    plt.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, density = normalize, histtype=h_type)
+    ns, bins, patches = plt.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, density = normalize, histtype=h_type)
     plt.xlabel(xaxis_label, fontsize =fontsize)
     plt.tick_params(axis='x', labelsize=fontsize)
+
     if(logy): plt.yscale('log')
+    elif(ymax > 0):
+        plt.ylim([0,ymax])
+    else:
+        ymax = 1.3 * np.amax(ns)
+        plt.ylim([0,ymax])
+
     if(yaxis_label != ""):
         plt.ylabel(yaxis_label, fontsize=fontsize)
         plt.tick_params(axis='y', labelsize=fontsize)

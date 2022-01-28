@@ -47,6 +47,7 @@ def input_options():
     parser.add_argument("--sig_file", type = str, default = "",  help="Load signal from separate file")
     parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
     parser.add_argument("--sig_per_batch", type = float, default = -1.,  help="Reduce signal to this number of events in each batch (< 0 to not use )")
+    parser.add_argument("--spb_before_selection",  default = False, action = 'store_true',  help="Whether the of sig events per batch refers to number before mass and delta eta cuts (or not)")
     parser.add_argument("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays of signal")
     parser.add_argument("--seed", type = int, default = 123456,  help="RNG seeds for models")
     parser.add_argument("--BB_seed", type = int, default = 123456,  help="RNG seed for dataset")
