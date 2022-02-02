@@ -4,8 +4,34 @@ import math
 import tensorflow as tf 
 import copy
 import os
+import sys
 from .PlotUtils import *
 from sklearn.preprocessing import StandardScaler
+
+#From the h5 maker, a map between different systematics and their index
+sys_weights_map = {
+        'nom_weight' : 0,
+        'pdf_up' : 1,
+        'pdf_down': 2,
+        'prefire_up': 3,
+        'prefire_down' : 4,
+        'pileup_up' : 5 ,
+        'pileup_down' : 6,
+        'btag_up' : 7,
+        'btag_down' : 8,
+        'PS_ISR_up' : 9,
+        'PS_ISR_down' : 10,
+        'PS_FSR_up' : 11,
+        'PS_FSR_down' : 12,
+        'F_up' : 13,
+        'F_down' : 14,
+        'R_up' : 15,
+        'R_down' : 16,
+        'RF_up' : 17,
+        'RF_down' : 18
+        }
+
+
 
 def expandable_shape(d_shape):
     c_shape = list(d_shape)
@@ -130,22 +156,36 @@ class DataReader:
         self.fin = kwargs.get('fin', None)
         self.deta = kwargs.get('deta', -1.)
         self.deta_min = kwargs.get('deta_min', -1.)
-        self.sig_idx = kwargs.get('sig_idx', 1)
-        self.sig_file = kwargs.get('sig_file', '')
-        self.sig_frac = kwargs.get('sig_frac', -1.)
-        self.sig_per_batch = kwargs.get('sig_per_batch', -1)
-        self.spb_before_selection = kwargs.get('spb_before_selection', False)
         self.data_start = kwargs.get('data_start', 0)
         self.data_stop = kwargs.get('data_stop', -1)
         self.hadronic_only = kwargs.get('hadronic_only', False)
         self.keep_mlow = kwargs.get('keep_mlow', -1.)
         self.keep_mhigh = kwargs.get('keep_mhigh', -1.)
         self.mjj_sig = kwargs.get('mjj_sig', -1.)
+
+
+        self.sig_idx = kwargs.get('sig_idx', 1)
+        self.sig_file = kwargs.get('sig_file', '')
+        self.sig_weights = kwargs.get('sig_weights', False)
+        self.sig_frac = kwargs.get('sig_frac', -1.)
+        self.sig_per_batch = kwargs.get('sig_per_batch', -1)
+        self.spb_before_selection = kwargs.get('spb_before_selection', False)
+
+        self.sig_sys = kwargs.get('sig_sys', '')
+        if (len(self.sig_sys) > 0):
+            if(self.sig_sys not in sys_weights_map.keys()):
+                print("Un recognized systematic %s! ")
+                sys.exit(1)
+
         self.BB_seed = kwargs.get('BB_seed', 123456)
+        #self.rng = np.random.Generator(np.random.PCG64(BB_seed))
+        self.rng = np.random
+        self.rng.seed(self.BB_seed)
         self.ptsort = kwargs.get('ptsort', False)
         self.randsort = kwargs.get('randsort', False)
         self.batch_list = kwargs.get('batch_list', None)
         self.no_minor_bkgs = kwargs.get('no_minor_bkgs', False)
+
 
         local_storage = kwargs.get('local_storage', False)
         batch_start = kwargs.get('batch_start', -1)
@@ -269,8 +309,15 @@ class DataReader:
 
         if(self.sep_signal):
             self.nsig_in_file = self.sig_file_h5['event_info'].shape[0]
+            num_total_batches = 40
+
             #self.sig_chunk_size = int(self.nsig_in_file / (2. * len(self.batch_list)))
-            self.sig_chunk_size = int(self.nsig_in_file / (len(self.batch_list)))
+            self.sig_chunk_size = int(self.nsig_in_file / num_total_batches)
+            
+            if(self.sig_chunk_size <= self.sig_per_batch):
+                print("WARNING: Not enough signal to split across 40 batches, splitting only across this sample, could cause repeats in later runs!")
+                self.sig_chunk_size = int(self.nsig_in_file / (len(self.batch_list)))
+
             self.sig_marker = 0
 
         if(self.multi_batch):
@@ -419,7 +466,7 @@ class DataReader:
                     print("Num sig overall is %i, Sig frac %.4f in SR and we want %.4f in window: Filter %i" %(num_sig_overall, cur_sig_frac_window, self.sig_frac, do_filter))
                 if(do_filter): 
                     #mask_sig = get_signal_mask_rand(labels, mask, new_sig_frac, self.BB_seed)
-                    mask_sig = get_signal_mask(labels, mask, sig_to_keep, self.BB_seed)
+                    mask_sig = get_signal_mask(labels, mask, sig_to_keep, self.rng)
                     mask = mask & mask_sig
 
 
@@ -436,7 +483,7 @@ class DataReader:
                 j2_pt = f['jet_kinematics'][cstart:cstop][mask,6]
                 swapping_idxs = j2_pt > j1_pt
             elif(self.randsort):
-                swapping_idxs = np.random.choice(a=[True,False], size = f['jet_kinematics'][cstart:cstop][mask].shape[0])
+                swapping_idxs = self.rng.choice(a=[True,False], size = f['jet_kinematics'][cstart:cstop][mask].shape[0])
 
 
             #load separate signal data
@@ -445,6 +492,7 @@ class DataReader:
                 sig_mask_temp = np.ones(self.sig_chunk_size, dtype = bool)
                 s_start = self.sig_marker
                 s_stop = self.sig_marker + self.sig_chunk_size
+                self.sig_marker += self.sig_chunk_size
 
                 if(s_stop > self.nsig_in_file):
                     print("Not enough signal events in file, exiting")
@@ -473,18 +521,42 @@ class DataReader:
                     if(self.hadronic_only):
                         sig_deta_eff = np.mean(deta_mask[is_lep < 0.1]) #compute deta eff for hadronic only
 
-                #TODO pick signal events with a weighted random sampling (if systematics)
                 idx_list = np.arange(0, self.sig_chunk_size)
-                num_sig_inj = self.sig_per_batch
+                num_sig_inj = float(self.sig_per_batch)
+
+                if(self.sig_weights): #do weighted random sampling of signal events
+                    sig_weights = self.sig_file_h5['sys_weights'][s_start:s_stop, 0][sig_mask_temp]
+
+                    if(len(self.sig_sys) > 0):
+                        weight_idx = sys_weights_map[self.sig_sys]
+                        sig_weights *= self.sig_file_h5['sys_weights'][s_start:s_stop,weight_idx][sig_mask_temp]
+                            
+
+                    avg_sig_weight = np.mean(sig_weights)
+                    sum_sig_weight = np.sum(sig_weights)
+                    print("Average sig weight is %.2f" % avg_sig_weight)
+                    #num_sig_inj *= avg_sig_weight
+
+                    #used for the random sampling
+                    probs = sig_weights / sum_sig_weight
+                    print(probs[:10])
+                    print(probs[probs <= 0.])
+
 
                 if(self.spb_before_selection):
-                    num_sig_inj = int(self.sig_per_batch * sig_mjj_eff * sig_deta_eff)
+                    num_sig_inj *= sig_mjj_eff * sig_deta_eff
                     print("Sig mjj eff %.4f deta eff %.4f. Spb now %i" % (sig_mjj_eff, sig_deta_eff, num_sig_inj))
+
+                num_sig_inj = int(round(num_sig_inj))
+
                 if(idx_list[sig_mask_temp].shape[0] < num_sig_inj):
                     print("Not enough signal in chunk after selection (%i, want %i)! Exiting" % (idx_list[sig_mask_temp].shape[0], num_sig_inj))
                     sys.exit(1)
 
-                sig_idxs = idx_list[sig_mask_temp][:num_sig_inj]
+
+                if(self.sig_weights): sig_idxs = self.rng.choice(idx_list[sig_mask_temp], num_sig_inj, replace = False, p = probs)
+                else: sig_idxs = idx_list[sig_mask_temp][:num_sig_inj]
+                print(num_sig_inj, self.sig_chunk_size, sig_idxs)
                 sig_final_mask = np.zeros(self.sig_chunk_size, dtype = bool)
                 sig_final_mask[sig_idxs] = True
 
@@ -493,7 +565,7 @@ class DataReader:
                     j2_pt_sig = self.sig_file_h5['jet_kinematics'][s_start:s_stop][sig_final_mask, 6]
                     swapping_idxs = np.append(swapping_idxs, j2_pt_sig > j1_pt_sig, axis=0)
                 elif(self.randsort):
-                    swapping_idxs = np.append(swapping_idxs, np.random.choice(a=[True,False], size = num_sig_inj), axis=0)
+                    swapping_idxs = np.append(swapping_idxs, self.rng.choice(a=[True,False], size = num_sig_inj), axis=0)
 
 
             #combine labels
@@ -913,9 +985,8 @@ class DataReader:
 
 #create a mask that removes signal events to enforce a given fraction
 #randomly selects which signal events to remove
-def get_signal_mask(labels, mask, num_sig, BB_seed=12345):
+def get_signal_mask(labels, mask, num_sig, rng):
 
-    np.random.seed(BB_seed)
     num_events = labels.shape[0]
     cur_sig =  np.sum(labels[mask] > 0)
     num_drop = int(cur_sig - num_sig)
@@ -923,7 +994,7 @@ def get_signal_mask(labels, mask, num_sig, BB_seed=12345):
     if(num_drop < 0): return keep_idxs
     all_idxs = np.arange(num_events, dtype=np.int32)
     sig_idxs = all_idxs[mask][labels[mask].reshape(-1) > 0]
-    drop_sigs = np.random.choice(sig_idxs, num_drop, replace = False)
+    drop_sigs = rng.choice(sig_idxs, num_drop, replace = False)
     keep_idxs[drop_sigs] = False
     return keep_idxs
 

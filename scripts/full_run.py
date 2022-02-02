@@ -264,11 +264,16 @@ def full_run(options):
                 doCondor(c_opts)
 
         #merge selections
-        for eff in effs:
-            fit_inputs = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
-            merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs
+        for eff in options.effs:
+            fit_inputs_merge = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
+
+            merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs_merge
             for k,k_options in enumerate(kfold_options):
-                merge_cmd += k_options.output + "fit_inputs_kfold{k}_eff{eff}.h5 ".format(k = k, eff = eff)
+                fit_inputs = options.output + "fit_inputs_kfold{k}_eff{eff}.h5".format(k = k, eff = eff)
+
+                if(not os.path.exists(fit_inputs)):
+                    fit_inputs = options.output + "fit_inputs_kfold{k}.h5".format(k = k)
+                merge_cmd += fit_inputs + " " 
 
         print("Merge cmd: " + merge_cmd)
         subprocess.call(merge_cmd ,shell = True)
@@ -283,7 +288,7 @@ def full_run(options):
         counting_str = ""
         if(options.counting_fit):
             counting_str = "_counting"
-        for eff in effs:
+        for eff in options.effs:
             fit_inputs = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
             fit_cmd = ("cd ../fitting; source deactivate;" 
                       "eval `scramv1 runtime -sh`; python dijetfit%s.py -i %s -p %s; cd -;"

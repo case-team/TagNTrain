@@ -45,6 +45,8 @@ def input_options():
     parser.add_argument("--large", default = False, action = "store_true", help="Use larger NN archetecture")
     parser.add_argument("--sig_idx", type = int, default = 1,  help="What index of signal to use")
     parser.add_argument("--sig_file", type = str, default = "",  help="Load signal from separate file")
+    parser.add_argument("--sig_weights", default = False, action = "store_true",  help="Use weights (SF's) for signal file")
+    parser.add_argument("--sig_sys", type= str, default = "",  help="Use weights (SF's) for signal file")
     parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
     parser.add_argument("--sig_per_batch", type = float, default = -1.,  help="Reduce signal to this number of events in each batch (< 0 to not use )")
     parser.add_argument("--spb_before_selection",  default = False, action = 'store_true',  help="Whether the of sig events per batch refers to number before mass and delta eta cuts (or not)")
