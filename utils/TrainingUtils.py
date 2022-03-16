@@ -5,11 +5,20 @@ from .PlotUtils import *
 from .OptionUtils import *
 from .DataReader import *
 from .ModelEnsemble import *
+from .Consts import *
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, roc_auc_score
 from scipy.stats import entropy
+from numpy.linalg import norm
 from sklearn.utils import shuffle as sk_shuffle
+from sklearn.preprocessing import QuantileTransformer
+
+def JSD(P, Q):
+    _P = P / norm(P, ord=1)
+    _Q = Q / norm(Q, ord=1)
+    _M = 0.5 * (_P + _Q)
+    return np.sqrt(0.5 * (entropy(_P, _M) + entropy(_Q, _M)))
 
 
 

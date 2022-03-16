@@ -3,21 +3,43 @@ sys.path.append('..')
 from utils.TrainingUtils import *
 import h5py
 
+
+def get_features(data, systematic = ""):
+    j1_images = j2_images = jj_images = j1_dense_inputs = j2_dense_inputs = jj_dense_inputs = None
+
+    if('j1_images' in data.keys): 
+        j1_images = data['j1_images']
+        j2_images = data['j2_images']
+    if('jj_images' in data.keys): jj_images = data['jj_images']
+    if('j1_features' in options.keys):
+        j1_dense_inputs = data['j1_features']
+        j2_dense_inputs = data['j2_features']
+
+        #modify features for JME corrections (for signals only)
+        if(len(systematic) > 0 and systematic in JME_vars):
+            m_idx = JME_vars_map["m_" + systematic]
+            j1_m_corr = data["j1_JME_vars"][:, m_idx]
+            j2_m_corr = data["j2_JME_vars"][:, m_idx]
+
+
+            j1_dense_inputs[:, 0] = j1_m_corr
+            j2_dense_inputs[:, 0] = j2_m_corr
+
+
+    if('jj_dense_inputs' in data.keys):
+        jj_dense_inputs = data['jj_features']
+
+    return j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, jj_images, jj_dense_inputs
     
 
 
 def classifier_selection(options):
+    print("\n")
+    print(options.__dict__)
+
     #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
     if(len(options.effs) == 0):
         print("Must input at least 1 efficiency value!")
-
-
-
-
-    n_points = 200.
-
-
-
 
     options.keys = ['mjj', 'event_info']
     if(options.model_type == 0 or options.model_type == 1):
@@ -31,24 +53,20 @@ def classifier_selection(options):
     #keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'mjj']
 
     data, _ = load_dataset_from_options(options)
+    sig_only_data = None
+    if(len(options.sig_file) > 0):
+        sig_only_data = load_signal_file(options)
 
     Y = data['label'].reshape(-1)
     mjj = data['mjj']
 
     event_num = data['event_info'][:,0]
 
-    j1_images = j2_images = jj_images = j1_dense_inputs = j2_dense_inputs = jj_dense_inputs = None
+    j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, jj_images, jj_dense_inputs = get_features(data)
 
-    if('j1_images' in options.keys): 
-        j1_images = data['j1_images']
-        j2_images = data['j2_images']
-    if('jj_images' in options.keys): jj_images = data['jj_images']
-    if('j1_features' in options.keys):
-        j1_dense_inputs = data['j1_features']
-        j2_dense_inputs = data['j2_features']
+    if(sig_only_data is not None):
+        j1_sig_images, j2_sig_images, j1_dense_sig_inputs, j2_dense_sig_inputs, jj_sig_images, jj_dense_sig_inputs = get_features(sig_only_data, systematic = options.sig_sys)
 
-    if('jj_dense_inputs' in options.keys):
-        jj_dense_inputs = data['jj_features']
     batch_size = 1024
     sig_effs = []
     bkg_effs = []
@@ -66,36 +84,36 @@ def classifier_selection(options):
         print("Using model %s" % f)
         if(options.model_type <= 2 or options.model_type == 5): #classifier on each jet
 
-            #j1_score, j2_score = get_jet_scores(model_dir, f, options.model_type, j1rand_images, j2rand_images, j1rand_dense_inputs, j2rand_dense_inputs, num_models = options.num_models)
             j1_score, j2_score = get_jet_scores("", f, options.model_type, j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, num_models = options.num_models)
-            j1_qs = quantile_transform(j1_score.reshape(-1,1), copy = True).reshape(-1)
-            j2_qs = quantile_transform(j2_score.reshape(-1,1), copy = True).reshape(-1)
+            j1_QT = QuantileTransformer(copy = True)
+            j1_qs = j1_QT.fit_transform(j1_score.reshape(-1,1)).reshape(-1)
+            j2_QT = QuantileTransformer(copy = True)
+            j2_qs = j2_QT.fit_transform(j2_score.reshape(-1,1)).reshape(-1)
 
             #combine scores into one
-            #jj_scores = np.minimum(j1_qs, j2_qs)
             jj_scores = j1_qs * j2_qs
 
+            if(sig_only_data is not None):
+                j1_sig_score, j2_sig_score = get_jet_scores("", f, options.model_type, j1_sig_images, j2_sig_images, j1_dense_sig_inputs, j2_dense_sig_inputs, num_models = options.num_models)
+                j1_sig_qs = j1_QT.transform(j1_sig_score.reshape(-1,1)).reshape(-1)
+                j2_sig_qs = j2_QT.transform(j2_sig_score.reshape(-1,1)).reshape(-1)
+                jj_sig_scores = j1_sig_qs * j2_sig_qs
 
-
-                #old method
-                #sig_eff = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==1)].shape[0])/(Y_inwindow[Y_nwindow==1].shape[0]) for perc in np.arange(0.,1., 1./n_points)])-
-                #bkg_eff = np.array([(Y_inwindow[(j1_qs > perc) & (j2_qs > perc) & (Y_inwindow==0)].shape[0])/(Y_inwindow[Y_inwindow==0].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
-                #for perc in np.arange(0., 1., 1./n_points):
-                #    mask = (j1_qs > perc) &  (j2_qs > perc)
-                #    eff = np.mean(mask)
-                #    sig_eff_ = np.mean(mask & (Y_inwindow ==1)) / np.mean(Y_inwindow == 1)
-                #    bkg_eff_ = np.mean(mask & (Y_inwindow ==0)) / np.mean(Y_inwindow == 0)
-
-                #    sig_eff.append(sig_eff_)
-                #    bkg_eff.append(bkg_eff_)
-                #    overall_effs.append(eff)
 
         else:
             jj_scores = get_jj_scores("", f, options.model_type, jj_images, jj_dense_inputs, num_models = options.num_models)
 
         if(options.do_roc):
-            in_window_and_nominor_bkg = (mjj > options.mjj_low) & (mjj < options.mjj_high) & (Y > -0.1)
-            bkg_eff_roc, sig_eff_roc, thresholds = roc_curve(Y[in_window_and_nominor_bkg], jj_scores[in_window_and_nominor_bkg], drop_intermediate = True)
+            in_window_and_nominor_bkg = (mjj > options.mjj_low) & (mjj < options.mjj_high) & (Y > -0.1) 
+            QCD = (mjj > options.mjj_low) & (mjj < options.mjj_high) & (Y > -0.1) & (Y < 0.1)
+            sig = (mjj > options.mjj_low) & (mjj < options.mjj_high) & (Y > 0.1)
+            QCD_scores = jj_scores[QCD]
+            if(sig_only_data is not None): sig_scores = jj_sig_scores
+            else: sig_scores = jj_scores[sig]
+            labels = np.append([0.] * QCD_scores.shape[0], [1.] * sig_scores.shape[0])
+            scores = np.append(QCD_scores, sig_scores)
+            bkg_eff_roc, sig_eff_roc, thresholds = roc_curve(labels, scores, drop_intermediate = True)
+            print("auc", auc(bkg_eff_roc, sig_eff_roc))
 
 
 
@@ -130,7 +148,6 @@ def classifier_selection(options):
             mask = jj_scores > thresh
 
 
-
         mjj_output = mjj[mask]
         is_sig_output = Y[mask]
         event_num_output = event_num[mask]
@@ -145,6 +162,9 @@ def classifier_selection(options):
 
         nsig = (Y[Y > 0.9]).shape[0] 
         nbkg = (Y[Y < 0.1]).shape[0] 
+
+        
+        sig_eff_deta = 1.0 #need separate file to compute properly
 
         if(nsig > 0):
             sig_eff = float(( Y[(Y > 0.9) & mask]).shape[0]) / nsig
@@ -162,6 +182,57 @@ def classifier_selection(options):
         print("Sig Eff %.3f, with window %.3f " % (sig_eff, sig_eff_window))
         print("Bkg eff %.3f, in mjj window %.3f " % (bkg_eff, bkg_eff_window))
         print("Minor bkg eff %.3f" % minor_bkg_eff)
+
+        if(sig_only_data is not None):
+
+
+            print("Computing signal efficiency on signal only file")
+
+            #signal weights
+            sig_weights = sig_only_data['sys_weights'][:,0]
+
+            if(len(options.sig_sys) > 0 and options.sig_sys in sys_weights_map.keys()):
+                print("Using systematic %s" % options.sig_sys)
+                weight_idx = sys_weights_map[options.sig_sys]
+                sig_weights *= sig_only_data['sys_weights'][:,weight_idx]
+
+            no_cut_weight = np.sum(sig_weights)
+
+            #deta eff
+            sig_deta = sig_only_data['jet_kinematics'][:,1]
+            sig_deta_mask = sig_deta >= options.deta_min
+            if(options.deta > 0.): sig_deta_mask = sig_deta_mask & (sig_deta < options.deta)
+
+            sig_deta_eff = np.sum(sig_weights[sig_deta_mask]) / no_cut_weight
+
+
+
+            sig_eff_deta = np.mean(sig_deta_mask)
+
+            #mjj eff after deta cut
+            sig_mjj = sig_only_data['jet_kinematics'][:,0][sig_deta_mask]
+            sig_mjj_mask = sig_mjj >= options.mjj_low
+            if(options.mjj_high > 0.): sig_mjj_mask = sig_mjj_mask & (sig_mjj < options.mjj_high)
+
+            sig_cut_mask = jj_sig_scores[sig_deta_mask] > thresh
+
+            sig_eff = np.sum(sig_weights[sig_deta_mask][sig_cut_mask]) / np.sum(sig_weights[sig_deta_mask])
+            sig_eff_window = np.sum(sig_weights[sig_deta_mask][sig_cut_mask & sig_mjj_mask]) / np.sum(sig_weights[sig_deta_mask])
+
+            sys_effs = dict()
+            for sys in sys_weights_map.keys():
+                if(sys == 'nom_weight'): continue
+                sys_idx = sys_weights_map[sys]
+                weights = sig_only_data['sys_weights'][:,0] * sig_only_data['sys_weights'][:,sys_idx]
+                sys_sig_eff = np.sum(weights[sig_deta_mask][sig_cut_mask])/ np.sum(weights[sig_deta_mask])
+                sys_sig_eff_window = np.sum(weights[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights[sig_deta_mask])
+                sys_effs[sys]= (sys_sig_eff, sys_sig_eff_window)
+
+
+            print("Sig eta eff %.3f, sig_eff %.3f, sig_eff_window %.3f" % (sig_eff_deta, sig_eff, sig_eff_window))
+
+
+
         print("Outputting to %s \n\n" % output_name)
 
 
@@ -174,11 +245,21 @@ def classifier_selection(options):
             mjj_shape[0] = None
             is_sig_shape[0] = None
             event_num_shape[0] = None
-            f.create_dataset("mjj", data=mjj_output, chunks = True, maxshape = mjj_shape)
-            f.create_dataset("truth_label", data=is_sig_output, chunks = True, maxshape = is_sig_shape)
-            f.create_dataset("event_num", data=event_num_output, chunks = True, maxshape = event_num_shape)
             f.create_dataset("sig_eff", data=np.array([sig_eff]) )
+            f.create_dataset("sig_eff_deta", data=np.array([sig_eff_deta]) )
             f.create_dataset("sig_eff_window", data=np.array([sig_eff_window]) )
+            if(sig_only_data is not None):
+                for sys in sys_weights_map.keys():
+                    if(sys == 'nom_weight'): continue
+                    print(sys, sys_effs[sys])
+                    f.create_dataset("sig_eff" + "_"+ sys, data=np.array([sys_effs[sys][0]]) )
+                    f.create_dataset("sig_eff_window" +"_" + sys , data=np.array([sys_effs[sys][1]]) )
+
+
+            if(not options.eff_only):
+                f.create_dataset("mjj", data=mjj_output, chunks = True, maxshape = mjj_shape)
+                f.create_dataset("truth_label", data=is_sig_output, chunks = True, maxshape = is_sig_shape)
+                f.create_dataset("event_num", data=event_num_output, chunks = True, maxshape = event_num_shape)
 
 
         if(options.do_roc):

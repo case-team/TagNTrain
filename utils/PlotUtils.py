@@ -4,10 +4,26 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib import gridspec
 from sklearn.metrics import roc_curve,auc
+from .Consts import *
 import scipy.stats
 import numpy as np
 
 fig_size = (12,9)
+
+def add_patch(legend, patch, name):
+    from matplotlib.patches import Patch
+    ax = legend.axes
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(patch)
+    labels.append(name)
+
+    legend._legend_box = None
+    legend._init_legend_box(handles, labels)
+    legend._set_loc(legend._loc)
+    legend.set_title(legend.get_title().get_text())
+
+
 
 
 def print_image(a):
@@ -273,6 +289,110 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
     #else: plt.show(block=False)
     return fig
 
+
+
+def make_multi_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, 
+        weights = None, fname="", ratio_range = -1, errors = False, logy = False, max_rw = 5, unc_band_norm = -1):
+    h_type= 'step'
+    alpha = 1.
+    fontsize = 22
+    fig = plt.figure(figsize = fig_size)
+    gs = gridspec.GridSpec(2,1, height_ratios = [3,1])
+    ax0 =  plt.subplot(gs[0])
+
+    low = np.amin(entries[0])
+    high = np.amax(entries[0])
+    if(h_range == None):
+        h_range = (low, high)
+
+    ns, bins, patches  = ax0.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels[:len(entries)], 
+            density = normalize, weights = weights, histtype=h_type)
+
+
+    plt.xlim([low, high])
+    if(logy): plt.yscale("log")
+    plt.title(title, fontsize=fontsize)
+
+    bin_size = bins[1] - bins[0]
+    bincenters = 0.5*(bins[1:]+bins[:-1]) 
+    ax1 = plt.subplot(gs[1])
+
+    ratios = []
+    errs = []
+
+    leg = ax0.legend(loc='best', fontsize = 14)
+    
+
+
+    frac_unc = None
+    if(unc_band_norm > 0):
+        raw_dist = np.copy(ns[0])
+        if(not normalize): norm_dist = raw_dist * unc_band_norm / np.sum(raw_dist)
+        else: normed_dist = raw_dist * bin_size * unc_band_norm
+        #print(raw_dist)
+        unc_dist = np.sqrt(normed_dist)
+        frac_unc = unc_dist / normed_dist
+        bincenters_band = np.copy(bincenters)
+        bincenters_band[0] = low
+        bincenters_band[-1] = high
+
+        if(len(labels) <= len(entries)): label = "Signal Injection Stat. Unc."
+        else: label = labels[-1]
+
+        l_unc = ax1.fill_between(bincenters_band, 1. - frac_unc, 1. + frac_unc, color = 'gray', alpha = 0.5, label = labels)
+        add_patch(leg, l_unc, label)
+
+    for i in range(1, len(ns)):
+        ratio = np.clip(ns[i], 1e-8, None) / np.clip(ns[0], 1e-8, None)
+        ratios.append(ratio)
+
+        ratio_err = None
+        if(errors):
+            if(weights != None):
+                w0 = weights[0]**2
+                w1 = weights[i]**2
+                norm0 = np.sum(weights[0])*bin_size
+                norm1 = np.sum(weights[i])*bin_size
+            else:
+                w0 = w1 = None
+                norm0 = entries[0].shape[0]*bin_size
+                norm1 = entries[i].shape[0]*bin_size
+
+            err0 = np.sqrt(np.histogram(entries[0], bins=bins, weights=w0)[0])/norm0
+            err1 = np.sqrt(np.histogram(entries[i], bins=bins, weights=w1)[0])/norm1
+            err0_alt  = np.sqrt(norm0*n0)/norm0
+            err_alt1  = np.sqrt(norm1*n1)/norm1
+            ratio_err = ratio * np.sqrt((err0/n0)**2 + (err1/n1)**2)
+        errs.append(ratio_err)
+
+        ax1.errorbar(bincenters, ratio, yerr = ratio_err, alpha=alpha, markerfacecolor = colors[i], markeredgecolor = colors[i], fmt='ko')
+
+
+
+    
+
+    label_size = 18
+    ax1.set_ylabel("Ratio", fontsize= label_size)
+    ax1.set_xlabel(axis_label, fontsize = label_size)
+
+    plt.xlim([low, high])
+
+    if(type(ratio_range) == list):
+        plt.ylim(ratio_range[0], ratio_range[1])
+    else:
+        if(ratio_range > 0):
+            plt.ylim([1-ratio_range, 1+ratio_range])
+
+    plt.grid(axis='y')
+
+    if(save): 
+        plt.savefig(fname)
+        print("saving fig %s" %fname)
+
+    return ns, bins, ratios, frac_unc
+
+
+
 def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, normalize = False, save=False, h_range = None, 
         weights = None, fname="", ratio_range = -1, errors = False, extras = None, logy = False, max_rw = 5):
     h_type= 'step'
@@ -303,20 +423,12 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
     n0 = np.clip(ns[0], 1e-8, None)
     n1 = np.clip(ns[1], 1e-8, None)
     ratio =  n0/ n1
+
+    #low outliers more ok than high ones
     if(max_rw > 0):
-        ratio = np.clip(ratio, 1./max_rw, max_rw)
+        ratio = np.clip(ratio, 1./(2*max_rw), max_rw)
 
     ratio_err = None
-    #if(errors):
-    #    if(weights != None):
-    #        norm0 = np.sum(weights[0])
-    #        norm1 = np.sum(weights[1])
-    #    else:
-    #        norm0 = entries[0].shape[0]
-    #        norm1 = entries[1].shape[0]
-    #    err0  = np.sqrt(norm0*n0)/norm0
-    #    err1  = np.sqrt(norm1*n1)/norm1
-    #    ratio_err = ratio * np.sqrt((err0/n0)**2 + (err1/n1)**2)
 
     bin_size = bins[1] - bins[0]
 

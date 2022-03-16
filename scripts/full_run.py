@@ -38,6 +38,33 @@ def check_all_models_there(model_dir, num_models):
 
 
 
+def avg_eff(fout_name, input_list):
+    if(len(input_list) == 0): return
+    all_effs = dict()
+    for fname in input_list:
+        f = h5py.File(fname, "r")
+
+        for key in f.keys():
+            if("eff" not in key): continue
+
+            if(key in all_effs.keys()):
+                all_effs[key].append(f[key][0])
+            else:
+                all_effs[key] = [f[key][0]]
+
+    avg_effs = dict()
+
+    fout = h5py.File(fout_name, "a")
+    for key,val in all_effs.items():
+        avg_eff = np.mean(val)
+        print(key, avg_eff)
+        if(key not in fout.keys()):
+            fout.create_dataset(key, data=np.array([avg_eff]) )
+        else:
+            fout[key][0] = avg_eff
+
+
+
 
 
 
@@ -52,25 +79,31 @@ def full_run(options):
         subprocess.call("mkdir %s" % options.output, shell = True)
 
     if(options.reload):
-        if(not os.path.exists(options.output + "run_opts.pkl")):
+        if(os.path.exists(options.output + "run_opts.json")):
+            rel_opts = get_options_from_json(options.output + "run_opts.json")
+        elif(os.path.exists(options.output + "run_opts.pkl")):
+            rel_opts = get_options_from_pkl(options.output + "run_opts.pkl")
+        else:
             print("Reload options specified but file %s doesn't exist. Exiting" % (options.output+"run_opts.pkl"))
             sys.exit(1)
-        else:
-            rel_opts = get_options_from_pkl(options.output + "run_opts.pkl")
-            rel_opts.step = options.step
-            if(len(options.effs) >0): rel_opts.effs = options.effs
-            if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
-            if(options.counting_fit): rel_opts.counting_fit = True
-            else: rel_opts.counting_fit = False
-            rel_opts.condor = options.condor
-            rel_opts.keep_LSF = options.keep_LSF #quick fix
-            rel_opts.redo_roc = options.redo_roc #quick fix
-            rel_opts.output = options.output #allows renaming / moving directories
-            options = rel_opts
+
+        rel_opts.step = options.step
+        if(len(options.effs) >0): rel_opts.effs = options.effs
+        if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
+        if(options.counting_fit): rel_opts.counting_fit = True
+        else: rel_opts.counting_fit = False
+        rel_opts.condor = options.condor
+        rel_opts.keep_LSF = options.keep_LSF #quick fix
+        rel_opts.redo_roc = options.redo_roc #quick fix
+        if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
+        rel_opts.output = options.output #allows renaming / moving directories
+        options = rel_opts
     else:
         #save options
         options_dict = options.__dict__
-        write_options_to_pkl(options_dict, options.output + "run_opts.pkl", write_mode = "xb" )
+        #write_options_to_pkl(options_dict, options.output + "run_opts.pkl", write_mode = "xb" )
+        #write_options_to_pkl(options_dict, options.output + "run_opts.pkl", write_mode = "wb" )
+        write_options_to_json(options_dict, options.output + "run_opts.json" )
 
 
  
@@ -183,6 +216,7 @@ def full_run(options):
 
     #select events
     if(do_selection):
+        print(options.__dict__)
         for k,k_options in enumerate(kfold_options):
             selection_options = copy.deepcopy(k_options)
             selection_options.data_batch_list = k_options.holdouts
@@ -224,6 +258,11 @@ def full_run(options):
                 os.system("cp %s %s" % (base_script, select_script))
                 os.system("sed -i s/BSTART/%i/g %s" % (selection_options.data_batch_list[0], select_script))
                 os.system("sed -i s/BSTOP/%i/g %s" % (selection_options.data_batch_list[-1] + 1, select_script))
+                if(len(options.sig_file) > 0):
+                    sig_fn = options.sig_file.split("/")[-1]
+                    os.system("sed -i 's/SIGFILE/%s/g' %s" % ("--sig_file " + sig_fn, select_script))
+                else:
+                    os.system("sed -i 's/SIGFILE//g' %s" % (select_script))
                 f_select_script = open(select_script, "a")
 
                 for eff in options.effs:
@@ -233,6 +272,8 @@ def full_run(options):
 
 
                 os.system("sed -i s/KFOLDNUM/%i/g %s" % (k, select_script))
+                os.system("sed -i s/FNAME/fit_inputs*/g %s" % (select_script))
+
                 c_opts.script = select_script
 
                 c_opts.name = options.label + "_select_kfold%i" % k 
@@ -267,20 +308,40 @@ def full_run(options):
         for eff in options.effs:
             fit_inputs_merge = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
 
-            merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs_merge
+            #print(options.__dict__)
+            if('eff_only' in options.__dict__.keys() and not options.eff_only): #merge fit inputs
+                merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs_merge
+
+                do_merge = False
+                for k,k_options in enumerate(kfold_options):
+                    fit_inputs = options.output + "fit_inputs_kfold{k}_eff{eff}.h5".format(k = k, eff = eff)
+
+                    if(not os.path.exists(fit_inputs)):
+                        fit_inputs = options.output + "fit_inputs_kfold{k}.h5".format(k = k)
+                    if(os.path.exists(fit_inputs)): 
+                        do_merge = True
+                        merge_cmd += fit_inputs + " " 
+
+                if(do_merge):
+                    print("Merge cmd: " + merge_cmd)
+                    subprocess.call(merge_cmd ,shell = True)
+                else:
+                    print("Unable to find files for merge")
+
+            #avg efficiencies
+            avg_inputs = []
             for k,k_options in enumerate(kfold_options):
                 fit_inputs = options.output + "fit_inputs_kfold{k}_eff{eff}.h5".format(k = k, eff = eff)
 
                 if(not os.path.exists(fit_inputs)):
                     fit_inputs = options.output + "fit_inputs_kfold{k}.h5".format(k = k)
-                merge_cmd += fit_inputs + " " 
 
-        print("Merge cmd: " + merge_cmd)
-        subprocess.call(merge_cmd ,shell = True)
+                if(os.path.exists(fit_inputs)): avg_inputs.append(fit_inputs)
+
+            avg_eff(fit_inputs_merge, avg_inputs)
 
 
     if(do_fit):
-
 
 
 
@@ -288,12 +349,21 @@ def full_run(options):
         counting_str = ""
         if(options.counting_fit):
             counting_str = "_counting"
+
+        dijet_cmd = "python dijetfit%s.py -i %s -p %s " % (counting_str, base_path + fit_inputs, base_path + options.output)
+        if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
+            dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
+        if( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
+            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/graviton_interpolation_M%.1f.root" % options.mjj_sig
+            dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model " % (options.mjj_sig, sig_shape_file)
+
+
+        dijet_cmd += " >& %s/fit_log.txt " % (base_path + options.output)
         for eff in options.effs:
             fit_inputs = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
             fit_cmd = ("cd ../fitting; source deactivate;" 
-                      "eval `scramv1 runtime -sh`; python dijetfit%s.py -i %s -p %s; cd -;"
-                      "source deactivate; source activate mlenv0" % 
-                      ( counting_str, base_path + fit_inputs, base_path + options.output))
+                      "eval `scramv1 runtime -sh`; %s ; cd -;"
+                      "source deactivate; source activate mlenv0" % dijet_cmd)
             print(fit_cmd)
             subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
 
@@ -325,8 +395,8 @@ def full_run(options):
                 roc_label = "_max"
                 qcd_only = Y > -0.1
                 #scores = np.minimum(j1_qs,j2_qs)
-                scores = np.maximum(j1_qs,j2_qs)
-                #scores = j1_qs*j2_qs
+                #scores = np.maximum(j1_qs,j2_qs)
+                scores = j1_qs*j2_qs
                 bkg_eff, sig_eff, thresholds = roc_curve(Y[qcd_only], scores[qcd_only], drop_intermediate = True)
                 print(sig_eff.shape)
 
@@ -353,6 +423,7 @@ def full_run(options):
 
 if(__name__ == "__main__"):
     parser = input_options()
+    parser.add_argument("--sig_norm_unc", default = -1.0, type = float, help = "parameter for fit (uncertainty on signal efficiency)")
     parser.add_argument("--effs", nargs="+", default = [], type = float)
     parser.add_argument("--kfolds", default = 5, type = int)
     parser.add_argument("--lfolds", default = 4, type = int)

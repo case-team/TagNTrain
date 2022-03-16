@@ -66,7 +66,15 @@ def create_model_ensemble(options):
         c_opts = condor_options().parse_args([])
         c_opts.nJobs = num_ensemble_models
         c_opts.outdir = condor_dir
-        c_opts.script = "../condor/scripts/train_from_pkl.sh"
+        base_script = "../condor/scripts/train_from_pkl.sh"
+        train_script = condor_dir + "train_script.sh"
+        os.system("cp %s %s" % (base_script, train_script))
+        if(len(options.sig_file) > 0):
+            sig_fn = options.sig_file.split("/")[-1]
+            os.system("sed -i 's/SIGFILE/%s/g' %s" % ("--sig_file " + sig_fn, train_script))
+        else:
+            os.system("sed -i 's/SIGFILE//g' %s" % (train_script))
+        c_opts.script = train_script
         c_opts.name = options.label
         c_opts.sub = True
         c_opts.input = opts_list

@@ -26,17 +26,9 @@ os.system("mkdir %s" %options.output)
 
 
 
-
-window_size = (options.mjj_high - options.mjj_low)/2.
-window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
-
-#keep window size proportional to mjj bin center
-window_low_size = window_frac*options.mjj_low / (1 + window_frac)
-window_high_size = window_frac*options.mjj_high / (1 - window_frac)
-options.keep_mlow = options.mjj_low - window_low_size
-options.keep_mhigh = options.mjj_high + window_high_size
-
+compute_mjj_window(options)
 print("Keep low %.0f keep high %.0f \n" % ( options.keep_mlow, options.keep_mhigh))
+print("mjj low %.0f mjj high %.0f \n" % ( options.mjj_low, options.mjj_high))
 
 
 options.keys = ['mjj', 'j1_features', 'j2_features', 'jet_kinematics']
@@ -154,6 +146,7 @@ if(data.swapped_js):
     j2_pts[swaps] = j1_pts_temp[swaps]
     del j1_pts_temp
 
+
 #j2_pt_cut = (j2_pts > 400.) & (j2_pts < 425.)
 #j2_pt_cut = (j2_pts > -10.)
 
@@ -173,8 +166,16 @@ if(not options.do_ttbar):
 
 
 
+
 true_bkg = (Y < 0.1).reshape(-1)
 true_sig = (Y > 0.9).reshape(-1)
+
+
+#j1_sig_ms = data['j1_features'][:,0] [true_sig]
+#j2_sig_ms = data['j2_features'][:,0] [true_sig]
+#print(j1_sig_ms[:10])
+#print(j2_sig_ms[:10])
+#print(np.mean(j1_sig_ms > j2_sig_ms))
 
 if(options.draw_sig):
     print("Drawing based on %.0f signal events" % np.sum(sig_region & true_sig))

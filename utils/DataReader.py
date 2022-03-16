@@ -6,30 +6,8 @@ import copy
 import os
 import sys
 from .PlotUtils import *
+from .Consts import *
 from sklearn.preprocessing import StandardScaler
-
-#From the h5 maker, a map between different systematics and their index
-sys_weights_map = {
-        'nom_weight' : 0,
-        'pdf_up' : 1,
-        'pdf_down': 2,
-        'prefire_up': 3,
-        'prefire_down' : 4,
-        'pileup_up' : 5 ,
-        'pileup_down' : 6,
-        'btag_up' : 7,
-        'btag_down' : 8,
-        'PS_ISR_up' : 9,
-        'PS_ISR_down' : 10,
-        'PS_FSR_up' : 11,
-        'PS_FSR_down' : 12,
-        'F_up' : 13,
-        'F_down' : 14,
-        'R_up' : 15,
-        'R_down' : 16,
-        'RF_up' : 17,
-        'RF_down' : 18
-        }
 
 
 
@@ -44,6 +22,34 @@ def append_h5(f, name, data):
     prev_size = f[name].shape[0]
     f[name].resize(( prev_size + data.shape[0]), axis=0)
     f[name][prev_size:] = data
+
+
+def mjj_from_4vecs(j1, j2):
+    #assume j1 and j2 in (pt,eta,phi,m) format
+    px1 = j1[:,0] * np.cos(j1[:,2])  
+    py1 = j1[:,0] * np.sin(j1[:,2])  
+    pz1 = j1[:,0] * np.sinh(j1[:,1]) 
+    px2 = j2[:,0] * np.cos(j2[:,2])  
+    py2 = j2[:,0] * np.sin(j2[:,2])  
+    pz2 = j2[:,0] * np.sinh(j2[:,1]) 
+    E1 = np.sqrt(px1**2 + py1**2 + pz1**2 + j1[:,3]**2)
+    E2 = np.sqrt(px2**2 + py2**2 + pz2**2 + j2[:,3]**2)
+    mjj = np.sqrt((E1 + E2)**2 - (px1 + px2)**2 - (py1 + py2)**2 - (pz1 + pz2)**2)
+    return mjj
+
+def get_avg_sys_reweight(f, sys, deta, deta_min):
+    if('btag' in sys): #shape only, don't change normalization
+        return 1.0
+    deta_min = max(0., deta_min)
+    deta = min(10., deta)
+    deta_var = f['jet_kinematics'][:,1]
+    deta_mask = (deta_var < deta) & (deta_var > deta_min)
+    nom_weight = f['sys_weights'][:,0][deta_mask]
+
+    weight_idx = sys_weights_map[sys]
+    sig_weights = nom_weight * f['sys_weights'][:,weight_idx][deta_mask]
+
+    return np.mean(sig_weights) / np.mean(nom_weight)
 
 
 class MyGenerator(tf.keras.utils.Sequence):
@@ -168,13 +174,15 @@ class DataReader:
         self.sig_file = kwargs.get('sig_file', '')
         self.sig_weights = kwargs.get('sig_weights', False)
         self.sig_frac = kwargs.get('sig_frac', -1.)
-        self.sig_per_batch = kwargs.get('sig_per_batch', -1)
+        self.sig_per_batch = kwargs.get('sig_per_batch', -1.0)
         self.spb_before_selection = kwargs.get('spb_before_selection', False)
 
         self.sig_sys = kwargs.get('sig_sys', '')
+        self.sig_only = kwargs.get('sig_only', False)
+
         if (len(self.sig_sys) > 0):
-            if(self.sig_sys not in sys_weights_map.keys()):
-                print("Un recognized systematic %s! ")
+            if(self.sig_sys not in sys_weights_map.keys() and self.sig_sys not in JME_vars):
+                print("Un recognized systematic %s! " % self.sig_sys)
                 sys.exit(1)
 
         self.BB_seed = kwargs.get('BB_seed', 123456)
@@ -199,20 +207,26 @@ class DataReader:
 
         print("Creating dataset. Mass range %.0f - %.0f. Delta Eta %.1f -  %.1f" % (self.keep_mlow, self.keep_mhigh, self.deta_min, self.deta))
 
-        self.sep_signal = False
+        self.sys_norm_reweight = 1.0
         if(len(self.sig_file ) > 0 ):
             print("Loading signal %s " % self.sig_file)
-            self.sep_signal = True
             self.sig_file_h5 = h5py.File(self.sig_file, "r")
+
+            if(len(self.sig_sys) > 0 and self.sig_sys in sys_weights_map.keys()):
+                #change normalization of signal
+                self.sys_norm_reweight = get_avg_sys_reweight(self.sig_file_h5, self.sig_sys, self.deta, self.deta_min)
+                print("Sig norm reweight is %.4f" % self.sys_norm_reweight)
+
+        self.sep_signal = len(self.sig_file) > 0 and not self.sig_only
 
 
 
 
         keys = kwargs.get('keys', None)
         if(keys is None):
-            self.keys = ['j1_images', 'j2_images', 'mjj']
+            self.keys = {'j1_images', 'j2_images', 'mjj'}
         else:
-            self.keys = copy.deepcopy(kwargs.get('keys'))
+            self.keys = set(copy.deepcopy(kwargs.get('keys')))
 
         print(self.keys)
 
@@ -306,22 +320,31 @@ class DataReader:
         self.nTrain = 0
         self.nVal = 0
 
+        self.num_total_batches = 40
+        self.sig_marker = 0
+        self.sig_chunk_size  = 1
+        self.batchIdx = -1
 
-        if(self.sep_signal):
+        if(len(self.sig_file) > 0):
             self.nsig_in_file = self.sig_file_h5['event_info'].shape[0]
-            num_total_batches = 40
 
             #self.sig_chunk_size = int(self.nsig_in_file / (2. * len(self.batch_list)))
-            self.sig_chunk_size = int(self.nsig_in_file / num_total_batches)
+            self.sig_chunk_size = int(self.nsig_in_file / self.num_total_batches)
             
             if(self.sig_chunk_size <= self.sig_per_batch):
                 print("WARNING: Not enough signal to split across 40 batches, splitting only across this sample, could cause repeats in later runs!")
                 self.sig_chunk_size = int(self.nsig_in_file / (len(self.batch_list)))
 
-            self.sig_marker = 0
 
-        if(self.multi_batch):
+        if(self.sig_only):
+            self.data_start = np.amin(self.batch_list) * self.sig_chunk_size
+            self.data_stop = self.data_start + self.sig_chunk_size * len(self.batch_list)
+            self.read_batch(self.sig_file)
+
+        elif(self.multi_batch):
             for i in self.batch_list:
+                self.batchIdx = i
+                self.sig_marker = self.sig_chunk_size * i
                 f_name = self.fin + "BB_images_batch%i.h5" % i 
                 if(not os.path.exists(f_name)):
                     f_name = self.fin + "BB_batch%i.h5" % i
@@ -329,11 +352,11 @@ class DataReader:
         else:
             self.read_batch(self.fin)
 
-        self.keys.append('label')
+        self.keys.add('label')
         print("Kept %i events after selection" % self.nEvents)
         self.ready = True
 
-        if('swapped_js' not in self.keys and self.swapped_js): self.keys.append('swapped_js')
+        if('swapped_js' not in self.keys and self.swapped_js): self.keys.add('swapped_js')
 
 
     def get_key(self,f, cstart, cstop, mask, key):
@@ -349,6 +372,7 @@ class DataReader:
             j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
             j2_feats = self.process_feats(f['jet2_extraInfo'][cstart:cstop][mask])
             data = np.append(j2_m, j2_feats, axis = 1)
+
 
         elif(key == 'jj_features'):
             j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
@@ -366,6 +390,10 @@ class DataReader:
             j2_img = np.expand_dims(f['j2_images'][cstart:cstop][mask], axis = -1)
             data = np.append(j2_img, j1_img, axis = 3)
 
+        #fix naming issue (j1 vs jet1)
+        elif(key == 'j1_JME_vars'): data = f['jet1_JME_vars'][cstart:cstop][mask]
+        elif(key == 'j2_JME_vars'): data = f['jet2_JME_vars'][cstart:cstop][mask]
+
         else:
             data = f[key][cstart:cstop][mask]
 
@@ -379,7 +407,7 @@ class DataReader:
 
         f = h5py.File(f_name, "r")
         if(self.data_stop == -1): stop = f['event_info'].shape[0]
-        else: stop = self.stop
+        else: stop = self.data_stop
         self.nEvents_file = stop - self.data_start
 
         nChunks = 1
@@ -488,11 +516,9 @@ class DataReader:
 
             #load separate signal data
             if(self.sep_signal):
-                self.sig_per_batch = int(self.sig_per_batch)
                 sig_mask_temp = np.ones(self.sig_chunk_size, dtype = bool)
                 s_start = self.sig_marker
                 s_stop = self.sig_marker + self.sig_chunk_size
-                self.sig_marker += self.sig_chunk_size
 
                 if(s_stop > self.nsig_in_file):
                     print("Not enough signal events in file, exiting")
@@ -502,9 +528,33 @@ class DataReader:
                     sig_mask_temp = sig_mask_temp & (is_lep < 0.1)
                     print("Hadronic only mask has mean %.3f " % np.mean(is_lep < 0.1))
 
+                #local copy to allow JME modifications
+                sig_jet_kinematics = np.copy(self.sig_file_h5["jet_kinematics"][s_start:s_stop])
+                if(len(self.sig_sys) > 0 and self.sig_sys in JME_vars):
+                    #Apply JME variation
+                    m_idx = JME_vars_map["m_" + self.sig_sys]
+                    j1_m_corr = self.sig_file_h5["jet1_JME_vars"][s_start:s_stop, m_idx]
+                    j2_m_corr = self.sig_file_h5["jet2_JME_vars"][s_start:s_stop, m_idx]
+
+
+                    sig_jet_kinematics [:, 5] = j1_m_corr
+                    sig_jet_kinematics [:, 9] = j2_m_corr
+
+                    if('JE' in self.sig_sys): #also correct pt (JES and JER)
+                        pt_idx = JME_vars_map["pt_" + self.sig_sys]
+                        j1_pt_corr = self.sig_file_h5["jet1_JME_vars"][s_start:s_stop, pt_idx]
+                        j2_pt_corr = self.sig_file_h5["jet2_JME_vars"][s_start:s_stop, pt_idx]
+
+                        sig_jet_kinematics [:, 2] = j1_pt_corr
+                        sig_jet_kinematics [:, 6] = j2_pt_corr
+
+
+                    new_mjj = mjj_from_4vecs(sig_jet_kinematics[:, 2:6], sig_jet_kinematics[:, 6:10])
+                    sig_jet_kinematics [:,0] = new_mjj
+
                 sig_mjj_eff = sig_deta_eff = 1.
                 if(self.keep_mlow > 0. and self.keep_mhigh >0.):
-                    mjj = self.sig_file_h5["jet_kinematics"][s_start:s_stop,0]
+                    mjj = sig_jet_kinematics[:,0]
                     mjj_mask = (mjj > self.keep_mlow) & (mjj < self.keep_mhigh)
                     sig_mask_temp = sig_mask_temp & mjj_mask
                     sig_mjj_eff = np.mean(mjj_mask)
@@ -512,7 +562,7 @@ class DataReader:
                         sig_mjj_eff = np.mean(mjj_mask[is_lep < 0.1]) #compute mjj eff for hadronic only
 
                 if(self.deta > 0. or self.deta_min > 0.):
-                    deta = self.sig_file_h5['jet_kinematics'][s_start:s_stop,1]
+                    deta = sig_jet_kinematics[:,1]
                     deta_mask = deta > -99999
                     if(self.deta > 0.): deta_mask = deta_mask & (deta < self.deta)
                     if(self.deta_min > 0.): deta_mask = deta_mask & (deta > self.deta_min)
@@ -522,32 +572,50 @@ class DataReader:
                         sig_deta_eff = np.mean(deta_mask[is_lep < 0.1]) #compute deta eff for hadronic only
 
                 idx_list = np.arange(0, self.sig_chunk_size)
-                num_sig_inj = float(self.sig_per_batch)
+                num_sig_inj = self.sig_per_batch
 
                 if(self.sig_weights): #do weighted random sampling of signal events
                     sig_weights = self.sig_file_h5['sys_weights'][s_start:s_stop, 0][sig_mask_temp]
 
-                    if(len(self.sig_sys) > 0):
+                    if(len(self.sig_sys) > 0 and self.sig_sys in sys_weights_map.keys()):
                         weight_idx = sys_weights_map[self.sig_sys]
                         sig_weights *= self.sig_file_h5['sys_weights'][s_start:s_stop,weight_idx][sig_mask_temp]
+                        num_sig_inj *= self.sys_norm_reweight
                             
 
-                    avg_sig_weight = np.mean(sig_weights)
-                    sum_sig_weight = np.sum(sig_weights)
-                    print("Average sig weight is %.2f" % avg_sig_weight)
-                    #num_sig_inj *= avg_sig_weight
+                    #change in weight by eta cut accounted for by eta cut efficiency already
+                    avg_sig_reweight = np.mean(sig_weights) 
 
                     #used for the random sampling
+                    sum_sig_weight = np.sum(sig_weights)
                     probs = sig_weights / sum_sig_weight
-                    print(probs[:10])
-                    print(probs[probs <= 0.])
 
 
                 if(self.spb_before_selection):
                     num_sig_inj *= sig_mjj_eff * sig_deta_eff
                     print("Sig mjj eff %.4f deta eff %.4f. Spb now %i" % (sig_mjj_eff, sig_deta_eff, num_sig_inj))
 
-                num_sig_inj = int(round(num_sig_inj))
+                #num_sig_inj = int(round(num_sig_inj))
+
+                if( abs(num_sig_inj - np.round(num_sig_inj)) > 0.01):
+                    fraction = num_sig_inj - np.floor(num_sig_inj)
+                    print(fraction)
+                    num_batches_extra_sig = int(round(fraction * self.num_total_batches))
+                    print(num_batches_extra_sig)
+                    spacing = np.floor(self.num_total_batches / num_batches_extra_sig)
+                    batches_extra_sig = [(i * spacing)%self.num_total_batches for i in range(num_batches_extra_sig)]
+                    print(batches_extra_sig)
+                    if(self.batchIdx in batches_extra_sig):
+                        num_sig_inj = int(np.floor(num_sig_inj)) + 1
+                    else:
+                        num_sig_inj = int(np.floor(num_sig_inj))
+
+                else:
+                    num_sig_inj = int(round(num_sig_inj))
+
+                print("Injecting %i signal events" % num_sig_inj)
+
+                    
 
                 if(idx_list[sig_mask_temp].shape[0] < num_sig_inj):
                     print("Not enough signal in chunk after selection (%i, want %i)! Exiting" % (idx_list[sig_mask_temp].shape[0], num_sig_inj))
@@ -556,14 +624,14 @@ class DataReader:
 
                 if(self.sig_weights): sig_idxs = self.rng.choice(idx_list[sig_mask_temp], num_sig_inj, replace = False, p = probs)
                 else: sig_idxs = idx_list[sig_mask_temp][:num_sig_inj]
-                print(num_sig_inj, self.sig_chunk_size, sig_idxs)
                 sig_final_mask = np.zeros(self.sig_chunk_size, dtype = bool)
                 sig_final_mask[sig_idxs] = True
 
                 if(self.ptsort):
-                    j1_pt_sig = self.sig_file_h5['jet_kinematics'][s_start:s_stop][sig_final_mask, 2]
-                    j2_pt_sig = self.sig_file_h5['jet_kinematics'][s_start:s_stop][sig_final_mask, 6]
+                    j1_pt_sig = sig_jet_kinematics[sig_final_mask, 2]
+                    j2_pt_sig = sig_jet_kinematics[sig_final_mask, 6]
                     swapping_idxs = np.append(swapping_idxs, j2_pt_sig > j1_pt_sig, axis=0)
+
                 elif(self.randsort):
                     swapping_idxs = np.append(swapping_idxs, self.rng.choice(a=[True,False], size = num_sig_inj), axis=0)
 
@@ -597,7 +665,8 @@ class DataReader:
                 data = self.get_key(f,cstart, cstop, mask, key)
 
                 if(self.sep_signal): 
-                    sig_data = self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, key)
+                    if(key == 'jet_kinematics'): sig_data = sig_jet_kinematics[sig_final_mask]
+                    else: sig_data = self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, key)
                     data = np.append(data, sig_data, axis= 0)
                     data = data[shuffle_order]
 
@@ -678,7 +747,7 @@ class DataReader:
         bkg_high_weight = n_bkg_low/n_bkg_high
         sig_weight = 2.*n_bkg_low / n_sig
 
-        self.keys.append('weight' + extra_str)
+        self.keys.add('weight' + extra_str)
         weights = np.ones_like(j_m, dtype=np.float32)
         weights[bkg_high] = bkg_high_weight
         weights[SR] = sig_weight
@@ -690,7 +759,7 @@ class DataReader:
         Y_ttbar = np.zeros_like(j_m)
         Y_ttbar[SR] = 1
 
-        self.keys.append('Y_ttbar' + extra_str)
+        self.keys.add('Y_ttbar' + extra_str)
         self.f_storage.create_dataset('Y_ttbar' + extra_str, data = Y_ttbar)
 
         filter_frac = self.apply_mask(tag_selection)
@@ -698,13 +767,13 @@ class DataReader:
 
 
     def make_Y_mjj(self, mjj_low, mjj_high):
-        self.keys.append('Y_mjj')
+        self.keys.add('Y_mjj')
         mjj = self.f_storage['mjj'][()]
         mjj_window = ((mjj > mjj_low) & (mjj < mjj_high))
         self.f_storage.create_dataset('Y_mjj', data = mjj_window)
 
 
-        self.keys.append('weight')
+        self.keys.add('weight')
         n_bkg_high = np.sum(mjj > mjj_high)
         n_bkg_low = np.sum(mjj < mjj_low)
         n_sig = np.sum(mjj_window)
@@ -768,7 +837,7 @@ class DataReader:
         Y_TNT[bkg_cut] = 0
         Y_TNT[sig_cut] = 1
         self.f_storage.create_dataset('Y_TNT' + extra_str, data = Y_TNT)
-        self.keys.append("Y_TNT" + extra_str)
+        self.keys.add("Y_TNT" + extra_str)
 
         n_bkg_high = np.sum(mjj[bkg_cut] > mjj_high)
         n_bkg_low = np.sum(mjj[bkg_cut] < mjj_low)
@@ -793,7 +862,7 @@ class DataReader:
         print(bkg_high_weight, bkg_mid_weight, sig_weight)
 
 
-        self.keys.append('weight' + extra_str)
+        self.keys.add('weight' + extra_str)
         weights = np.ones_like(mjj, dtype=np.float32)
         weights[sig_cut] = sig_weight
         weights[bkg_cut & (mjj > mjj_high)] = bkg_high_weight
@@ -808,7 +877,7 @@ class DataReader:
 
 
 
-    def make_ptrw(self, Y_key, use_weights = True, normalize = True, save_plots = False, plot_dir = "", extra_str = ""):
+    def make_ptrw(self, Y_key, use_weights = True, normalize = True, save_plots = False, plot_dir = "", extra_str = "", mjj_mid = -1.):
        
 
         sig_cut = (self.f_storage[Y_key][()] > 0.9)
@@ -829,9 +898,15 @@ class DataReader:
         j1_pts = self.f_storage['jet_kinematics'][:,2]
         j2_pts = self.f_storage['jet_kinematics'][:,6]
 
-        if(self.clip_pts):
-            j1_pts = np.clip(j1_pts, 0.1*self.mjj_sig, 0.9 * self.mjj_sig)
-            j2_pts = np.clip(j2_pts, 0.1*self.mjj_sig, 0.9 * self.mjj_sig)
+        if(mjj_mid < 0):
+            mjj_mid = (self.keep_mlow + self.keep_mhigh)/ 2.
+
+        perc = 2.
+
+        
+        if(self.clip_pts): #restrict to bulk of distribution
+            j1_pts = np.clip(j1_pts, np.percentile(j1_pts, perc), np.percentile(j1_pts, 100. - perc) )
+            j2_pts = np.clip(j2_pts, np.percentile(j2_pts, perc), np.percentile(j2_pts, 100. - perc) )
 
         if(self.swapped_js):
             #meaning of j1 and j2 swapped for some events
@@ -864,7 +939,7 @@ class DataReader:
             j1_rw_vals *= self.f_storage['weight' + extra_str]
 
         self.f_storage.create_dataset('j1_ptrw'+extra_str, data = j1_rw_vals)
-        self.keys.append("j1_ptrw"+extra_str)
+        self.keys.add("j1_ptrw"+extra_str)
 
         j2_bins, j2_ratio = make_ratio_histogram([j2_sr_pts, j2_br_pts], labels, colors, 'jet2 pt (GeV)', "Jet2 Sig vs. Bkg Pt distribution", n_pt_bins,
                         normalize=normalize, weights = weights, save = save_plots, fname=plot_dir + "j2_ptrw.png")
@@ -880,7 +955,7 @@ class DataReader:
 
 
         self.f_storage.create_dataset('j2_ptrw'+extra_str, data = j2_rw_vals)
-        self.keys.append("j2_ptrw" + extra_str)
+        self.keys.add("j2_ptrw" + extra_str)
 
 
 
@@ -920,8 +995,8 @@ class DataReader:
         return h5_gen
 
     def labeler_scores(self, model, key, chunk_size = 10000):
-        print(list(self.f_storage.keys()))
-        print("key", key)
+        #print(list(self.f_storage.keys()))
+        #print("key", key)
         
         n_objs = self.f_storage[key].shape[0]
         n_chunks = int(np.ceil(n_objs / chunk_size))

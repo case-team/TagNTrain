@@ -2,6 +2,7 @@ from .DataReader import *
 import pickle
 import sys
 import argparse
+import json
 
 
 def input_options():
@@ -32,20 +33,24 @@ def input_options():
     parser.add_argument("--use_one", type = bool, default = True, help="Make a classifier for one jet instead of both")
     parser.add_argument("-j", "--training_j", type =int, default = 1, help="Which jet to make a classifier for (1 or 2)")
     parser.add_argument("--use_images", default = False, action = "store_true", help="Make a classifier using jet images as inputs")
+
     parser.add_argument("--keep_mlow", type=int, default = -1,  help="Low mjj value to keep in dataset")
     parser.add_argument("--keep_mhigh", type=int, default = -1, help="High mjj value to keep in dataset")
     parser.add_argument("--mjj_low", type=int, default = 2250,  help="Low mjj cut value")
     parser.add_argument("--mjj_high", type=int, default = 2750, help="High mjj cut value")
-    parser.add_argument("--mjj_sig", type=int, default = 2500, help="Signal mass (used for signal filtering)")
+    parser.add_argument("--mjj_sig", type=int, default = 2500, help="Signal mass (used for signal filtering only)")
+    parser.add_argument("--mbin", type=int, default = -1, help="Mass bin based on mjj binning scheme")
+
     parser.add_argument("--deta", type=float, default = -1, help="Delta eta cut")
+    parser.add_argument("--deta_min", default = -1, type = float, help = "Minimum dEta")
+
     parser.add_argument("--no_ptrw", default = False, action="store_true",  help="Don't reweight events to have matching pt distributions in sig-rich and bkg-rich samples")
     parser.add_argument("--no_sample_weights", default = False, action="store_true", help="Don't do weighting of different signal / bkg regions")
-    parser.add_argument("--deta_min", default = -1, type = float, help = "Minimum dEta")
 
     parser.add_argument("--large", default = False, action = "store_true", help="Use larger NN archetecture")
     parser.add_argument("--sig_idx", type = int, default = 1,  help="What index of signal to use")
     parser.add_argument("--sig_file", type = str, default = "",  help="Load signal from separate file")
-    parser.add_argument("--sig_weights", default = False, action = "store_true",  help="Use weights (SF's) for signal file")
+    parser.add_argument("--sig_weights", default = True, action = "store_true",  help="Use weighted random sampling ( based on SF's) for signal file (only matters for separate sig_file used)")
     parser.add_argument("--sig_sys", type= str, default = "",  help="Use weights (SF's) for signal file")
     parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
     parser.add_argument("--sig_per_batch", type = float, default = -1.,  help="Reduce signal to this number of events in each batch (< 0 to not use )")
@@ -70,6 +75,7 @@ def input_options():
     parser.add_argument("--no_nsubj_ratios", dest = 'nsubj_ratios', action = "store_false", help="Clip input feature values to avoid negatives")
     parser.set_defaults(nsubj_ratios=True)
 
+    parser.add_argument("--eff_only", default = False,  action = 'store_true', help = 'When merging/selecting only saving efficiencies, not fit inputs')
 
     parser.add_argument("--local_storage", default =False, action="store_true",  help="Store temp files locally not on gpuscratch")
     parser.add_argument("--sig_cut", type=int, default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")
@@ -137,6 +143,56 @@ def load_dataset_from_options(options):
 
     return data, val_data
 
+def load_signal_file(options):
+    if(not hasattr(options, 'data_batch_list')):
+        data_batch_list = None
+        if(options.batch_start >=0 and options.batch_stop >= 0): 
+            data_batch_list = list(range(options.batch_start, options.batch_stop + 1))
+
+    else:
+        data_batch_list = options.data_batch_list
+    s_opts = copy.deepcopy(options)
+    s_opts.deta = s_opts.deta_min = s_opts.keep_mlow = s_opts.keep_mhigh = -1.
+    s_opts.sig_per_batch = s_opts.sig_frac = -1
+    s_opts.sig_only = True
+    s_opts.keys += ["jet_kinematics", "sys_weights", "j1_JME_vars", "j2_JME_vars"]
+    #s_opts.keys += ["jet_kinematics" ]
+
+    s_opts_dict = vars(s_opts)
+    s_opts_dict['batch_list'] = data_batch_list
+    s_data = DataReader(**s_opts_dict)
+    s_data.read()
+    return s_data
+    
+
+
+def compute_mjj_window(options):
+
+    if(options.mbin > 0): # use predefined binning
+        if(options.mbin > 10):
+            mbins = mass_bins2
+            options.mbin -= 10
+        else:
+            mbins = mass_bins1
+        options.mjj_low = mbins[options.mbin]
+        options.high_low = mbins[options.mbin+1]
+        options.keep_mlow = mbins[options.mbin-1]
+        options.keep_mhigh = mbins[options.mbin+2]
+        print(options.mbin)
+        print(mbins)
+        print(options.keep_mlow, options.keep_mhigh)
+
+
+    else: #compute 
+
+        window_size = (options.mjj_high - options.mjj_low)/2.
+        window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
+
+        window_low_size = window_frac*options.mjj_low / (1 + window_frac)
+        window_high_size = window_frac*options.mjj_high / (1 - window_frac)
+        options.keep_mlow = options.mjj_low - window_low_size
+        options.keep_mhigh = options.mjj_high + window_high_size
+
 class OptStruct:
     def __init__(self, **entries):
         self.__dict__.update(entries)
@@ -149,11 +205,24 @@ def get_options_from_pkl(fname):
 
     return options
 
+
+def get_options_from_json(fname):
+
+    with open(fname, "rb") as f:
+        options_dict = json.load(f, encoding = 'latin-1')
+    options = OptStruct(**options_dict)
+
+    return options
+
 def write_options_to_pkl(options, fname, write_mode = "wb"):
     with open(fname, write_mode) as f:
         pickle.dump(options, f)
     return
 
+def write_options_to_json(options, fname, write_mode = "w"):
+    with open(fname, write_mode) as f:
+        json.dump(options, f)
+    return
 
 
 
