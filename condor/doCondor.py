@@ -30,6 +30,7 @@ def condor_options():
     parser.add_argument("-v", "--verbose", dest="verbose", default=False, action="store_true", 
             help="Spit out more info")
     parser.add_argument("-i", "--input", default=[], help="Additional list of files to be used as input (comma separated)")
+    parser.add_argument("--job_list", default=[], help="Idxs to actually sub")
     # Make condor submission scripts arguments
     parser.add_argument("--njobs", dest="nJobs", type=int, default=1, help="Split into n jobs, will automatically produce submission scripts")
     parser.add_argument("-s", "--script", dest="script", default="scripts/my_script.sh",
@@ -55,6 +56,7 @@ def condor_options():
     parser.add_argument("--root_files", dest='root_files', default = False, action="store_true",  help="Shortcut to create tarball for root files of AFB analysis")
     parser.add_argument("--no_rename", default = False, action="store_true",  help="Don't rename files for storing on EOS")
     parser.add_argument("--mem", default = 0, type=int,  help="Request extra memory")
+    parser.add_argument("--overwrite", default = False, action='store_true',  help="Overwrite output dir instead of making new one (+x to name)")
     return parser
 
 
@@ -211,8 +213,14 @@ def doCondor(options):
     elif options.nJobs > 0:
     # -- MAIN
         if(options.name == ""): sys.exit("ERROR: MUST PROVIDE JOB NAME \n")
-        if(os.path.exists(options.outdir + options.name)):
-            os.system('rm -r %s' % (options.outdir + options.name))
+        if(options.overwrite):
+            if(os.path.exists(options.outdir + options.name)):
+                os.system("rm -r " + options.outdir + options.name)
+        while(os.path.exists(options.outdir + options.name) and len(os.listdir(options.outdir + options.name)) != 0):
+            print("Directory %s exists, adding an x" % options.outdir + options.name)
+            options.name += "x"
+            #os.system('rm -r %s' % (options.outdir + options.name))
+        print("Dir is %s" %( options.outdir + options.name))
         eos_dir_name = EOS_base + 'Condor_outputs/' + options.name
         #os.system("eosrm -r %s" % eos_dir_name)
         os.system('mkdir -p %s' % (options.outdir + options.name))
@@ -223,8 +231,9 @@ def doCondor(options):
         os.system('chmod +x %s/my_script.sh' % (options.outdir + options.name))
 
         for iJob in range(options.nJobs):
-            eos_file_name = EOS_base + 'Condor_outputs/' + options.name + '/'
-            write_job(options.outdir + options.name, options.name, options.nJobs, iJob, eos_file_name)
+            if(len(options.job_list) == 0 or iJob in options.job_list):
+                eos_file_name = EOS_base + 'Condor_outputs/' + options.name + '/'
+                write_job(options.outdir + options.name, options.name, options.nJobs, iJob, eos_file_name)
 
     # submit jobs by looping over job scripts in output dir
     if options.sub:

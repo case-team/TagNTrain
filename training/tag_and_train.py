@@ -75,7 +75,7 @@ def tag_and_train(options):
         options.keys = ['mjj', 'j1_features', 'j2_features']
         if(not options.no_ptrw): options.keys.append('jet_kinematics')
         x_key = j_label +  'features'
-        if('auto' in options.labeler_name):
+        if('auto' in options.labeler_name or 'AE' in options.labeler_name):
             options.keys.append(opp_j_label + "images")
             l_key = opp_j_label + 'images'
             if(options.randsort):

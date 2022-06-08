@@ -6,7 +6,9 @@ from optparse import OptionGroup
 
 
 
-def train_auto_encoder(options):
+def train_autoencoder(options):
+    print(options.__dict__)
+
     #which images to train on and which to use for labelling
     if(options.training_j == 1):
         j_label = "j1_"
@@ -52,6 +54,11 @@ def train_auto_encoder(options):
     print("Scaling batch size by %.2f to account for masking" % batch_size_scale)
     options.batch_size = int(options.batch_size * batch_size_scale)
     print(options.batch_size)
+
+    if(do_val):
+        val_mjj = val_data['mjj']
+        val_mjj_cut = (val_mjj < options.mjj_low) | (val_mjj > options.mjj_high)
+        val_data.apply_mask(val_mjj_cut)
 
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
@@ -138,4 +145,4 @@ def train_auto_encoder(options):
 if(__name__ == "__main__"):
     parser = input_options()
     options = parser.parse_args()
-    train_auto_encoder(options)
+    train_autoencoder(options)

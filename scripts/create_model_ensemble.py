@@ -57,8 +57,8 @@ def create_model_ensemble(options):
             options_copy.fin = "../data/BB/"
             options_dict = options_copy.__dict__
 
-            write_options_to_pkl(options_dict, "train_opts_%i.pkl" % i )
-            opts_list.append("train_opts_%i.pkl" % i)
+            write_options_to_json(options_dict, "train_opts_%i.json" % i )
+            opts_list.append("train_opts_%i.json" % i)
 
     if(options.condor):
         condor_dir = options.output + "condor_jobs/"
@@ -66,9 +66,15 @@ def create_model_ensemble(options):
         c_opts = condor_options().parse_args([])
         c_opts.nJobs = num_ensemble_models
         c_opts.outdir = condor_dir
-        base_script = "../condor/scripts/train_from_pkl.sh"
+        base_script = "../condor/scripts/train_from_json.sh"
         train_script = condor_dir + "train_script.sh"
+        if(options.fin[-1] == "/"):
+            bb_name = options.fin.split("/")[-2]
+        else:
+            bb_name = options.fin.split("/")[-1]
+        
         os.system("cp %s %s" % (base_script, train_script))
+        os.system("sed -i 's/BB_NAME/%s/g' %s" % (bb_name, train_script))
         if(len(options.sig_file) > 0):
             sig_fn = options.sig_file.split("/")[-1]
             os.system("sed -i 's/SIGFILE/%s/g' %s" % ("--sig_file " + sig_fn, train_script))
@@ -77,6 +83,8 @@ def create_model_ensemble(options):
         c_opts.script = train_script
         c_opts.name = options.label
         c_opts.sub = True
+        c_opts.overwrite = True
+        #c_opts.sub = False
         c_opts.input = opts_list
         doCondor(c_opts)
         for fname in opts_list:
@@ -88,6 +96,7 @@ if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--num_val_batch", type=int, default=5, help="How many batches to use for validation")
     parser.add_argument("--do_TNT",  default=False, action = 'store_true',  help="Use TNT (default cwola)")
+    parser.add_argument("--do_ae",  default=False, action = 'store_true',  help="Train autoencoder (default cwola)")
     parser.add_argument("--do_ttbar",  default=False, action = 'store_true',  help="Do ttbar CR training")
     parser.add_argument("--condor",  default=False, action = 'store_true',  help="Submit all NN trainings to condor")
     options = parser.parse_args()

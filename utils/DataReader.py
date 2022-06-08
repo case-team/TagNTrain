@@ -51,6 +51,19 @@ def get_avg_sys_reweight(f, sys, deta, deta_min):
 
     return np.mean(sig_weights) / np.mean(nom_weight)
 
+def get_sideband_mask(f):
+    deta = f['jet_kinematics'][:,1]
+    mjj = f['jet_kinematics'][:,0]
+    pt1= f['jet_kinematics'][:,2]
+    pt2 = f['jet_kinematics'][:,6]
+    pt3 = f['jet_kinematics'][:,10]
+    deta_mask = (deta > 2.0 ) & (deta < 2.5)
+    jet3_mask = pt3 < 300.
+    #2.0<dEta<2.5 && ( |(pt1-pt2)/(p1+pt2)|>0.1 || 2*pt1*pt2*(coshdEta+1)/mjj^2>1 ||  2*pt1*pt2*(coshdEta+1)/mjj^2<0.95 ) && pt3<300 GeV
+    pt_asym_mask = ((np.abs(pt1 - pt2) / (pt1 + pt2)) > 0.1) | (2. * pt1 * pt2 * np.cosh(deta + 1) / mjj**2 > 1.) | (2. * pt1 * pt2 * np.cosh(deta + 1) / mjj**2 < 0.95) 
+    return deta_mask & jet3_mask & pt_asym_mask
+
+
 
 class MyGenerator(tf.keras.utils.Sequence):
     def __init__(self, f, n, batch_size, key1, key2, key3 = None, mask = None):
@@ -153,10 +166,6 @@ class DataReader:
 
     def __init__(self, iterable = (), **kwargs):
 
-            #fin = None, sig_idx =1, keys = None, sig_frac = -1., data_start = 0, data_stop = -1, batch_start = -1, batch_stop = -1, batch_list = None, 
-            #keep_mlow = -1., keep_mhigh = -1., hadronic_only = False, deta = -1., ptsort =False, randsort = False, local_storage = False, 
-            #mjj_sig = -1, sig_per_batch = -1, BB_seed = 12345):
-
         self.ready = False
         #second  arg is default argument
         self.fin = kwargs.get('fin', None)
@@ -165,9 +174,12 @@ class DataReader:
         self.data_start = kwargs.get('data_start', 0)
         self.data_stop = kwargs.get('data_stop', -1)
         self.hadronic_only = kwargs.get('hadronic_only', False)
+        self.sideband = kwargs.get('sideband', False)
         self.keep_mlow = kwargs.get('keep_mlow', -1.)
         self.keep_mhigh = kwargs.get('keep_mhigh', -1.)
         self.mjj_sig = kwargs.get('mjj_sig', -1.)
+
+        self.max_events = kwargs.get('max_events', -1)
 
 
         self.sig_idx = kwargs.get('sig_idx', 1)
@@ -193,6 +205,7 @@ class DataReader:
         self.randsort = kwargs.get('randsort', False)
         self.batch_list = kwargs.get('batch_list', None)
         self.no_minor_bkgs = kwargs.get('no_minor_bkgs', False)
+        self.replace_ttbar = kwargs.get('replace_ttbar', False)
 
 
         local_storage = kwargs.get('local_storage', False)
@@ -343,6 +356,9 @@ class DataReader:
 
         elif(self.multi_batch):
             for i in self.batch_list:
+                if(self.max_events > 0 and self.nEvents >= self.max_events): 
+                    print("%i events read, above max (%i). Stopping loading" % (self.nEvents, self.max_events))
+                    break
                 self.batchIdx = i
                 self.sig_marker = self.sig_chunk_size * i
                 f_name = self.fin + "BB_images_batch%i.h5" % i 
@@ -429,6 +445,7 @@ class DataReader:
 
             #fill this chunk
             raw_labels = f['truth_label'][cstart: cstop]
+            #QCD 0, single top -1, ttbar -2, V+jets -3
             labels = np.copy(raw_labels)
             if((not self.sep_signal) and self.sig_idx > 0):
                 labels[raw_labels == self.sig_idx] = 1
@@ -445,6 +462,12 @@ class DataReader:
             else:
                 mask = np.squeeze(raw_labels >= -999999)
 
+            num_ttbar = 0
+            if(self.replace_ttbar):
+                num_ttbar = np.sum(raw_labels == -2)
+                mask = mask & np.squeeze(raw_labels != -2)
+                print("Removing %i ttbar events" % num_ttbar)
+
             #Selection masks before reducing signal
             if(self.hadronic_only):
                 is_lep = f['event_info'][cstart:cstop:,4] # stored as a float
@@ -458,7 +481,11 @@ class DataReader:
                 mjj_mask = (mjj > self.keep_mlow) & (mjj < self.keep_mhigh)
                 #print("mjj_mask", np.mean(mjj_mask))
                 mask = mask & mjj_mask
-            if(self.deta > 0. or self.deta_min > 0.):
+            if(self.sideband):
+                sb_mask = get_sideband_mask(f)
+                print("SB mask eff", np.mean(sb_mask))
+                mask = mask & get_sideband_mask(f)
+            elif(self.deta > 0. or self.deta_min > 0.):
                 deta = f['jet_kinematics'][cstart:cstop,1]
                 if(self.deta > 0.): mask = mask & (deta < self.deta)
                 if(self.deta_min > 0.): mask = mask & (deta > self.deta_min)
@@ -573,6 +600,10 @@ class DataReader:
 
                 idx_list = np.arange(0, self.sig_chunk_size)
                 num_sig_inj = self.sig_per_batch
+                if(self.replace_ttbar):
+                    ttbar_norm_change = self.sig_file_h5['top_ptrw_avg'][0]
+                    num_sig_inj = num_ttbar * ttbar_norm_change
+                    self.spb_before_selection = True
 
                 if(self.sig_weights): #do weighted random sampling of signal events
                     sig_weights = self.sig_file_h5['sys_weights'][s_start:s_stop, 0][sig_mask_temp]
@@ -599,12 +630,9 @@ class DataReader:
 
                 if( abs(num_sig_inj - np.round(num_sig_inj)) > 0.01):
                     fraction = num_sig_inj - np.floor(num_sig_inj)
-                    print(fraction)
                     num_batches_extra_sig = int(round(fraction * self.num_total_batches))
-                    print(num_batches_extra_sig)
                     spacing = np.floor(self.num_total_batches / num_batches_extra_sig)
                     batches_extra_sig = [(i * spacing)%self.num_total_batches for i in range(num_batches_extra_sig)]
-                    print(batches_extra_sig)
                     if(self.batchIdx in batches_extra_sig):
                         num_sig_inj = int(np.floor(num_sig_inj)) + 1
                     else:
@@ -639,6 +667,7 @@ class DataReader:
             #combine labels
             if(self.sep_signal): 
                 extra_labels = np.expand_dims(np.ones(num_sig_inj, dtype=np.int8),axis=-1)
+                if(self.replace_ttbar): np.expand_dims(np.array([-2]*num_sig_inj, dtype = np.int8), axis = -1)
                 t_labels = np.append(t_labels, extra_labels, axis=0)
             #print("# sig events: ", np.sum(t_labels == 1))
             self.nEvents += t_labels.shape[0]
@@ -877,7 +906,7 @@ class DataReader:
 
 
 
-    def make_ptrw(self, Y_key, use_weights = True, normalize = True, save_plots = False, plot_dir = "", extra_str = "", mjj_mid = -1.):
+    def make_ptrw(self, Y_key, use_weights = True, normalize = True, save_plots = False, plot_dir = "", extra_str = "", mjj_mid = -1., clip_perc = 1.):
        
 
         sig_cut = (self.f_storage[Y_key][()] > 0.9)
@@ -901,12 +930,10 @@ class DataReader:
         if(mjj_mid < 0):
             mjj_mid = (self.keep_mlow + self.keep_mhigh)/ 2.
 
-        perc = 2.
 
-        
         if(self.clip_pts): #restrict to bulk of distribution
-            j1_pts = np.clip(j1_pts, np.percentile(j1_pts, perc), np.percentile(j1_pts, 100. - perc) )
-            j2_pts = np.clip(j2_pts, np.percentile(j2_pts, perc), np.percentile(j2_pts, 100. - perc) )
+            j1_pts = np.clip(j1_pts, np.percentile(j1_pts, clip_perc), np.percentile(j1_pts, 100. - clip_perc) )
+            j2_pts = np.clip(j2_pts, np.percentile(j2_pts, clip_perc), np.percentile(j2_pts, 100. - clip_perc) )
 
         if(self.swapped_js):
             #meaning of j1 and j2 swapped for some events

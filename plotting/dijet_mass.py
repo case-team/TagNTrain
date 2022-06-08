@@ -117,7 +117,8 @@ S = mjj[sig_events & in_window].shape[0]
 B = mjj[bkg_events & in_window].shape[0]
 minor_B = mjj[minor_bkg_events & in_window].shape[0]
 
-eff_S_in_window = S / mjj[sig_events].shape[0]
+if(S > 0): eff_S_in_window = S / mjj[sig_events].shape[0]
+else: eff_S_in_window = 0.
 
 overall_S = mjj[sig_events].shape[0]
 overall_B = mjj[bkg_events].shape[0]

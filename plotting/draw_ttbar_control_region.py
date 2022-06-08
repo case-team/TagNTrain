@@ -67,9 +67,11 @@ pt_cut = (j1_pt > 400.) & (j2_pt > 400.)
 #https://twiki.cern.ch/twiki/bin/viewauth/CMS/BtagRecommendation
 # use an average
 deepcsv_cut = 0.16
+#deepcsv_cut = -999.
 
 #lower pt side is used to 'tag'
 tag_tau32 = 0.75
+#tag_tau32 = 999.
 tag_selection = (j2_tau32 < tag_tau32) & (j2_deepcsv > deepcsv_cut)
 if(options.deta_min > 0): 
     tag_selection = tag_selection & (data['jet_kinematics'][:,1] > options.deta_min)

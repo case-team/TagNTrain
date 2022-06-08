@@ -23,6 +23,9 @@ def input_options():
     parser.add_argument("--data_start", type = int, default=0, help="What event to start with")
     parser.add_argument("--data_sop", type = int, default=-1, help="What event to stop on")
     parser.add_argument("--num_data", type = int, default=-1, help="How many events to train on")
+    parser.add_argument("--max_events", type = int, default=-1, help="Max number of events ")
+    parser.add_argument("--val_max_events", type = int, default=-1, help="Max number of events for val sample")
+
     parser.add_argument("--batch_size", type=int, default=256, help="Size of mini-batchs used for training")
     parser.add_argument("--batch_start", type=int, default=-1, help="Train over multiple batches of dataset. Starting batch")
     parser.add_argument("--batch_stop", type=int, default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
@@ -43,6 +46,7 @@ def input_options():
 
     parser.add_argument("--deta", type=float, default = -1, help="Delta eta cut")
     parser.add_argument("--deta_min", default = -1, type = float, help = "Minimum dEta")
+    parser.add_argument("--sideband", default = False, action = 'store_true', help = "Add cuts for sideband")
 
     parser.add_argument("--no_ptrw", default = False, action="store_true",  help="Don't reweight events to have matching pt distributions in sig-rich and bkg-rich samples")
     parser.add_argument("--no_sample_weights", default = False, action="store_true", help="Don't do weighting of different signal / bkg regions")
@@ -50,6 +54,7 @@ def input_options():
     parser.add_argument("--large", default = False, action = "store_true", help="Use larger NN archetecture")
     parser.add_argument("--sig_idx", type = int, default = 1,  help="What index of signal to use")
     parser.add_argument("--sig_file", type = str, default = "",  help="Load signal from separate file")
+    parser.add_argument("--replace_ttbar", default = False, action = "store_true", help = "Filter out ttbar events from the dataset (to replace with separate sample")
     parser.add_argument("--sig_weights", default = True, action = "store_true",  help="Use weighted random sampling ( based on SF's) for signal file (only matters for separate sig_file used)")
     parser.add_argument("--sig_sys", type= str, default = "",  help="Use weights (SF's) for signal file")
     parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
@@ -171,17 +176,14 @@ def compute_mjj_window(options):
     if(options.mbin > 0): # use predefined binning
         if(options.mbin > 10):
             mbins = mass_bins2
-            options.mbin -= 10
+            options.mbin_idx = options.mbin - 10
         else:
             mbins = mass_bins1
-        options.mjj_low = mbins[options.mbin]
-        options.high_low = mbins[options.mbin+1]
-        options.keep_mlow = mbins[options.mbin-1]
-        options.keep_mhigh = mbins[options.mbin+2]
-        print(options.mbin)
-        print(mbins)
-        print(options.keep_mlow, options.keep_mhigh)
-
+            options.mbin_idx = options.mbin
+        options.mjj_low = mbins[options.mbin_idx]
+        options.mjj_high = mbins[options.mbin_idx+1]
+        options.keep_mlow = mbins[options.mbin_idx-1]
+        options.keep_mhigh = mbins[options.mbin_idx+2]
 
     else: #compute 
 
@@ -226,3 +228,11 @@ def write_options_to_json(options, fname, write_mode = "w"):
 
 
 
+def get_params(fname):
+    with open(fname, "r") as f:
+        pickle.dump(results, f)
+
+
+def write_params(fname, params):
+    with open(fname, "w") as f:
+        json.dump(params, f )

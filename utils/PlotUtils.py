@@ -404,7 +404,7 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
 
     low = np.amin([np.amin(entries[0]), np.amin(entries[1])])
     high = np.amax([np.amax(entries[0]), np.amax(entries[1])])
-    if(h_range == None):
+    if(h_range is None):
         h_range = (low, high)
 
     ns, bins, patches  = ax0.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, 
@@ -456,7 +456,8 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
 
     ax1.errorbar(bincenters, ratio, yerr = ratio_err, alpha=alpha, fmt='ko')
 
-    plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
+    #plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
+    plt.xlim([low,high])
     ax1.set_ylabel("Ratio")
     ax1.set_xlabel(axis_label)
 

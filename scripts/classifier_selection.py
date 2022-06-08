@@ -35,6 +35,7 @@ def get_features(data, systematic = ""):
 
 def classifier_selection(options):
     print("\n")
+    options.keep_mlow = options.keep_mhigh = -1
     print(options.__dict__)
 
     #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
@@ -293,7 +294,7 @@ def classifier_selection(options):
 if(__name__ == "__main__"):
     if(len(sys.argv) ==2): #use a dict of parameters
         fname = sys.argv[1]
-        options = get_options_from_pkl(fname)
+        options = get_options_from_json(fname)
 
 
     else:

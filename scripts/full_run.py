@@ -91,6 +91,7 @@ def full_run(options):
         if(len(options.effs) >0): rel_opts.effs = options.effs
         if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
         if(options.counting_fit): rel_opts.counting_fit = True
+        if(options.fit_start > 0): rel_opts.fit_start = options.fit_start
         else: rel_opts.counting_fit = False
         rel_opts.condor = options.condor
         rel_opts.keep_LSF = options.keep_LSF #quick fix
@@ -183,6 +184,12 @@ def full_run(options):
                 k_options.label = options.label + "_jrand_kfold%i" % k
                 k_options.output = options.output + "jrand_kfold%i/" % k
                 k_options.training_j = 1
+                if(len(options.ae_dir) > 0):
+                    if(options.mbin < 0):
+                        print("Must supply mbin with ae_dir !")
+                        exit(1)
+                    else:
+                        k_options.labeler_name = options.ae_dir + "jrand_AE_kfold%i_mbin%i.h5" % (k, k_options.mbin)
                 create_model_ensemble(k_options)
 
 
@@ -242,8 +249,8 @@ def full_run(options):
                 selection_options.local_storage = True
                 selection_options.fin = "../data/BB/"
                 selection_options_dict = selection_options.__dict__
-                selection_opts_fname  = options.output + "select_opts_%i.pkl" % k
-                write_options_to_pkl(selection_options_dict,  selection_opts_fname)
+                selection_opts_fname  = options.output + "select_opts_%i.json" % k
+                write_options_to_json(selection_options_dict,  selection_opts_fname)
 
 
                 condor_dir = options.output + "selection_condor_jobs/"
@@ -252,10 +259,16 @@ def full_run(options):
                 c_opts.nJobs = 1
                 c_opts.outdir = condor_dir
 
-                base_script = "../condor/scripts/select_from_pkl.sh"
+                base_script = "../condor/scripts/select_from_json.sh"
                 select_script = condor_dir + "select%i_script.sh" % k 
 
+                if(options.fin[-1] == "/"):
+                    bb_name = options.fin.split("/")[-2]
+                else:
+                    bb_name = options.fin.split("/")[-1]
+
                 os.system("cp %s %s" % (base_script, select_script))
+                os.system("sed -i s/BB_NAME/%s/g %s" % (bb_name, select_script))
                 os.system("sed -i s/BSTART/%i/g %s" % (selection_options.data_batch_list[0], select_script))
                 os.system("sed -i s/BSTOP/%i/g %s" % (selection_options.data_batch_list[-1] + 1, select_script))
                 if(len(options.sig_file) > 0):
@@ -277,6 +290,7 @@ def full_run(options):
                 c_opts.script = select_script
 
                 c_opts.name = options.label + "_select_kfold%i" % k 
+                c_opts.overwrite = True
                 c_opts.sub = True
                 #c_opts.sub = False
 
@@ -303,6 +317,9 @@ def full_run(options):
                 c_opts.outdir = options.output
                 c_opts.name = options.label + "_select_kfold%i" % k 
                 doCondor(c_opts)
+                if(not os.path.exists(options.output + 'fit_inputs_kfold{k}.h5'.format(k=k))):
+                    c_opts.name += 'x'
+                #    doCondor(c_opts)
 
         #merge selections
         for eff in options.effs:
@@ -344,13 +361,15 @@ def full_run(options):
     if(do_fit):
 
 
-
         #Do fit
         counting_str = ""
         if(options.counting_fit):
             counting_str = "_counting"
 
-        dijet_cmd = "python dijetfit%s.py -i %s -p %s " % (counting_str, base_path + fit_inputs, base_path + options.output)
+        fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+        dijet_cmd = "python dijetfit%s.py -i %s -p %s" % (counting_str, base_path + options.output + fit_inputs, base_path + options.output)
+        if('fit_start' in options.__dict__.keys() and options.fit_start > 0):
+            dijet_cmd += " --mjj_min %.0f" % options.fit_start
         if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
             dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
         if( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
@@ -358,7 +377,7 @@ def full_run(options):
             dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model " % (options.mjj_sig, sig_shape_file)
 
 
-        dijet_cmd += " >& %s/fit_log.txt " % (base_path + options.output)
+        dijet_cmd += " >& %s/fit_log%.1f.txt " % (base_path + options.output, options.mjj_sig)
         for eff in options.effs:
             fit_inputs = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
             fit_cmd = ("cd ../fitting; source deactivate;" 
@@ -424,6 +443,7 @@ def full_run(options):
 if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--sig_norm_unc", default = -1.0, type = float, help = "parameter for fit (uncertainty on signal efficiency)")
+    parser.add_argument("--ae_dir", default = "", help = "directory with all the autoencoders (auto pick the right mbin and kfold)")
     parser.add_argument("--effs", nargs="+", default = [], type = float)
     parser.add_argument("--kfolds", default = 5, type = int)
     parser.add_argument("--lfolds", default = 4, type = int)
@@ -435,6 +455,7 @@ if(__name__ == "__main__"):
     parser.set_defaults(condor=False)
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
     parser.add_argument("--counting_fit", default = False,  action = 'store_true', help = 'Do counting version of dijet fit')
+    parser.add_argument("--fit_start", default = -1.,  type = float, help = 'Lowest mjj value for dijet fit')
     parser.add_argument("--redo_roc", default = False,  action = 'store_true', help = 'Remake roc')
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")

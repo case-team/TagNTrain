@@ -110,14 +110,6 @@ def get_signal_params(options):
         sys.exit(1)
 
 
-def get_params(fname):
-    with open(fname, "r") as f:
-        pickle.dump(results, f)
-
-
-def write_params(fname, params):
-    with open(fname, "w") as f:
-        json.dump(params, f )
 
 def make_signif_plot(options, signifs):
     fout = options.output + options.label + "_signif_plot.png"
