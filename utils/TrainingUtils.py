@@ -2,76 +2,24 @@ from __future__ import print_function, division
 from .model_defs import * 
 from .losses import *
 from .PlotUtils import *
+from .OptionUtils import *
 from .DataReader import *
+from .ModelEnsemble import *
+from .Consts import *
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, roc_auc_score
 from scipy.stats import entropy
+from numpy.linalg import norm
 from sklearn.utils import shuffle as sk_shuffle
-from optparse import OptionParser
-from optparse import OptionGroup
+from sklearn.preprocessing import QuantileTransformer
 
-def input_options():
-    parser = OptionParser()
-    parser = OptionParser(usage="usage: %prog analyzer outputfile [options] \nrun with --help to get list of options")
-    parser.add_option("-i", "--fin", default='../data/jet_images.h5', help="Input file with data for training.")
-    parser.add_option("--plot_dir", default='../plots/', help="Directory to output plots")
-    parser.add_option("--model_dir", default='../models/', help="Directory to read in and output models")
-    parser.add_option("-o", "--model_name", default='cwbh.h5', help="What to name the model")
-    parser.add_option("--model_start", default="", help="Starting point for model (empty string for new model)")
+def JSD(P, Q):
+    _P = P / norm(P, ord=1)
+    _Q = Q / norm(Q, ord=1)
+    _M = 0.5 * (_P + _Q)
+    return np.sqrt(0.5 * (entropy(_P, _M) + entropy(_Q, _M)))
 
-    parser.add_option("--iter", dest = "tnt_iter", type = 'int', default=0, help="What iteration of  the tag & train algorithm this is (Start = 0).")
-    parser.add_option("--num_epoch", type = 'int', default=100, help="How many epochs to train for")
-    parser.add_option("--data_start", type = 'int', default=0, help="What event to start with")
-    parser.add_option("--num_data", type = 'int', default=-1, help="How many events to train on")
-    parser.add_option("--batch_size", type='int', default=256, help="Size of mini-batchs used for training")
-    parser.add_option("--batch_start", type='int', default=-1, help="Train over multiple batches of dataset. Starting batch")
-    parser.add_option("--batch_stop", type='int', default=-1, help="Train over multiple batches of dataset. Stopping batch (inclusive)")
-    parser.add_option("--val_batch_start", type='int', default=-1, help="Batches to use for validation start")
-    parser.add_option("--val_batch_stop", type='int', default=-1, help="Batches to use for validation stop ")
-
-    parser.add_option("--use_one", default = False, action = "store_true", help="Make a classifier for one jet instead of both")
-    parser.add_option("-j", "--training_j", type ='int', default = 1, help="Which jet to make a classifier for (1 or 2)")
-    parser.add_option("--use_dense", default = False, action = "store_true", help="Make a classifier using inputs from cwola hunting paper instead of jet images")
-    parser.add_option("--mjj_low", type='int', default = 2250,  help="Low mjj cut value")
-    parser.add_option("--mjj_high", type='int', default = 2750, help="High mjj cut value")
-    parser.add_option("--mjj_sig", type='int', default = 2500, help="Signal mass (used for signal filtering)")
-    parser.add_option("--d_eta", type='float', default = -1, help="Delta eta cut")
-    parser.add_option("--no_ptrw", default = False, action="store_true",  help="Don't reweight events to have matching pt distributions in sig-rich and bkg-rich samples")
-    parser.add_option("--no_sample_weights", default = False, action="store_true", help="Don't do weighting of different signal / bkg regions")
-
-    parser.add_option("--large", default = False, action = "store_true", help="Use larger NN archetecture")
-    parser.add_option("--sig_idx", type = 'int', default = 1,  help="What index of signal to use")
-    parser.add_option("-s", "--sig_frac", type = 'float', default = -1.,  help="Reduce signal to this amount (< 0 to not filter )")
-    parser.add_option("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays of signal")
-    parser.add_option("--seed", type = 'int', default = 123456,  help="RNG seed for model")
-    parser.add_option("--BB_seed", type = 'int', default = 123456,  help="RNG seed for dataset")
-    parser.add_option("--num_models", type = 'int', default = 1,  help="How many networks to train (if >1 will save the one with best validation loss)")
-    parser.add_option("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
-
-
-    parser.add_option("--sig_cut", type='int', default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")
-    parser.add_option("--bkg_cut", type='int', default = 40,  help="What classifier percentile to use to define bkg-rich region in TNT")
-
-
-    parser.add_option("--ptsort", default = False, action="store_true",  help="Sort j1 and j2 by pt rather than by jet mass")
-    parser.add_option("--randsort", default = False, action="store_true",  help="Sort j1 and j2 randomly rather than by jet mass")
-    return parser
-
-def load_dataset_from_options(options):
-    data = DataReader(options.fin, keys = options.keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-            m_low = options.keep_low, m_high = options.keep_high, batch_start = options.batch_start, batch_stop = options.batch_stop , hadronic_only = options.hadronic_only, 
-            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta)
-    data.read()
-
-    if(options.val_batch_start >0 and options.val_batch_stop > 0):
-        val_data = DataReader(options.fin, keys = options.keys, signal_idx = options.sig_idx, sig_frac = options.sig_frac, start = options.data_start, stop = options.data_start + options.num_data, 
-            m_low = options.keep_low, m_high = options.keep_high, batch_start = options.val_batch_start, batch_stop = options.val_batch_stop , hadronic_only = options.hadronic_only, 
-            m_sig = options.mjj_sig, seed = options.BB_seed, eta_cut = options.d_eta)
-        val_data.read()
-    else:
-        val_data = None
-    return data, val_data
 
 
 def bce(yhat, y, weights = None):
@@ -81,11 +29,56 @@ def bce(yhat, y, weights = None):
     else:
         return -((y * np.log(yhat) + (1 - y) * np.log(1 - yhat))).mean()
 
+def weighted_quantile(values, quantiles, sample_weight=None, 
+                      values_sorted=False, old_style=False):
+#https://stackoverflow.com/questions/21844024/weighted-percentile-using-numpy
+    """ Very close to numpy.percentile, but supports weights.
+    NOTE: quantiles should be in [0, 1]!
+    :param values: numpy.array with data
+    :param quantiles: array-like with many quantiles needed
+    :param sample_weight: array-like of the same length as `array`
+    :param values_sorted: bool, if True, then will avoid sorting of
+        initial array
+    :param old_style: if True, will correct output to be consistent
+        with numpy.percentile.
+    :return: numpy.array with computed quantiles.
+    """
+    values = np.array(values)
+    quantiles = np.array(quantiles)
+    if sample_weight is None:
+        sample_weight = np.ones(len(values))
+    sample_weight = np.array(sample_weight)
+    assert np.all(quantiles >= 0) and np.all(quantiles <= 1), \
+        'quantiles should be in [0, 1]'
 
-def compute_effcut_metric(sig_scores, bkg_scores, eff = 0.01):
+    if not values_sorted:
+        sorter = np.argsort(values)
+        values = values[sorter]
+        sample_weight = sample_weight[sorter]
+
+    weighted_quantiles = np.cumsum(sample_weight) - 0.5 * sample_weight
+    if old_style:
+        # To be convenient with numpy.percentile
+        weighted_quantiles -= weighted_quantiles[0]
+        weighted_quantiles /= weighted_quantiles[-1]
+    else:
+        weighted_quantiles /= np.sum(sample_weight)
+    return np.interp(quantiles, weighted_quantiles, values)
+
+
+def compute_effcut_metric(sig_scores, bkg_scores, eff = 0.01, weights = None, labels = None):
     percentile = 100. - 100.*eff
-    sb_cut = np.percentile(bkg_scores,percentile)
-    return np.mean(sig_scores > sb_cut)
+    quantile = 1. - eff
+    #sb_cut = np.percentile(bkg_scores,percentile)
+    #eff_cut = np.mean(sig_scores > sb_cut)
+    sb_cut_weighted = weighted_quantile(bkg_scores.reshape(-1), [quantile], sample_weight = weights.reshape(-1))[0]
+    eff_cut_weighted = np.mean(sig_scores > sb_cut_weighted)
+    #print("Eff %.3f" % eff)
+    #print("sb_cut %.4f, eff_cut %.4f" % (sb_cut, eff_cut))
+    #print("sb_cut_weighted %.4f, eff_cut_weighted %.4f" % (sb_cut_weighted, eff_cut_weighted))
+    if(labels is not None):
+        print("%i signal and %i bkg events above the cut" % (np.sum(labels[sig_scores > sb_cut_weighted] > 0.1), np.sum(labels[sig_scores > sb_cut_weighted] <= 0.1)))
+    return eff_cut_weighted
 
 
 
@@ -95,14 +88,14 @@ class RocCallback(tf.keras.callbacks.Callback):
         self.extra_label = extra_label
         self.freq = freq
         self.x = training_data[0]
-        self.y = training_data[1]
+        self.y = np.clip(training_data[1], 0, 1)
         self.x_val = validation_data[0]
-        self.y_val = validation_data[1]
+        self.y_val = np.clip(validation_data[1], 0, 1)
         self.skip_val = self.skip_train = False
-        if(np.mean(self.y_val) < 1e-5):
+        if(np.mean(self.y_val > 0) < 1e-5):
             print("Not enough signal in validation set, will skip auc")
             self.skip_val = True
-        if(np.mean(self.y) < 1e-5):
+        if(np.mean(self.y > 0) < 1e-5):
             print("Not enough signal in train set, will skip auc")
             self.skip_train = True
 
@@ -145,23 +138,40 @@ class RocCallback(tf.keras.callbacks.Callback):
     def on_batch_end(self, batch, logs={}):
         return
 
-
-def make_selection(j1_scores, j2_scores, percentile):
+def make_selection(j1_scores, j2_scores, percentile, mask = None):
 # make a selection with a given efficiency using both scores (and)
-    n_points = 400
-    j1_threshs = [np.percentile(j1_scores,i) for i in np.arange(0., 100., 100./n_points)]
-    j2_threshs = [np.percentile(j2_scores,i) for i in np.arange(0., 100., 100./n_points)]
 
-    combined_effs = np.array([np.mean((j1_scores > j1_threshs[i]) & (j2_scores > j2_threshs[i])) for i in range(n_points)])
-    cut_idx = np.argwhere(combined_effs < (100. - percentile)/100.)[0][0]
-    mask = (j1_scores > j1_threshs[cut_idx]) & (j2_scores > j2_threshs[cut_idx])
-    print("Cut idx %i, eff %.3e, j1_cut %.3e, j2_cut %.3e " %(cut_idx, combined_effs[cut_idx], j1_threshs[cut_idx], j2_threshs[cut_idx]))
-    print(np.mean(mask))
+    n_points = 1000
+    if(mask is None):
+        j1_select_scores = j1_scores
+        j2_select_scores = j2_scores
+    else:
+        j1_select_scores = j1_scores[mask]
+        j2_select_scores = j2_scores[mask]
+
+    j1_qs = quantile_transform(j1_select_scores.reshape(-1,1), copy = True).reshape(-1)
+    j2_qs = quantile_transform(j2_select_scores.reshape(-1,1), copy = True).reshape(-1)
+
+
+    threshs = [thresh for thresh in np.arange(0., 1., 1./n_points)]
+
+
+    combined_effs = np.array([np.mean(((j1_qs > thresh) & (j2_qs > thresh))) for thresh in threshs])
+    cut_idx = np.argwhere(combined_effs <= (100. - percentile)/100.)[0][0]
+    cut_percentile = threshs[cut_idx]
+
+    j1_cut = np.percentile(j1_select_scores, 100.*cut_percentile)
+    j2_cut = np.percentile(j2_select_scores, 100.*cut_percentile)
+
+
+    mask = (j1_scores > j1_cut) & (j2_scores > j2_cut)
+    print("Cut idx %i, cut_percentile %.3f, j1_cut %.3f , j2_cut %.3f, eff %.3e " %(cut_idx, cut_percentile, j1_cut, j2_cut, combined_effs[cut_idx]))
+    print("Overall eff:", np.mean(mask))
     return mask
 
 def print_signal_fractions(y_true, y):
     #compute true signal fraction in signal-rich region
-    y_true = y_true.reshape(-1)
+    y_true = np.clip(y_true, 0, 1).reshape(-1)
     y = y.reshape(-1)
     true_sigs = (y_true > 0.9 ) & (y > 0.9)
     lost_sigs = (y_true > 0.9) & (y < 0.1 )
@@ -288,10 +298,10 @@ class AdditionalValidationSets(tf.keras.callbacks.Callback):
 
 
 
-def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=None,  batch_size = 512):
+def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=None,  num_models = 1, batch_size = 512):
 
     if(model_type <= 2):
-        j_model = tf.keras.models.load_model(model_name)
+        j_model = ModelEnsemble(location = model_name, num_models = num_models)
 
         if(model_type == 0):  #cnn
             j_score = j_model.predict(j_images, batch_size = batch_size)
@@ -316,23 +326,29 @@ def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=
 
 
 
-def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=None, j1_dense_inputs=None, j2_dense_inputs=None, batch_size = 512):
+def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=None, j1_dense_inputs=None, j2_dense_inputs=None, 
+        num_models = 1, batch_size = 512):
 
     if(model_type <= 2):
         if(len(model_name) != 2):
-            if('/' not in model_name):
-                j1_fname = model_dir + "j1_" + model_name
-                j2_fname = model_dir + "j2_" + model_name
+            if('j_label' in model_name):
+                j1_fname = model_dir + model_name.format(j_label = "j1")
+                j2_fname = model_dir + model_name.format(j_label = "j2")
             else:
-                ins_idx = model_name.rfind('/')+1
-                j1_fname = model_dir + model_name[:ins_idx] + "j1_" + model_name[ins_idx:]
-                j2_fname = model_dir + model_name[:ins_idx] + "j2_" + model_name[ins_idx:]
+                j1_fname = j2_fname = model_dir + model_name
+            #if('/' not in model_name):
+            #    j1_fname = model_dir + "j1_" + model_name
+            #    j2_fname = model_dir + "j2_" + model_name
+            #else:
+            #    ins_idx = model_name.rfind('/')+1
+            #    j1_fname = model_dir + model_name[:ins_idx] + "j1_" + model_name[ins_idx:]
+            #    j2_fname = model_dir + model_name[:ins_idx] + "j2_" + model_name[ins_idx:]
             print(j1_fname, j2_fname)
-            j1_model = tf.keras.models.load_model(j1_fname)
-            j2_model = tf.keras.models.load_model(j2_fname)
+            j1_model = ModelEnsemble(location = j1_fname, num_models = num_models)
+            j2_model = ModelEnsemble(location = j2_fname, num_models = num_models)
         else:
-            j1_model = tf.keras.models.load_model(model_dir + model_name[0])
-            j2_model = tf.keras.models.load_model(model_dir + model_name[1])
+            j1_model = ModelEnsemble(location = model_dir + model_name[0], num_models = num_models)
+            j2_model = ModelEnsemble(location =  model_dir + model_name[1], num_models = num_models)
 
         if(model_type == 0):  #cnn
             j1_score = j1_model.predict(j1_images, batch_size = batch_size)
@@ -360,7 +376,7 @@ def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=
 
     return j1_score.reshape(-1), j2_score.reshape(-1)
 
-def get_jj_scores(model_dir, model_name, model_type, jj_images = None, jj_dense_inputs = None, batch_size = 512):
+def get_jj_scores(model_dir, model_name, model_type, jj_images = None, jj_dense_inputs = None, batch_size = 512, num_models = 1):
     if(model_type == 3): #CNN both jets
         jj_model = tf.keras.models.load_model(model_dir + model_name)
         scores = jj_model.predict(jj_images, batch_size = batch_size).reshape(-1)
