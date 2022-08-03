@@ -22,6 +22,7 @@ parser.add_option("-s", "--signal", type='int', default=1, help="Which signal ty
 parser.add_option("--sig_frac",  type='float', default=-1., help="Filter signal to this amount (negative to do nothing)")
 parser.add_option("--mjj_sig", type='int', default = -1, help="Mjj value of signal (used for filtering in correct mass region)")
 parser.add_option("--hadronic_only",  default=False, action='store_true',  help="Filter out leptonic decays")
+parser.add_option("--local_storage",  default=False, action='store_true',  help="Temp file made locally")
 
 
 (options, args) = parser.parse_args()
@@ -67,7 +68,7 @@ if(options.model_name != ""):
 else: 
     keys = ['jet_kinematics']
 data = DataReader(fin, signal_idx = options.signal, sig_frac = options.sig_frac, keys = keys, start = data_start, stop = data_start + num_data, hadronic_only = options.hadronic_only, 
-        batch_start = options.batch_start, batch_stop = options.batch_stop, m_sig = options.mjj_sig)
+        batch_start = options.batch_start, batch_stop = options.batch_stop, m_sig = options.mjj_sig, local_storage = options.local_storage)
 data.read()
 Y = data['label'].reshape(-1)
 mjj = data['jet_kinematics'][:,0]
@@ -111,7 +112,7 @@ dist_labels = []
 #No selection
 mjj_dists.append(mjj[bkg_events])
 make_outline_hist([mjj[bkg_events]],  mjj[sig_events], labels, ['b','r'], 'Dijet Mass (GeV)', "No Selection", n_m_bins, logy = True,
-        stacked = True, save = save_figs,  h_range = m_range, fname=plot_dir + plot_label + "nocut_mass.png" )
+        save = save_figs,  h_range = m_range, fname=plot_dir + plot_label + "nocut_mass.png" )
 
 
 
