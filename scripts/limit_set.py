@@ -1,4 +1,5 @@
 from full_run import *
+import sys
 from plotting.draw_sys_variations import *
 
 dedicated_searches = {
@@ -36,14 +37,14 @@ def spb_opts(options, spb, sys = ""):
 
 def get_optimal_spb(options, sig_effs):
 
-    if(int(options.mjj_sig) in fit_results.keys()):
-        n_evts_exc, n_evts_exc_no_sel = fit_results[int(options.mjj_sig)]
+    #if(int(options.mjj_sig) in fit_results.keys()):
+        #n_evts_exc, n_evts_exc_nosel = fit_results[int(options.mjj_sig)]
 
-    else:
-        print("Can't find signal mjj (%i) in fit results dict" % int(options.mjj))
-        n_evts_exc = 93.
-        n_evts_exc_no_sel = 1000.
-    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_no_sel))
+
+    n_evts_exc = options.saved_params['n_evts_exc']
+    n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
+
+    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_nosel))
 
     get_signal_params(options)
 
@@ -57,7 +58,7 @@ def get_optimal_spb(options, sig_effs):
     print("Optimal spb %i" % optimal_spb)
     return optimal_spb
 
-def get_preselection_params(sig_fname):
+def get_preselection_params(sig_fname, hadronic_only_cut = False, sig_mass = 2500.):
     print("Getting preselection params from %s" % sig_fname)
     if(not os.path.exists(sig_fname)):
         print("Can't find file " + sig_fname)
@@ -69,16 +70,75 @@ def get_preselection_params(sig_fname):
     #print(deta_eff)
     is_lep = f['event_info'][:,4]
     hadronic_only = 1.0 - np.mean(is_lep)
-    return presel_eff * deta_eff, is_lep
+    hadronic_only_mask = is_lep < 0.1
+    weights = f['sys_weights'][:,0]
+    mjj = f['jet_kinematics'][:,0]
+    mjj_mask = (mjj  > 0.8 * sig_mass)  & (mjj < 1.2 * sig_mass)
+    if(hadronic_only_cut): mjj_window_eff = np.sum(weights[mjj_mask & hadronic_only_mask]) / np.sum(weights[hadronic_only_mask])
+    else: mjj_window_eff = np.sum(weights[mjj_mask]) / np.sum(weights)
+    f.close()
+    return presel_eff * deta_eff, hadronic_only, mjj_window_eff
+
+def get_fit_nosel_sig(options):
+    base_path = os.path.abspath(".") + "/"
+    nosel_fname = base_path + "../data/fit_inputs_nocut.h5"
+    plot_dir = base_path + options.output + 'sig_nosel_fit/'
+    fit_file = plot_dir + 'fit_results_%.1f.json' % options.mjj_sig
+    if(not os.path.exists(plot_dir)): os.system("mkdir %s" % plot_dir)
+
+    if(options.refit or not os.path.exists(fit_file)):
+        print("Running fit with no selection \n")
+        f_sig = h5py.File(options.sig_file, "r")
+        mjj = f_sig['jet_kinematics'][:,0]
+        deta = f_sig['jet_kinematics'][:,1]
+        weights = f_sig['sys_weights'][:,0]
+        mask = deta < options.deta
+        if(options.hadronic_only):
+            is_lep = f_sig['event_info'][:,4]
+            hadronic_only_mask = is_lep < 0.1
+            mask = mask & hadronic_only_mask
+
+        sig_nosel_fname = options.output + "sig_shape_nosel.h5"
+        with h5py.File(sig_nosel_fname, "w") as f_sig_shape:
+            f_sig_shape.create_dataset('mjj', data = mjj[mask], chunks = True, maxshape = (None))
+            f_sig_shape.create_dataset('weights', data = weights[mask], chunks = True, maxshape = (None))
+            f_sig_shape.create_dataset('truth_label', data = np.ones((mjj[mask].shape[0],1)), chunks = True, maxshape = (None, 1))
+
+
+
+        sig_fit_cmd = "python fit_signalshapes.py -i %s -o %s -M %i --dcb-model --fitRange 0.3 >& %s/sig_fit_log.txt" % (base_path + sig_nosel_fname, plot_dir , options.mjj_sig, plot_dir)
+        print(sig_fit_cmd)
+        fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
+        fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
+        full_sig_fit_cmd = fit_cmd_setup + sig_fit_cmd + "; "  + fit_cmd_after
+
+        subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
+        sig_shape_file = plot_dir + 'sig_fit_%i.root' % options.mjj_sig
+
+        run_dijetfit(options, fit_start = -1, input_file = nosel_fname, output_dir = plot_dir, sig_shape_file = sig_shape_file, loop = True)
+
+    with open(fit_file, 'r') as f:
+        fit_params = json.load(f, encoding="latin-1")
+        n_evts_exc_nosel = fit_params['exp_lim_events'] 
+
+    print("No selection num events lim %.0f "  % n_evts_exc_nosel)
+    return n_evts_exc_nosel
+
+
+
+    
 
 def get_signal_params(options):
     #modifies options struct
-    options.lumi = 28.
+    options.lumi = 26.81
     options.dedicated_lim = -1
     options.dedicated_label = ""
+    options.mjj_window_nosel_eff = 1.0
     if(len(options.sig_file) > 0):
 
-        options.preselection_eff, hadronic_only_ = get_preselection_params(options.sig_file)
+        options.preselection_eff, hadronic_only_, options.mjj_window_nosel_eff = get_preselection_params(options.sig_file, options.hadronic_only, options.mjj_sig)
+
+        options.saved_params['n_evts_exc_nosel'] = get_fit_nosel_sig(options)
 
         
         if(options.hadronic_only): options.hadronic_only_eff = hadronic_only_
@@ -115,56 +175,66 @@ def make_signif_plot(options, signifs):
     fout = options.output + options.label + "_signif_plot.png"
 
     options.lumi = 28.
-    if(int(options.mjj_sig) in fit_results.keys()):
-        n_evts_exc, n_evts_exc_no_sel = fit_results[int(options.mjj_sig)]
+    #n_evts_exc, n_evts_exc_nosel = fit_results[int(options.mjj_sig)]
+    n_evts_exc = options.saved_params['n_evts_exc']
+    n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
 
-    else:
-        print("Can't find signal mjj (%i) in fit results dict" % int(options.mjj))
-        n_evts_exc = 93.
-        n_evts_exc_no_sel = 1000.
-    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_no_sel))
 
-    get_signal_params(options)
+     
+
+
+    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_nosel))
+
 
     injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in options.spbs])
 
     xs = injected_xsecs
     ys = signifs
-    no_sel_limit = n_evts_exc_no_sel / (options.preselection_eff * options.lumi * options.hadronic_only_eff)
+    #print('window_eff', options.mjj_window_nosel_eff)
+    #nosel_limit = n_evts_exc_nosel / (options.preselection_eff * options.mjj_window_nosel_eff * options.lumi * options.hadronic_only_eff)
+    nosel_limit = n_evts_exc_nosel / (options.preselection_eff *  options.lumi * options.hadronic_only_eff)
 
-    no_sel_x = no_sel_limit
+    nosel_x = nosel_limit
 
 
 
     fig_size = (12,9)
     plt.figure(figsize=fig_size)
     size = 0.4
+    linewidth = 4
+    pointsize = 70.
 
-    y_stop = max(ys)
+    x_stop = max(np.max(xs), nosel_x)
+    y_stop = max(np.max(ys), 6.)
+    print('stops', x_stop, y_stop)
+    print(xs, nosel_limit) 
+    print(ys)
+
     yline = np.arange(0,y_stop,y_stop/10)
-    if(no_sel_x >0):
-        label = "Inclusive Limit (%.1f fb)" % no_sel_x
-        plt.plot([no_sel_x]*10, yline, linestyle = "--", color = "green", linewidth = 2, label = label)
+    if(nosel_x >0):
+        label = "Inclusive Limit (%.1f fb)" % nosel_x
+        plt.plot([nosel_x]*10, yline, linestyle = "--", color = "green", linewidth = linewidth, label = label)
 
     #if(options.dedicated_lim > 0):
         #plt.plot([options.dedicated_lim] * 10, yline, linestyle = "--", color = "cyan", linewidth = 2, label = options.dedicated_label)
 
 
-    plt.scatter(xs, ys, c ='b' , s=40.0, label = "Injections")
+    plt.scatter(xs, ys, c ='b' , s=pointsize, label = "Injections")
 
 
 
 
-    plt.ylim([0., 8.])
-    plt.xlim([0., np.max(xs) * 1.2])
+            
+    plt.ylim([0., y_stop * 1.2])
+    plt.xlim([0., x_stop * 1.2])
 
-    plt.xlabel("Injected cross section (fb)", fontsize=20)
-    plt.ylabel(r"Significance ($\sigma$)", fontsize=20)
+    plt.xlabel("Injected cross section (fb)", fontsize=30)
+    plt.ylabel(r"Significance ($\sigma$)", fontsize=30)
 
-    plt.tick_params(axis='y', labelsize=16)
-    plt.tick_params(axis='x', labelsize=16)
+    plt.tick_params(axis='y', labelsize=18)
+    plt.tick_params(axis='x', labelsize=18)
 
-    plt.legend(loc="upper right", fontsize = 16)
+    plt.legend(loc="upper left", fontsize = 20)
 
     print("saving %s" % fout)
     plt.savefig(fout)
@@ -176,14 +246,10 @@ def make_limit_plot(options, sig_effs):
     fout = options.output + options.label + "_limit_plot.png"
     if(options.num_events): fout = options.output + options.label + "_limit_plot_numevents.png"
 
-    if(int(options.mjj_sig) in fit_results.keys()):
-        n_evts_exc, n_evts_exc_no_sel = fit_results[int(options.mjj_sig)]
+    n_evts_exc = options.saved_params['n_evts_exc']
+    n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
 
-    else:
-        print("Can't find signal mjj (%i) in fit results dict" % int(options.mjj))
-        n_evts_exc = 93.
-        n_evts_exc_no_sel = 1000.
-    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_no_sel))
+    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_nosel))
 
     get_signal_params(options)
 
@@ -191,21 +257,21 @@ def make_limit_plot(options, sig_effs):
     sig_effs = np.clip(sig_effs, 1e-4, 1.0)
     injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in options.spbs])
     excluded_xsecs = np.array([(n_evts_exc / (options.hadronic_only_eff * sig_eff * options.preselection_eff * options.lumi)) for sig_eff in sig_effs])
-    no_sel_limit = n_evts_exc_no_sel / (options.preselection_eff  * options.lumi * options.hadronic_only_eff)
+    nosel_limit = n_evts_exc_nosel / (options.preselection_eff  * options.lumi * options.hadronic_only_eff)
 
     injected_nsig  = np.array( [spb * options.numBatches  for spb in options.spbs])
     excluded_nsig = np.array([n_evts_exc / sig_eff  for sig_eff in sig_effs])
-    no_sel_limit_nsig = n_evts_exc_no_sel / (options.preselection_eff)
+    nosel_limit_nsig = n_evts_exc_nosel / (options.preselection_eff)
 
 
     if(options.num_events): 
         xs = injected_nsig
         ys = excluded_nsig
-        no_sel_y = no_sel_limit_nsig
+        nosel_y = nosel_limit_nsig
     else:
         xs = injected_xsecs
         ys = excluded_xsecs
-        no_sel_y = no_sel_limit
+        nosel_y = nosel_limit
 
 
 
@@ -225,22 +291,24 @@ def make_limit_plot(options, sig_effs):
     else:
         best_lim_label = "Best Limit (%.1f fb)" % best_lim
 
-    print("Limit without NN selection: %.1f" % no_sel_y)
+    print("Limit without NN selection: %.1f" % nosel_y)
     print("Best lim : %.3f"  % best_lim)
         
     fig_size = (12,9)
     plt.figure(figsize=fig_size)
     size = 0.4
+    linewidth = 4
+    pointsize = 70.
 
-    x_stop = max(xs)
+    x_stop = max(np.max(xs), nosel_limit)
     xline = np.arange(0,x_stop,x_stop/10)
-    plt.plot(xline, xline, linestyle = "--", color = "black", linewidth = 2, label = "Excluded = Injected")
-    if(no_sel_y >0):
-        label = "Inclusive Limit (%.1f fb)" % no_sel_y
-        if(options.num_events): label = "Inclusive Limit (%.1f events)" % no_sel_y
-        plt.plot(xline, [no_sel_y]*10, linestyle = "--", color = "green", linewidth = 2, label = label)
+    plt.plot(xline, xline, linestyle = "--", color = "black", linewidth = linewidth, label = "Excluded = Injected")
+    if(nosel_y >0):
+        label = "Inclusive Limit (%.1f fb)" % nosel_y
+        if(options.num_events): label = "Inclusive Limit (%.1f events)" % nosel_y
+        plt.plot(xline, [nosel_y]*10, linestyle = "--", color = "green", linewidth = linewidth, label = label)
     if(options.dedicated_lim > 0):
-        plt.plot(xline, [options.dedicated_lim]*10, linestyle = "--", color = "cyan", linewidth = 2, label = options.dedicated_label)
+        plt.plot(xline, [options.dedicated_lim]*10, linestyle = "--", color = "cyan", linewidth = linewidth, label = options.dedicated_label)
 
 
 
@@ -249,32 +317,32 @@ def make_limit_plot(options, sig_effs):
     lim_line_max = min(xs[best_i], ys[best_i])*0.97
 
     if(vertical_line):
-        plt.plot([best_lim, best_lim], [0., lim_line_max], linestyle="--", color = "red", linewidth =2, label = best_lim_label)
+        plt.plot([best_lim, best_lim], [0., lim_line_max], linestyle="--", color = "red", linewidth =linewidth, label = best_lim_label)
     else: #horizontal line
-        plt.plot( [0., lim_line_max], [best_lim, best_lim], linestyle="--", color = "red", linewidth =2, label = best_lim_label)
+        plt.plot( [0., lim_line_max], [best_lim, best_lim], linestyle="--", color = "red", linewidth =linewidth, label = best_lim_label)
 
-    plt.scatter(xs, ys, c ='b' , s=40.0, label="Injections")
+    plt.scatter(xs, ys, c ='b' , s=pointsize, label="Injections")
 
     off_plots = ys > (x_stop * 1.2)
     num_off = np.sum(off_plots)
     off_ys = [x_stop * 1.18] * num_off
-    plt.scatter(xs[off_plots], off_ys, c = 'b', s = 40.0, marker ="^")
+    plt.scatter(xs[off_plots], off_ys, c = 'b', s = pointsize, marker ="^")
 
     plt.ylim([0., x_stop * 1.2])
     plt.xlim([0., x_stop * 1.2])
 
     if(not options.num_events):
-        plt.xlabel("Injected cross section (fb)", fontsize=20)
-        plt.ylabel(" 'Excluded' cross section (fb)", fontsize=20)
+        plt.xlabel("Injected cross section (fb)", fontsize=30)
+        plt.ylabel(" 'Excluded' cross section (fb)", fontsize=30)
     else:
-        plt.xlabel("Injected Number of Events", fontsize=20)
-        plt.ylabel(" 'Excluded' Number of Events", fontsize=20)
+        plt.xlabel("Injected Number of Events", fontsize=30)
+        plt.ylabel(" 'Excluded' Number of Events", fontsize=30)
 
-    plt.tick_params(axis='y', labelsize=16)
-    plt.tick_params(axis='x', labelsize=16)
+    plt.tick_params(axis='y', labelsize=18)
+    plt.tick_params(axis='x', labelsize=18)
 
-    fs_leg = 16
-    plt.legend(loc="upper right", fontsize = fs_leg)
+    fs_leg = 20
+    plt.legend(loc="upper right", fontsize = fs_leg, framealpha = 1.0)
     print("saving %s" % fout)
     plt.savefig(fout)
 
@@ -328,17 +396,22 @@ def get_sig_eff(outdir, eff = 1.0, sys = ""):
         return sig_eff
 
 def get_fit_results(outdir, m):
-    fname = outdir + "fit_results_%.1f.pkl" % m
+    fname = outdir + "fit_results_%.1f.json" % m
     if(not os.path.exists(fname)):
         print("Can't find fit inputs " + fname)
         return None
 
-    fit_results = get_options_from_pkl(fname)
+    fit_results = get_options_from_json(fname)
     return fit_results
 
 
 
 def limit_set(options):
+    if(len(options.label) == 0):
+        if(options.output[-1] == "/"):
+            options.label = options.output.split("/")[-2]
+        else:
+            options.label = options.output.split("/")[-1]
 
     num_rand = 4
 
@@ -352,11 +425,10 @@ def limit_set(options):
 
     if(options.reload):
 
-        if(not os.path.exists(options.output + "run_opts.pkl")):
-            print("Reload options specified but file %s doesn't exist (add --new to create new directory). Exiting" % (options.output+"run_opts.pkl"))
+        if(not os.path.exists(options.output + "run_opts.json")):
+            print("Reload options specified but file %s doesn't exist (add --new to create new directory). Exiting" % (options.output+"run_opts.json"))
             sys.exit(1)
         else:
-            #rel_opts = get_options_from_pkl(options.output + "run_opts.pkl")
             rel_opts = get_options_from_json(options.output + "run_opts.json")
             print(rel_opts.__dict__)
             rel_opts.keep_LSF = options.keep_LSF #quick fix
@@ -364,6 +436,8 @@ def limit_set(options):
             rel_opts.sys_train_all = options.sys_train_all #quick fix
             if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
             rel_opts.step = options.step
+            rel_opts.condor = options.condor
+            rel_opts.refit = options.refit
             if(len(options.effs) >0): rel_opts.effs = options.effs
             if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
             if(len(options.spbs) > 0):
@@ -383,7 +457,6 @@ def limit_set(options):
 
     #save options
     options_dict = options.__dict__
-    #write_options_to_pkl(options_dict, options.output + "run_opts.pkl" )
     write_options_to_json(options_dict, options.output + "run_opts.json" )
 
 
@@ -432,6 +505,7 @@ def limit_set(options):
             t_opts = spb_opts(options, spb)
             t_opts.step = "select"
             t_opts.reload = True
+            #t_opts.condor = options.condor
             t_opts.condor = True
             full_run(t_opts)
 
@@ -661,15 +735,15 @@ def limit_set(options):
             full_run(t_opts)
 
     if(do_fit):
-        for spb in options.spbs:
+        for spb in spbs_to_run:
             t_opts = spb_opts(options, spb)
             t_opts.step = "fit"
             t_opts.reload = True
-            t_opts.condor = False
+            t_opts.condor = True
             full_run(t_opts)
 
     if(do_roc):
-        for spb in options.spbs:
+        for spb in spbs_to_run:
             t_opts = spb_opts(options, spb)
             t_opts.step = "roc"
             t_opts.reload = True
@@ -679,12 +753,20 @@ def limit_set(options):
     if(do_plot):
         sig_effs = []
         signifs = []
+        get_signal_params(options)
+
+        n_evts_exc_sum = 0.
+        n_runs = 0
 
 
-        for spb in options.spbs:
+        for spb in spbs_to_run:
             sig_eff = float(get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0]))
             fit_res = get_fit_results(options.output + "spb" + str(float(spb)) + "/",  options.mjj_sig)
-            if(fit_res is not None): signif = float(fit_res.signif)
+            if(fit_res is not None): 
+                signif = float(fit_res.signif)
+                if(fit_res.exp_lim_events > 0 and fit_res.exp_lim_events < 99999.):
+                    n_evts_exc_sum += fit_res.exp_lim_events
+                    n_runs += 1
             else: signif = 0.
 
             sig_effs.append(sig_eff)
@@ -692,6 +774,10 @@ def limit_set(options):
 
         print(sig_effs)
         print(signifs)
+
+        #take an average of the different fits (? is this right to do ?)
+        options.saved_params['n_evts_exc'] = n_evts_exc_sum / n_runs
+        
 
         options.saved_params['signifs'] = signifs
         options.saved_params['sig_effs'] = sig_effs
@@ -756,6 +842,7 @@ def limit_set(options):
 if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--sig_norm_unc", default = -1.0, type = float, help = "parameter for fit (uncertainty on signal efficiency)")
+    parser.add_argument("--ae_dir", default = "", help = "directory with all the autoencoders (auto pick the right mbin and kfold)")
     parser.add_argument("--spbs", nargs="+", default = [], type = float)
     parser.add_argument("--effs", nargs="+", default = [], type = float)
     parser.add_argument("--kfolds", default = 5, type = int)
@@ -769,5 +856,9 @@ if(__name__ == "__main__"):
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.set_defaults(reload=True)
+    parser.add_argument("--condor", dest = 'condor', action = 'store_true')
+    parser.add_argument("--no-condor", dest = 'condor', action = 'store_false')
+    parser.add_argument("--refit", action = 'store_true', help = 'redo no selection signal fit')
+    parser.set_defaults(condor=True)
     options = parser.parse_args()
     limit_set(options)

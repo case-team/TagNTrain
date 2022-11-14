@@ -8,6 +8,55 @@ import subprocess
 import h5py
 import time
 
+
+def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", output_dir = "", loop = False):
+    base_path = os.path.abspath(".") + "/"
+    fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+    if(len(output_dir) == 0): output_dir = base_path + options.output
+    if(len(input_file) == 0): input_file = base_path + options.output + fit_inputs
+
+    fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
+    fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
+
+    counting_str = ""
+    if(options.counting_fit):
+        counting_str = "_counting"
+
+    dijet_cmd = "python dijetfit%s.py -i %s -p %s --rebin" % (counting_str, input_file, output_dir)
+    #dijet_cmd = "python dijetfit%s.py -i %s -p %s " % (counting_str, input_file, output_dir)
+    if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
+        dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
+    if(len(sig_shape_file) > 0):
+        dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model -l M%0.f" % (options.mjj_sig, sig_shape_file,  options.mjj_sig)
+
+
+
+    run_fit = True
+    while(run_fit):
+        dijet_cmd_iter = copy.copy(dijet_cmd)
+
+        if(fit_start > 0):
+            dijet_cmd_iter += " --mjj_min %.0f" % fit_start
+
+        dijet_cmd_iter += " >& %s/fit_log%.1f.txt " % (output_dir, options.mjj_sig)
+        fit_cmd = fit_cmd_setup +  dijet_cmd_iter + "; " + fit_cmd_after
+        print(fit_cmd)
+        subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
+
+        if(loop): #loop until we get a good fit
+            fit_file = output_dir + 'fit_results_%.1f.json' % options.mjj_sig
+            with open(fit_file, 'r') as f:
+                fit_params = json.load(f, encoding="latin-1")
+                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > 0.5 and fit_start + 200. < options.mjj_sig):
+                    if(fit_start < 1550.): fit_start = 1550.
+                    else: fit_start += 100.
+                    print("\n \n POOR Fit quality (pval %.2e, largest unc %.2f)! \n. Increasing fit start to %.0f and retrying" % 
+                            (fit_params['bkgfit_prob'],  fit_params['bkgfit_frac_err'], fit_start))
+                else: run_fit = False
+        else: run_fit = False
+
+
+
 def check_all_models_there(model_dir, num_models):
     #TODO Fix it so there aren't Nan's...
     print("Checking %s" % model_dir)
@@ -57,7 +106,7 @@ def avg_eff(fout_name, input_list):
     fout = h5py.File(fout_name, "a")
     for key,val in all_effs.items():
         avg_eff = np.mean(val)
-        print(key, avg_eff)
+        #print(key, avg_eff)
         if(key not in fout.keys()):
             fout.create_dataset(key, data=np.array([avg_eff]) )
         else:
@@ -75,6 +124,12 @@ def full_run(options):
     if(options.output[-1] != '/'):
         options.output += '/'
 
+    if(len(options.label) == 0):
+        if(options.output[-1] == "/"):
+            options.label = options.output.split("/")[-2]
+        else:
+            options.label = options.output.split("/")[-1]
+
     if(not os.path.exists(options.output)):
         subprocess.call("mkdir %s" % options.output, shell = True)
 
@@ -91,23 +146,28 @@ def full_run(options):
         if(len(options.effs) >0): rel_opts.effs = options.effs
         if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
         if(options.counting_fit): rel_opts.counting_fit = True
-        if(options.fit_start > 0): rel_opts.fit_start = options.fit_start
+        if('fit_start' in options.__dict__.keys() and options.fit_start > 0): rel_opts.fit_start = options.fit_start
         else: rel_opts.counting_fit = False
         rel_opts.condor = options.condor
         rel_opts.keep_LSF = options.keep_LSF #quick fix
         rel_opts.redo_roc = options.redo_roc #quick fix
+        rel_opts.recover = options.recover
         if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
         rel_opts.output = options.output #allows renaming / moving directories
         options = rel_opts
     else:
         #save options
         options_dict = options.__dict__
-        #write_options_to_pkl(options_dict, options.output + "run_opts.pkl", write_mode = "xb" )
-        #write_options_to_pkl(options_dict, options.output + "run_opts.pkl", write_mode = "wb" )
         write_options_to_json(options_dict, options.output + "run_opts.json" )
 
 
  
+    if(options.do_TNT):
+        options.randsort = True
+        options.score_comb = "mult"
+    else:
+        options.score_comb = "max"
+
     print("Condor %i" % options.condor)
 
 
@@ -140,7 +200,7 @@ def full_run(options):
         do_merge = True
 
     get_condor = get_condor or (do_selection and options.condor)
-    do_merge = do_merge or do_fit
+    do_merge = do_merge 
 
 
     options.num_val_batch = batches_per_kfold // options.lfolds
@@ -170,6 +230,7 @@ def full_run(options):
     #Do trainings
     if(do_train):
         for k,k_options in enumerate(kfold_options):
+
             if(not options.randsort):
                 k_options.label = options.label + "_j1_kfold%i" % k
                 k_options.output = options.output + "j1_kfold%i/" % k
@@ -282,6 +343,7 @@ def full_run(options):
                     f_select_script.write("xrdcp -f %s ${1}" % selection_options.output.format(eff=eff))
 
                 f_select_script.write("xrdcp -f %s ${1}" % selection_options.output.format(eff=options.effs[0]).replace(".h5", "_eff.npz"))
+                f_select_script.write("xrdcp -f %s ${1}" % selection_options.output.format(eff=options.effs[0]).replace("fit_inputs", "sig_shape"))
 
 
                 os.system("sed -i s/KFOLDNUM/%i/g %s" % (k, select_script))
@@ -357,34 +419,62 @@ def full_run(options):
 
             avg_eff(fit_inputs_merge, avg_inputs)
 
+            #merge signal shapes
+            if(len(options.sig_file)):
+                sig_shape_merge = options.output + "sig_shape_eff{eff}.h5".format(eff = eff)
+
+                #print(options.__dict__)
+                if('eff_only' in options.__dict__.keys() and not options.eff_only): #merge fit inputs
+                    merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % sig_shape_merge
+
+                    do_merge = False
+                    for k,k_options in enumerate(kfold_options):
+                        sig_shape = options.output + "sig_shape_kfold{k}_eff{eff}.h5".format(k = k, eff = eff)
+
+                        if(not os.path.exists(sig_shape)):
+                            sig_shape = options.output + "sig_shape_kfold{k}.h5".format(k = k)
+                        if(os.path.exists(sig_shape)): 
+                            do_merge = True
+                            merge_cmd += sig_shape + " " 
+
+                    if(do_merge):
+                        print("Merge cmd: " + merge_cmd)
+                        subprocess.call(merge_cmd ,shell = True)
+                    else:
+                        print("Unable to find files for signal shape merge")
+                
+
 
     if(do_fit):
 
-
-        #Do fit
-        counting_str = ""
-        if(options.counting_fit):
-            counting_str = "_counting"
-
-        fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
-        dijet_cmd = "python dijetfit%s.py -i %s -p %s" % (counting_str, base_path + options.output + fit_inputs, base_path + options.output)
+        fit_start = -1.
         if('fit_start' in options.__dict__.keys() and options.fit_start > 0):
-            dijet_cmd += " --mjj_min %.0f" % options.fit_start
-        if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
-            dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
+            fit_start = options.fit_start
+        run_fit = True
+
+        fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
+        fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
+
         if( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
-            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/graviton_interpolation_M%.1f.root" % options.mjj_sig
-            dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model " % (options.mjj_sig, sig_shape_file)
+            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/diboson_interpolation_M%.1f.root" % options.mjj_sig
+        else: sig_shape_file = ""
 
 
-        dijet_cmd += " >& %s/fit_log%.1f.txt " % (base_path + options.output, options.mjj_sig)
-        for eff in options.effs:
-            fit_inputs = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
-            fit_cmd = ("cd ../fitting; source deactivate;" 
-                      "eval `scramv1 runtime -sh`; %s ; cd -;"
-                      "source deactivate; source activate mlenv0" % dijet_cmd)
-            print(fit_cmd)
-            subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
+        if(os.path.exists(options.output + "sig_shape_eff{eff}.h5".format(eff = options.effs[0]))):
+            #fit the signal shape
+            sig_shape_h5 = base_path + options.output + 'sig_shape_eff{eff}.h5'.format(eff = options.effs[0])
+            sig_fit_cmd = "python fit_signalshapes.py -i %s -o %s -M %i --dcb-model --fitRange 0.3 >& %s" % (sig_shape_h5, 
+                                   base_path + options.output, options.mjj_sig, base_path + options.output + "sig_fit_log.txt")
+            print(sig_fit_cmd)
+            full_sig_fit_cmd = fit_cmd_setup + sig_fit_cmd + "; "  + fit_cmd_after
+
+            subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
+            sig_shape_file = base_path + options.output + 'sig_fit_%i.root' % options.mjj_sig
+
+
+        run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, loop = True)
+
+
 
     stop_time = time.time()
     print("Total time taken was %s" % ( stop_time - start_time))
@@ -402,6 +492,8 @@ def full_run(options):
             np_file = np.load(np_fname)
             sig_eff = np.clip(np_file["sig_eff"], 1e-6, 1.)
             bkg_eff = np.clip(np_file["bkg_eff"], 1e-6, 1.)
+
+            bkg_eff_base = np.logspace(-4., 0., num = 1000)
             roc_label = ""
             if(options.redo_roc):
                 print("Recomputing roc")
@@ -415,29 +507,35 @@ def full_run(options):
                 qcd_only = Y > -0.1
                 #scores = np.minimum(j1_qs,j2_qs)
                 #scores = np.maximum(j1_qs,j2_qs)
-                scores = j1_qs*j2_qs
+                scores = combine_scores(j1_qs, j2_qs, options.score_comb)
                 bkg_eff, sig_eff, thresholds = roc_curve(Y[qcd_only], scores[qcd_only], drop_intermediate = True)
-                print(sig_eff.shape)
 
-                #for perc in np.arange(0., 1., 1./n_points):
-                #    mask = (j1_qs > perc) & (j2_qs > perc)
-                #    sig_eff_ = np.mean(mask & (Y ==1)) / np.mean(Y == 1)
-                #    bkg_eff_ = np.mean(mask & (Y ==0)) / np.mean(Y == 0)
-
-                #    sig_eff.append(sig_eff_)
-                #    bkg_eff.append(bkg_eff_)
 
                 sig_eff = np.clip(sig_eff, 1e-6, 1.)
                 bkg_eff = np.clip(bkg_eff, 1e-6, 1.)
 
+
             
-            sig_effs.append(sig_eff)
-            bkg_effs.append(bkg_eff)
+            #interpolate signal effs to smooth & standardize kfolds
+            sig_eff_smooth = np.interp(bkg_eff_base, bkg_eff, sig_eff)
+            #sig_eff_smooth = sig_eff
+            
+            sig_effs.append(sig_eff_smooth)
+            #bkg_effs.append(bkg_eff)
+
+        sig_effs_avg = np.mean(sig_effs, axis = 0)
+        bkg_effs_avg = np.mean(sig_effs, axis = 0)
+        labels.append("Avg.")
+        sig_effs.append(sig_effs_avg)
+        bkg_effs = [bkg_eff_base] * len(sig_effs)
 
         sic_fname = options.output + options.label + roc_label + "_sic.png"
         roc_fname = options.output + options.label + roc_label + "_roc.png"
         make_sic_plot(sig_effs, bkg_effs, colors = colors, labels = labels, fname = sic_fname)
         make_roc_plot(sig_effs, bkg_effs, colors = colors, labels = labels, fname = roc_fname)
+        f_np = options.output + options.label + "_avg_tagging_effs.npz"
+        print("Saving avg effs in  %s" % f_np)
+        np.savez(f_np, sig_eff = sig_effs_avg, bkg_eff = bkg_eff_base)
 
 
 if(__name__ == "__main__"):
@@ -458,6 +556,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--fit_start", default = -1.,  type = float, help = 'Lowest mjj value for dijet fit')
     parser.add_argument("--redo_roc", default = False,  action = 'store_true', help = 'Remake roc')
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--recover", dest='recover', action = 'store_true', help = "Retrain jobs that failed")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.set_defaults(reload=True)
     options = parser.parse_args()

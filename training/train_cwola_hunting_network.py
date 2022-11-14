@@ -87,7 +87,8 @@ def train_cwola_hunting_network(options):
     t_data = data.gen(x_key,'Y_mjj', key3 = sample_weights, batch_size = options.batch_size)
     v_data = None
 
-    cbs = [tf.keras.callbacks.History()]
+    timeout = TimeOut(t0=time.time(), timeout=24.0) #stop training after 30 hours to avoid job timeout
+    cbs = [tf.keras.callbacks.History(), timeout]
     early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)
 
@@ -127,13 +128,16 @@ def train_cwola_hunting_network(options):
         print("Creating model %i" % model_idx)
 
         if(options.use_images):
-            if(not options.large):
+            if(not options.large_net):
                 model = CNN(cnn_shape)
             else:
                 model = CNN_large(cnn_shape)
         else:
             dense_shape = data[x_key].shape[-1]
-            model = dense_net(dense_shape)
+            if(options.small_net or data.nTrain < 1e4):
+                model = dense_small_net(dense_shape)
+            else:
+                model = dense_net(dense_shape)
 
         model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'])
         if(model_idx == 0): model.summary()
@@ -153,6 +157,8 @@ def train_cwola_hunting_network(options):
 
         val_sig_events = val_data['Y_mjj'] > 0.9
         val_bkg_events = val_data['Y_mjj'] < 0.1
+        if(options.eff_cut * np.sum(val_sig_events)  < 20): options.eff_cut = max(options.eff_cut, 0.1)
+        print("Using eff_cut %.2f \n" % options.eff_cut)
         for model_idx in range(options.num_models):
             preds = model_list[model_idx].predict(val_data[x_key])
             loss = bce(preds.reshape(-1), val_data['Y_mjj'][()].reshape(-1), weights = val_data[sample_weights])
@@ -160,7 +166,7 @@ def train_cwola_hunting_network(options):
             if(np.sum(val_data['label'] > 0) > 10):
                 true_loss = bce(preds.reshape(-1), val_data['label'][()].reshape(-1))
                 auc = roc_auc_score(np.clip(val_data['label'], 0, 1), preds)
-            eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = 0.10, 
+            eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = options.eff_cut, 
                     weights = val_data[sample_weights][val_bkg_events], labels = val_data['label'][val_sig_events])
             print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
             loss = -eff_cut_metric

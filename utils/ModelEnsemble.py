@@ -35,6 +35,8 @@ class ModelEnsemble:
         if(len(X.shape) > 2):
             npix = X.shape[1]
             return ret.reshape(-1, npix,npix, 1)
+        elif(X.shape[1] > 5):
+            return ret
         else:
             return ret.reshape(-1)
 

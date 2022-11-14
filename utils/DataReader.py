@@ -63,10 +63,14 @@ def get_sideband_mask(f):
     pt_asym_mask = ((np.abs(pt1 - pt2) / (pt1 + pt2)) > 0.1) | (2. * pt1 * pt2 * np.cosh(deta + 1) / mjj**2 > 1.) | (2. * pt1 * pt2 * np.cosh(deta + 1) / mjj**2 < 0.95) 
     return deta_mask & jet3_mask & pt_asym_mask
 
+def apply_norm(d, norm):
+    if(norm is None): return d
+    else: return (d - norm[0]) / norm[1]
+
 
 
 class MyGenerator(tf.keras.utils.Sequence):
-    def __init__(self, f, n, batch_size, key1, key2, key3 = None, mask = None):
+    def __init__(self, f, n, batch_size, key1, key2, key3 = None, mask = None, key1_norm = None, key2_norm = None, key3_norm = None):
         self.f = [f]
         self.n = [n]
         self.batch_size = batch_size
@@ -81,7 +85,12 @@ class MyGenerator(tf.keras.utils.Sequence):
         self.key1 = [key1]
         self.key2 = [key2]
         self.key3 = [key3]
+
         print("init", key1, key2, key3)
+
+        self.key1_norm = key1_norm
+        self.key2_norm = key2_norm
+        self.key3_norm = key3_norm
 
 
     def add_dataset(self, key1,key2, key3 = None, f2 = None, n2 = None, mask = None, dataset = None):
@@ -146,16 +155,18 @@ class MyGenerator(tf.keras.utils.Sequence):
 
         if(mask is None or  mask.shape[0] == 0):
             if(key3 is None):
-                return (f[key1][start:stop], f[key2][start:stop])
+                return (apply_norm(f[key1][start:stop], self.key1_norm), apply_norm(f[key2][start:stop], self.key2_norm))
             else:
-                return (f[key1][start:stop], f[key2][start:stop], f[key3][start:stop])
+                return (apply_norm(f[key1][start:stop], self.key1_norm), apply_norm(f[key2][start:stop], self.key2_norm), 
+                        apply_norm(f[key3][start:stop], self.key3_norm))
         else:
             mask_local = mask[start:stop]
             if(key3 is None):
-                return (f[key1][start:stop][mask_local], f[key2][start:stop][mask_local])
+                return (apply_norm(f[key1][start:stop][mask_local], self.key1_norm), apply_norm(f[key2][start:stop][mask_local], self.key2_norm))
             else:
 
-                return (f[key1][start:stop][mask_local], f[key2][start:stop][mask_local], f[key3][start:stop][mask_local])
+                return (apply_norm(f[key1][start:stop][mask_local], self.key1_norm), apply_norm(f[key2][start:stop][mask_local], self.key2_norm), 
+                        apply_norm(f[key3][start:stop][mask_local], self.key3_norm))
 
 
 
@@ -178,6 +189,8 @@ class DataReader:
         self.keep_mlow = kwargs.get('keep_mlow', -1.)
         self.keep_mhigh = kwargs.get('keep_mhigh', -1.)
         self.mjj_sig = kwargs.get('mjj_sig', -1.)
+
+        self.data = kwargs.get('data', False)
 
         self.max_events = kwargs.get('max_events', -1)
 
@@ -333,7 +346,11 @@ class DataReader:
         self.nTrain = 0
         self.nVal = 0
 
-        self.num_total_batches = 40
+
+        if(self.data):
+            self.num_total_batches = 40
+        else:
+            self.num_total_batches = 80
         self.sig_marker = 0
         self.sig_chunk_size  = 1
         self.batchIdx = -1
@@ -361,9 +378,11 @@ class DataReader:
                     break
                 self.batchIdx = i
                 self.sig_marker = self.sig_chunk_size * i
-                f_name = self.fin + "BB_images_batch%i.h5" % i 
+                if(self.data): preface = 'data_'
+                else: preface = 'BB_'
+                f_name = self.fin + preface + "images_batch%i.h5" % i 
                 if(not os.path.exists(f_name)):
-                    f_name = self.fin + "BB_batch%i.h5" % i
+                    f_name = self.fin + preface + "batch%i.h5" % i
                 self.read_batch(f_name)
         else:
             self.read_batch(self.fin)
@@ -548,7 +567,7 @@ class DataReader:
                 s_stop = self.sig_marker + self.sig_chunk_size
 
                 if(s_stop > self.nsig_in_file):
-                    print("Not enough signal events in file, exiting")
+                    print("Not enough signal events in file (more than %i), exiting" % self.nsig_in_file)
                     exit(1)
                 if(self.hadronic_only):
                     is_lep = self.sig_file_h5['event_info'][s_start:s_stop:,4] # stored as a float
@@ -888,7 +907,7 @@ class DataReader:
         sig_weight = tot_bkg_weight / n_sig
 
         print(n_bkg_low, n_bkg_mid, n_bkg_high, n_sig)
-        print(bkg_high_weight, bkg_mid_weight, sig_weight)
+        print("TNT weights: bkg_high %.3f, bkg_mid %.3f, sig_weight %.3f"  %(bkg_high_weight, bkg_mid_weight, sig_weight))
 
 
         self.keys.add('weight' + extra_str)
@@ -999,7 +1018,7 @@ class DataReader:
         else:
             return self.f_storage[key][()][self.mask]
 
-    def gen(self, key1, key2, key3 = None, batch_size = 256):
+    def gen(self, key1, key2, key3 = None, batch_size = 256, key1_norm =None, key2_norm = None, key3_norm = None):
         if(not self.ready):
             print("Datareader has not loaded data yet! Must call read() first ")
             exit(1)
@@ -1018,7 +1037,8 @@ class DataReader:
         mask_ = self.mask
 
 
-        h5_gen = MyGenerator(self.f_storage, n_objs, batch_size, key1, key2, key3, mask = mask_)
+        h5_gen = MyGenerator(self.f_storage, n_objs, batch_size, key1, key2, key3, mask = mask_, 
+                                                    key1_norm = key1_norm,key2_norm = key2_norm, key3_norm = key3_norm)
         return h5_gen
 
     def labeler_scores(self, model, key, chunk_size = 10000):

@@ -4,107 +4,69 @@ from utils.TrainingUtils import *
 import h5py
 import time
 
-#fin = "../data/BB_v2_3500_images/BB_images_testset.h5"
-#fin = "../data/BB_v2_2500_images/BB_images_testset.h5"
-fin = "../data/BB_UL_MC_small_v2_deta_images/"
-time_start = time.time()
-batch_start = 20
-batch_stop = 30
-sig_idx = 1
-#roc_plot_name = "s%i_event_roc_cwola_all_kfold_qt.png" % sig_idx
-#sic_plot_name = "s%i_event_sic_cwola_all_kfold_qt.png" % sig_idx
-roc_plot_name = "s%i_event_roc_ae_latent_cmp.png" % sig_idx
-sic_plot_name = "s%i_event_sic_ae_latent_cmp.png" % sig_idx
-m_low = 2250.
-m_high = 2750.
-#m_low = 3150.
-#m_high = 3850.
+parser = input_options()
+options = parser.parse_args()
 
-no_minor_bkgs = True
+roc_plot_name = "event_roc_%s.png" %( options.label)
+sic_plot_name = "event_sic_%s.png" % (options.label)
 
-d_eta = 1.3
+compute_mjj_window(options)
+options.keep_mlow = options.mjj_low
+options.keep_mhigh = options.mjj_high
+
+options.no_minor_bkgs = True
+options.hadronic_only = True
+options.deta = 1.3
 
 
 single_file = True
-hadronic_only = True
 
 sic_max = 10
 
-plot_dir = "../plots/dec1_ae_eta_dep/"
-model_dir = "../models/AEs/nov29/"
+#model_dir = "cwola_qstar_test/"
+model_dir = "../runs/smallnet_test/"
+#model_dir = "../models/AEs/"
 
 #plot_dir = "../runs/cwola_40spb_fullrun/"
 #model_dir = "../runs/cwola_40spb_fullrun/"
 
 
 f_models = [
-"all_latent4_4batch.h5",
-"all_4batch.h5",
-"all_latent8_4batch.h5",
-"all_latent10_4batch.h5",
-#"all_8batch.h5",
-#"deta_4batch.h5",
-#"deta_8batch.h5",
-#"deta_nov29_8batch.h5",
-#"deta_nov29_24batch.h5",
-#"{j_label}_autoencoder_m3500.h5", 
-#"july22/{j_label}_deta_sig00_TNT0_seed1_s3.h5",
-#"july22/{j_label}_deta_sig00_TNT0_seed2_s3.h5",
-#"july22/{j_label}_deta_sig00_TNT0_seed3_s3.h5",
-#"july22/{j_label}_deta_sig00_TNT0_seed4_s3.h5",
-#"july22/{j_label}_deta_sig00_TNT0_seed5_s3.h5",
+        #'jrand_autoencoder_m3000.h5',
+        #'AEs_CR_may16/jrand_AE_kfold0_mbin13.h5',
+#['test_spb30.h5', 'j2_test_spb80.h5'],
+#['j1_wp_spb20.h5', 'j2_wp_spb20.h5'],
+'{j_label}_wp_3tev_test.h5',
+'{j_label}_wp_3tev_smallnet_test.h5',
+#'{j_label}_wp_3tev_supervised_test.h5',
+#'{j_label}_wp_3tev_supervised_smallnet_test.h5',
+'jrand_wp_3tev_test2.h5',
+'jrand_wp_smallnet_3tev_test2.h5',
+#'jrand_wp_3tev_smallnet_test.h5',
 
-#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed1/",
-#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed2/",
-#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed3/",
-#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed4/",
-#"july21/{j_label}_cwola_ensemble_eff_cut_num_model5_seed5/",
-
-#"july22/jrand_v2_deta_sig025_TNT0_seed1_s{sig_idx}.h5",
-#"july22/jrand_v2_deta_sig025_TNT0_seed2_s{sig_idx}.h5",
-#"july22/jrand_v2_deta_sig025_TNT0_seed3_s{sig_idx}.h5",
-#"july22/jrand_v2_deta_sig025_TNT0_seed4_s{sig_idx}.h5",
-#"july22/jrand_v2_deta_sig025_TNT0_seed5_s{sig_idx}.h5",
-
-#"aug18/jrand_v2_deta_sig01_TNT0_seed1_s{sig_idx}.h5",
-#"aug18/jrand_v2_deta_sig01_TNT0_seed2_s{sig_idx}.h5",
-#"aug18/jrand_v2_deta_sig01_TNT0_seed3_s{sig_idx}.h5",
-#"aug18/jrand_v2_deta_sig01_TNT0_seed4_s{sig_idx}.h5",
-#"aug18/jrand_v2_deta_sig01_TNT0_seed5_s{sig_idx}.h5",
-
-#"{j_label}_kfold0/",
-#"{j_label}_kfold1/",
-#"{j_label}_kfold2/",
-#"{j_label}_kfold3/",
-#"{j_label}_kfold4/",
-
-#"aug18/jrand_v2_xval5_ensemble_sig01_seed1/",
-#"aug18/jrand_v2_xval5_ensemble_sig01_seed2/",
-#"aug18/jrand_v2_xval5_ensemble_sig01_seed3/",
-#"aug18/jrand_v2_xval5_ensemble_sig01_seed4/",
-#"aug18/jrand_v2_xval5_ensemble_sig01_seed5/",
 ]
 
+
 labels = [
-         "AE Latent Size 4",
-         "AE Latent Size 6",
-         "AE Latent Size 8",
-         "AE Latent Size 10",
-#         "AE 8 batch (dEta cut, rotated images)",
-#         "AE 24 batch (dEta cut, rotated images)",
-#         "AE 4 batch",
-#         "AE 8 batch",
-#         "AE 4 batch (dEta cut)",
-#         "AE 8 batch (dEta cut)",
+        #'AE old',
+        #'AE new',
+        'cwola 30k params',
+        'cwola 3k params',
+        #'supervised 30k params',
+        #'supervised 3k params',
+        'TNT 30k params',
+        'TNT 3k params',
         ]
 
 
 
 
 #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
-model_type = [1,1,1,1,1,1]
+model_type = [2,2,2,2,2,2]
+#model_type = [2,2,2,2,2,2]
 num_models = [1,1,1,1,1,1]
 rand_sort = [False, False, False, False, False, False]
+#rand_sort = [True, True]
 
 #f_models = ["autoencoder_m3500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]
 #f_models = ["autoencoder_m3500.h5",  "mar15_deta/dense_deta_sig025_TNT1_s%i.h5", "mar15_deta/cwola_hunting_dense_deta_sig025_s%i.h5"]
@@ -124,17 +86,13 @@ logy= True
 need_images = 1 in model_type
 
 if(need_images):
-    keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'jet_kinematics']
+    options.keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'jet_kinematics']
 else:
-    keys = ["j1_features", "j2_features", "jj_features", 'jet_kinematics']
+    options.keys = ["j1_features", "j2_features", "jj_features", 'jet_kinematics']
 
 
 if(single_file):
-    num_data = -1
-    data_start = 0
-    data = DataReader(fin=fin, sig_idx = sig_idx, data_start = data_start, data_stop = data_start + num_data, keys = keys, keep_mlow = m_low, keep_mhigh = m_high, 
-            hadronic_only = hadronic_only, deta = deta, batch_start = batch_start, batch_stop = batch_stop, no_minor_bkgs = no_minor_bkgs )
-    data.read()
+    data, _ = load_dataset_from_options(options)
     j1_dense_inputs = data['j1_features']
     j2_dense_inputs = data['j2_features']
     jj_dense_inputs = data['jj_features']
@@ -205,29 +163,30 @@ for idx,f in enumerate(f_models):
         else:
             j1_score, j2_score = get_jet_scores(model_dir, f, model_type[idx], j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, num_models = num_models [idx])
         Y = Y.reshape(-1)
-        j1_qs = quantile_transform(j1_score.reshape(-1,1)).reshape(-1)
-        j2_qs = quantile_transform(j2_score.reshape(-1,1)).reshape(-1)
-        #sig_eff = np.array([len(Y[(j1_score > np.percentile(j1_score,i)) & (j2_score > np.percentile(j2_score,i)) & (Y==1)])/len(Y[Y==1]) for i in np.arange(0.,100., 100./n_points)])
-        #bkg_eff = np.array([len(Y[(j1_score > np.percentile(j1_score,i)) & (j2_score > np.percentile(j2_score,i)) & (Y==0)])/len(Y[Y==0]) for i in np.arange(0.,100., 100./n_points)])
-        sig_eff = np.array([(Y[(j1_qs > perc) & (j2_qs > perc) & (Y==1)].shape[0])/(Y[Y==1].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
-        bkg_eff = np.array([(Y[(j1_qs > perc) & (j2_qs > perc) & (Y==0)].shape[0])/(Y[Y==0].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
-        sig_eff = np.clip(sig_eff, 1e-8, 1.)
-        bkg_eff = np.clip(bkg_eff, 1e-8, 1.)
 
-        #print('bkg eff 10% ',f,np.percentile(j1_score,10),np.percentile(j2_score,10),bkg_eff[11])
-        sig_effs.append(sig_eff)
-        bkg_effs.append(bkg_eff)
-        sics.append(sig_eff/np.sqrt(bkg_eff))
-        aucs.append(auc(bkg_eff, sig_eff))
+        j1_QT = QuantileTransformer(copy = True)
+        j1_qs = j1_QT.fit_transform(j1_score.reshape(-1,1)).reshape(-1)
+        j2_QT = QuantileTransformer(copy = True)
+        j2_qs = j2_QT.fit_transform(j2_score.reshape(-1,1)).reshape(-1)
+
+        #j1_qs = quantile_transform(j1_score.reshape(-1,1)).reshape(-1)
+        #j2_qs = quantile_transform(j2_score.reshape(-1,1)).reshape(-1)
+        #sig_eff = np.array([(Y[(j1_qs > perc) & (j2_qs > perc) & (Y==1)].shape[0])/(Y[Y==1].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
+        #bkg_eff = np.array([(Y[(j1_qs > perc) & (j2_qs > perc) & (Y==0)].shape[0])/(Y[Y==0].shape[0]) for perc in np.arange(0.,1., 1./n_points)])
+        jj_scores = combine_scores(j1_qs, j2_qs, options.score_comb)
+
 
 
     else:
         jj_scores = get_jj_scores(model_dir, model_name[idx], model_type[idx], jj_images, jj_dense_inputs)
-        bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, jj_scores)
-        sig_effs.append(sig_eff)
-        bkg_effs.append(bkg_eff)
-        sics.append(sig_eff/np.sqrt(bkg_eff))
-        aucs.append(auc(bkg_eff, sig_eff))
+
+    bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, jj_scores)
+    bkg_eff = np.clip(bkg_eff, 1e-8, 1.)
+    sig_eff = np.clip(sig_eff, 1e-8, 1.)
+    sig_effs.append(sig_eff)
+    bkg_effs.append(bkg_eff)
+    sics.append(sig_eff/np.sqrt(bkg_eff))
+    aucs.append(auc(bkg_eff, sig_eff))
 
 
             
@@ -265,8 +224,8 @@ else:
 plt.tick_params(axis='x', labelsize=fs_leg)
 plt.tick_params(axis='y', labelsize=fs_leg)
 plt.legend(loc="upper left", fontsize= fs_leg)
-plt.savefig(plot_dir+roc_plot_name)
-print("Saving file to %s " % (plot_dir + roc_plot_name))
+plt.savefig(options.output+roc_plot_name)
+print("Saving file to %s " % (options.output + roc_plot_name))
 
 #sic curve
 eff_min = 1e-3
@@ -291,12 +250,8 @@ plt.tick_params(axis='x', labelsize=fs_leg)
 plt.tick_params(axis='y', labelsize=fs_leg)
 plt.grid(axis = 'y', linestyle='--', linewidth = 0.5)
 plt.legend(loc="best", fontsize= fs_leg)
-plt.savefig(plot_dir+sic_plot_name)
-print("Saving file to %s " % (plot_dir + sic_plot_name))
-
-time_done = time.time()
-
-print("Took %s" % (time_done - time_start))
+plt.savefig(options.output+sic_plot_name)
+print("Saving file to %s " % (options.output + sic_plot_name))
 
 del data
 

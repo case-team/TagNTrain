@@ -29,9 +29,16 @@ def create_model_ensemble(options):
         if(not os.path.exists(options.output)): os.system("mkdir %s" % options.output)
 
     opts_list = []
+
+    trained = 0
     for i in range(num_ensemble_models):
         options_copy = copy.deepcopy(options)
         options_copy.output += "model%i.h5" % i
+
+
+        if(options.recover and os.path.exists(options_copy.output)): 
+            trained += 1
+
 
         options_copy.val_batch_start = i*options.num_val_batch
         options_copy.val_batch_stop = (i+1)*options.num_val_batch - 1 
@@ -60,6 +67,10 @@ def create_model_ensemble(options):
             write_options_to_json(options_dict, "train_opts_%i.json" % i )
             opts_list.append("train_opts_%i.json" % i)
 
+    if(options.recover and trained == num_ensemble_models):
+        print("Skipping trainings for %s" % options.output)
+        return
+
     if(options.condor):
         condor_dir = options.output + "condor_jobs/"
         if( not os.path.exists(condor_dir)): os.system("mkdir %s" % condor_dir)
@@ -87,6 +98,7 @@ def create_model_ensemble(options):
         #c_opts.sub = False
         c_opts.input = opts_list
         doCondor(c_opts)
+        #print("SUB")
         for fname in opts_list:
             os.system("rm %s" % fname)
 
@@ -99,5 +111,6 @@ if(__name__ == "__main__"):
     parser.add_argument("--do_ae",  default=False, action = 'store_true',  help="Train autoencoder (default cwola)")
     parser.add_argument("--do_ttbar",  default=False, action = 'store_true',  help="Do ttbar CR training")
     parser.add_argument("--condor",  default=False, action = 'store_true',  help="Submit all NN trainings to condor")
+    parser.add_argument("--recover", dest='recover', action = 'store_true', help = "Retrain jobs that failed")
     options = parser.parse_args()
     create_model_ensemble(options)

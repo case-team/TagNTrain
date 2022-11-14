@@ -9,8 +9,8 @@ from training.train_autoencoder import *
 
 
 def train_from_param_dict(fname):
-
-    options = get_options_from_json(fname)
+    if('.pkl' in fname): options = get_options_from_pkl(fname)
+    else: options = get_options_from_json(fname)
     odict = options.__dict__
     if('do_TNT' in odict.keys() and options.do_TNT): tag_and_train(options)
     elif('do_ae' in odict.keys() and options.do_ae): train_autoencoder(options)

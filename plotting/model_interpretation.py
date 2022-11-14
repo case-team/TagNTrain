@@ -63,6 +63,7 @@ def model_interp(options):
         options.keys.append('jj_features' )
     #keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'mjj']
 
+    compute_mjj_window(options)
     options.keep_mlow = options.mjj_low
     options.keep_mhigh = options.mjj_high
     data, _ = load_dataset_from_options(options)

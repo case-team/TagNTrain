@@ -6,6 +6,7 @@ from .OptionUtils import *
 from .DataReader import *
 from .ModelEnsemble import *
 from .Consts import *
+import time
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, roc_auc_score
@@ -296,6 +297,9 @@ class AdditionalValidationSets(tf.keras.callbacks.Callback):
             print("\n")
 
 
+def get_norms(h5_file):
+    with h5py.File(h5_file, mode = 'r') as f :
+        return f['norms'][()]
 
 
 def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=None,  num_models = 1, batch_size = 512):
@@ -305,11 +309,17 @@ def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=
 
         if(model_type == 0):  #cnn
             j_score = j_model.predict(j_images, batch_size = batch_size)
-        elif(model_type == 1): #autoencoder
+        elif(model_type == 1): #CNN autoencoder
             j_reco_images = j_model.predict(j_images, batch_size=batch_size)
             j_score =  np.mean(np.square(j_reco_images - j_images), axis=(1,2))
         elif(model_type == 2): #dense
             j_score = j_model.predict(j_dense_inputs, batch_size = batch_size)
+        elif(model_type == -1): #dense autoencoder
+            #Hopefully no ensembles of this for now? Would break
+            norms = get_norms(model_name)
+            norm_dense_inputs = (j_dense_inputs - norms[0])/norms[1]
+            j_reco_dense = j_model.predict(norm_dense_inputs, batch_size=batch_size)
+            j_score =  np.mean(np.square(j_reco_dense - norm_dense_inputs), axis=1)
     elif(model_type == 5): #vae
         j_model = vae(0, model_dir = model_dir + "j_" +  model_name)
         j_model.load()
@@ -361,6 +371,18 @@ def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=
         elif(model_type == 2): #dense
             j1_score = j1_model.predict(j1_dense_inputs, batch_size = batch_size)
             j2_score = j2_model.predict(j2_dense_inputs, batch_size = batch_size)
+        elif(model_type == -1): #dense autoencoder
+            #Hopefully no ensembles of this for now? Would break
+            j1_norms = get_norms(j1_fname)
+            j2_norms = get_norms(j2_fname)
+
+            j1_dense_inputs_norm = (j1_dense_inputs - j1_norms[0])/j1_norms[1]
+            j1_reco_dense = j1_model.predict(j1_dense_inputs_norm, batch_size=batch_size)
+            j1_score =  np.mean(np.square(j1_reco_dense - j1_dense_inputs_norm, axis=1))
+
+            j2_dense_inputs_norm = (j2_dense_inputs - j2_norms[0])/j2_norms[1]
+            j2_reco_dense = j2_model.predict(j2_dense_inputs_norm, batch_size=batch_size)
+            j2_score =  np.mean(np.square(j2_reco_dense - j2_dense_inputs_norm, axis=1))
     elif(model_type == 5): #vae
         j1_model = vae(0, model_dir = model_dir + "j1_" +  model_name)
         j1_model.load()
@@ -389,4 +411,37 @@ def get_jj_scores(model_dir, model_name, model_type, jj_images = None, jj_dense_
         return None
 
     return scores
+
+def combine_scores(j1_scores, j2_scores, score_comb_type = 'mult'):
+    comb_types = ['mult', 'add', 'max', 'min', 'j1', 'j2']
+    if (score_comb_type not in  comb_types):
+        print("\n Score combination type %s not recognized! Going with mult as the default" % score_comb_type)
+        return j1_scores * j2_scores
+
+    if(score_comb_type == 'mult'): return j1_scores * j2_scores
+    elif(score_comb_type == 'add'): return j1_scores + j2_scores
+    elif(score_comb_type == 'max'): return np.maximum(j1_scores, j2_scores)
+    elif(score_comb_type == 'min'): return np.minimum(j1_scores, j2_scores)
+    elif(score_comb_type == 'j1'): return j1_scores
+    elif(score_comb_type == 'j2'): return j1_scores
+    else: return j1_scores * j2_scores
+    
+
+
+
+
+class TimeOut(tf.keras.callbacks.Callback):
+    def __init__(self, t0, timeout):
+        super().__init__()
+        self.t0 = t0
+        self.timeout = timeout  # time in hours
+
+    def on_epoch_end(self, epoch, logs=None):
+        if (time.time() - self.t0) > self.timeout * 60 * 60:
+            print(f"\nReached {(time.time() - self.t0) / 3600:.2f} hours of training, stopping")
+            self.model.stop_training = True
+
+    def on_train_end(self, epoch, logs = None):
+        print(f"\nTotal train time was {(time.time() - self.t0) / 3600:.2f} hours ")
+
 

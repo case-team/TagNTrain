@@ -10,6 +10,12 @@ import numpy as np
 
 fig_size = (12,9)
 
+def draw_mbins(plot, ymin = 0., ymax = 0.):
+    for mass in mass_bins1:
+        plot.axvline(mass, color = 'blue', linestyle = 'dashed', linewidth = 0.7)
+    for mass in mass_bins2:
+        plot.axvline(mass, color = 'green', linestyle = 'dashed', linewidth = 0.7)
+
 def add_patch(legend, patch, name):
     from matplotlib.patches import Patch
     ax = legend.axes

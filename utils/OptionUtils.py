@@ -21,7 +21,7 @@ def input_options():
     parser.add_argument("--iter", dest = "tnt_iter", type = int, default=0, help="What iteration of  the tag & train algorithm this is (Start = 0).")
     parser.add_argument("--num_epoch", type = int, default=100, help="How many epochs to train for")
     parser.add_argument("--data_start", type = int, default=0, help="What event to start with")
-    parser.add_argument("--data_sop", type = int, default=-1, help="What event to stop on")
+    parser.add_argument("--data_stop", type = int, default=-1, help="What event to stop on")
     parser.add_argument("--num_data", type = int, default=-1, help="How many events to train on")
     parser.add_argument("--max_events", type = int, default=-1, help="Max number of events ")
     parser.add_argument("--val_max_events", type = int, default=-1, help="Max number of events for val sample")
@@ -47,11 +47,13 @@ def input_options():
     parser.add_argument("--deta", type=float, default = -1, help="Delta eta cut")
     parser.add_argument("--deta_min", default = -1, type = float, help = "Minimum dEta")
     parser.add_argument("--sideband", default = False, action = 'store_true', help = "Add cuts for sideband")
+    parser.add_argument("--data", default = False, action = 'store_true', help = "Is data")
 
     parser.add_argument("--no_ptrw", default = False, action="store_true",  help="Don't reweight events to have matching pt distributions in sig-rich and bkg-rich samples")
     parser.add_argument("--no_sample_weights", default = False, action="store_true", help="Don't do weighting of different signal / bkg regions")
 
-    parser.add_argument("--large", default = False, action = "store_true", help="Use larger NN archetecture")
+    parser.add_argument("--large_net", default = False, action = "store_true", help="Use larger NN archetecture")
+    parser.add_argument("--small_net", default = False, action = "store_true", help="Use smaller NN archetecture")
     parser.add_argument("--sig_idx", type = int, default = 1,  help="What index of signal to use")
     parser.add_argument("--sig_file", type = str, default = "",  help="Load signal from separate file")
     parser.add_argument("--replace_ttbar", default = False, action = "store_true", help = "Filter out ttbar events from the dataset (to replace with separate sample")
@@ -91,9 +93,12 @@ def input_options():
     parser.add_argument("--ptsort", default = False, action="store_true",  help="Sort j1 and j2 by pt rather than by jet mass")
     parser.add_argument("--randsort", default = False, action="store_true",  help="Sort j1 and j2 randomly rather than by jet mass")
 
+    parser.add_argument("--score_comb", default = "mult", help = 'How to combine the anomaly scores from two jets into one')
+
     parser.add_argument("--TNT_bkg_cut", default = 3, type = int,  
             help="What type of mass window for bkg-like sample (0: AE cut and SB, 1:AE cut only, SB and SR, 2: AE cut and SR, 3: AE cut or SR)")
     parser.add_argument("--AE_size", default = 6, type = int,  help="Size of AE latent space")
+    parser.add_argument("--dense_AE", default =False, action = 'store_true')
     return parser
 
 def load_dataset_from_options(options):
@@ -169,21 +174,24 @@ def load_signal_file(options):
     s_data.read()
     return s_data
     
+def lookup_mjj_bins(mbin):
+        if(mbin > 10):
+            mbins = mass_bins2
+            mbin_idx = mbin - 10
+        else:
+            mbins = mass_bins1
+            mbin_idx = mbin
+        mjj_low = mbins[mbin_idx]
+        mjj_high = mbins[mbin_idx+1]
+        sb_low = mbins[mbin_idx-1]
+        sb_high = mbins[mbin_idx+2]
+        return sb_low, mjj_low, mjj_high, sb_high
 
 
 def compute_mjj_window(options):
-
     if(options.mbin > 0): # use predefined binning
-        if(options.mbin > 10):
-            mbins = mass_bins2
-            options.mbin_idx = options.mbin - 10
-        else:
-            mbins = mass_bins1
-            options.mbin_idx = options.mbin
-        options.mjj_low = mbins[options.mbin_idx]
-        options.mjj_high = mbins[options.mbin_idx+1]
-        options.keep_mlow = mbins[options.mbin_idx-1]
-        options.keep_mhigh = mbins[options.mbin_idx+2]
+        options.keep_mlow, options.mjj_low, options.mjj_high, options.keep_mhigh = lookup_mjj_bins(options.mbin)
+
 
     else: #compute 
 

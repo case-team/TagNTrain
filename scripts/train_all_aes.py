@@ -51,7 +51,7 @@ def train_all_aes(options):
             rel_opts = get_options_from_json(options.output + "run_opts.json")
             print(rel_opts.__dict__)
             rel_opts.keep_LSF = options.keep_LSF #quick fix
-            rel_opts.num_events = options.num_events #quick fix
+            #rel_opts.num_events = options.num_events #quick fix
             rel_opts.recover = options.recover
             rel_opts.condor = options.condor
             if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
@@ -149,9 +149,9 @@ def train_all_aes(options):
                 
                 t_opts = copy.deepcopy(k_options)
                 t_opts.mbin = mbin
-                t_opts.max_events = 150000
+                t_opts.max_events = 100000
                 t_opts.num_epoch = 30
-                t_opts.val_max_events = 30000
+                t_opts.val_max_events = 50000
                 t_opts.label = k_options.label + "_jrand_ae_mbin%i" % mbin
                 t_opts.output = k_options.output + "jrand_ae_mbin%i/" % mbin
                 if(not os.path.exists(t_opts.output)): os.system("mkdir %s" % t_opts.output)
@@ -193,13 +193,34 @@ def train_all_aes(options):
     if(get_condor):
         if(not os.path.exists(k_options.output)): os.system("mkdir %s/models" % options.output)
         for k,k_options in enumerate(kfold_options):
+            k_options.output += "kfold%i/" % k
             k_options.label += "_kfold%i" % k
 
             for idx, mbin in enumerate(mass_bin_idxs):
-                cmd = "xrdcp -p root://cmseos.fnal.gov//store/user/oamram/Condor_outputs/%s/model%i.h5 %s/models/jrand_AE_kfold%i_mbin%i.h5" % (k_options.label, idx, options.output, k, mbin)
+                output_label = k_options.label
+
+                #check for resubmititions
+                condor_dir = k_options.output + "condor_jobs/" + k_options.label
+
+                #f =  condor_dir + "x/" + output_label + "x" + "_job%i.sh" % (idx)
+                #print(f)
+                while(os.path.exists(condor_dir + "x/" + output_label + "x" + "_job%i.sh" % (idx))):
+                    print("Resubmiission script %s exists, Add x " % condor_dir + "x/" + output_label + "x" + "_job%i.sh" % (idx))
+                    condor_dir += "x"
+                    output_label += "x"
+
+
+                cmd = "xrdcp -p root://cmseos.fnal.gov//store/user/oamram/Condor_outputs/%s/model%i.h5 %s/models/jrand_AE_kfold%i_mbin%i.h5" % (output_label, idx, options.output, k, mbin)
                 print(cmd)
                 os.system(cmd)
 
+        #check whats missing
+        for k,k_options in enumerate(kfold_options):
+            k_options.label += "_kfold%i" % k
+
+            for idx, mbin in enumerate(mass_bin_idxs):
+                fname = "%s/models/jrand_AE_kfold%i_mbin%i.h5" % (options.output, k, mbin)
+                if(not os.path.exists(fname)): print("Missing : %s" % fname)
 
 
 
@@ -211,7 +232,6 @@ if(__name__ == "__main__"):
     parser.add_argument("--lfolds", default = 4, type = int)
     parser.add_argument("--numBatches", default = 40, type = int)
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
-    parser.add_argument("--num_events", default = False, action = 'store_true', help = "Make limit plot in terms of num events (removes common prefactors)")
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.add_argument("--recover", dest='recover', action = 'store_true', help = "Retrain jobs that failed")

@@ -107,6 +107,8 @@ def draw_sys_variations(options, frac_const = 5):
 
         diff = abs(ratios[0] - 1.0)
 
+
+
         if(any(diff > frac_unc )):
             print(jme_var, JS, ratios[0])
             relevant_uncs.add(jme_var)

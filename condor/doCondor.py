@@ -37,7 +37,6 @@ def condor_options():
             help="sh script to be run by jobs (if splitting, should take eosoutput, nJobs and iJob as args)")
     parser.add_argument("--dry-run", dest="dryRun", default=False, action="store_true", 
             help="Do nothing, just create jobs if requested")
-    parser.add_argument("--combine", dest='with_combine', default=False, action="store_true", help="include combine in tarball")
 
     # Monitor arguments (submit,check,resubmit failed)  -- just pass outodir as usual but this time pass --monitor sub --monitor check or --monitor resub
     parser.add_argument("--sub", default=False, action="store_true", help="Submit jobs")
@@ -51,7 +50,7 @@ def condor_options():
     parser.add_argument("--tarname", dest='tarname', default = "CASE", help="Name of directory to tar (relative to cmssw_base)")
     parser.add_argument("--tarexclude", dest='tarexclude', default = '', 
             help="Name of directories to exclude from the tar (relative to cmssw_base), format as comma separated string (eg 'dir1, dir2') ")
-    parser.add_argument("--cmssw", default = False, action="store_true",  help="Shortcut to create tarball for CMSSW environment for DY AFB analysis (with combine)")
+    parser.add_argument("--cmssw", default = False, action="store_true",  help="Use full CMSSW tarball")
     parser.add_argument("--case", default = False, action="store_true",  help="Shortcut to create tarball for case  analysis")
     parser.add_argument("--root_files", dest='root_files', default = False, action="store_true",  help="Shortcut to create tarball for root files of AFB analysis")
     parser.add_argument("--no_rename", default = False, action="store_true",  help="Don't rename files for storing on EOS")
@@ -87,7 +86,7 @@ def doCondor(options):
         sub_file.write('pwd\n')
         sub_file.write('export SCRAM_ARCH=%s\n' % scram_arch)
 
-        if(not options.with_combine):
+        if(not options.cmssw):
             sub_file.write('eval `scramv1 project CMSSW %s`\n'% (cmssw_ver))
             sub_file.write('cat my_script.sh \n')
             sub_file.write('mv my_script.sh %s/src/ \n'% (cmssw_ver))
@@ -95,17 +94,18 @@ def doCondor(options):
             sub_file.write('eval `scramv1 runtime -sh`\n')
 
         else:
-            sub_file.write('xrdcp %s CMSSW.tgz \n' % eos_cmssw_file) 
+            sub_file.write('xrdcp %s CASE_CMSSW.tgz \n' % eos_cmssw_file) 
             sub_file.write('cat my_script.sh \n')
-            sub_file.write('tar -xzf CMSSW.tgz \n')
+            sub_file.write('tar -xzvf CASE_CMSSW.tgz \n')
             sub_file.write('ls \n')
             sub_file.write('mv my_script.sh %s/src/ \n' % cmssw_name)
             sub_file.write('cd %s/src \n' % cmssw_name)
             sub_file.write('eval `scramv1 runtime -sh`\n')
-            sub_file.write('scram b ProjectRename \n')
 
         sub_file.write('xrdcp %s tarDir.tgz\n' %eos_an_file)
         sub_file.write('tar -xzvf tarDir.tgz \n')
+        sub_file.write('eval `scramv1 runtime -sh`\n')
+        sub_file.write('scram b ProjectRename \n')
         sub_file.write('scram b -j \n')
         sub_file.write('./my_script.sh %s %i \n' % (eosout,iJob))
         sub_file.write('cd ${_CONDOR_SCRATCH_DIR} \n')
@@ -151,8 +151,9 @@ def doCondor(options):
         excludeList = options.tarexclude.split(',')
         if options.case:
             print("Using CASE tarball options")
-            excludeList = ["CASE/CASEUtils/*.h5",  "CASE/CASEUtils/*.root", "CASE/TagNTrain/data",  "CASE/TagNTrain/runs", "CASE/TagNTrain/plots", "CASE/TagNTrain/condor",
-                    "CASE/CASEUtils/H5_maker", "CASE/CASEUtils/fitting/fit_inputs", "CASE/TagNTrain/models/BB*", "CASE/TagNTrain/models/old"]
+            excludeList = ["CASE/CASEUtils/*.h5",  "CASE/CASEUtils/*.root", "CASE/TagNTrain/data",  "CASE/TagNTrain/runs", "CASE/TagNTrain/plots", "CASE/TagNTrain/combine_sic",
+                    "CASE/TagNTrain/condor", "CASE/LundReweighting",
+                    "CASE/CASEUtils/H5_maker", "CASE/CASEUtils/fitting/fit_inputs", "CASE/TagNTrain/models/BB*", "CASE/TagNTrain/models/old", "CASE/*/DReader*.h5"]
 
             options.tarname = "CASE"
             for item in excludeList:
@@ -168,14 +169,17 @@ def doCondor(options):
         if options.cmssw:
             options.tarname = "CASE_CMSSW"
             print("tarring CMSSW")
-            tar_cmd += " --exclude='%s' " %'*.tgz' 
+            #tar_cmd += " --exclude='%s' " %'*.tgz' 
             tar_cmd += " --exclude='%s' " %'*.png' 
-            tar_cmd += " --exclude='%s' " %'*.root' 
-            tar_cmd += " --exclude='CASE_CMSSW/src/CASE/*' " 
+            #tar_cmd += " --exclude='%s' " %'*.root' 
+            tar_cmd += " --exclude='%s' " %'*nano_mc*.root' 
+            tar_cmd += " --exclude='%s' " %'*hadd*.root' 
+            tar_cmd += " --exclude='%s' " %'*.h5' 
+            tar_cmd += " --exclude='CASE_analysis/src/CASE/*' " 
             #tar_cmd += " --exclude='%s' " %'*.h5' 
-            tar_cmd += " --exclude=PhysicsTools/"
+            #tar_cmd += " --exclude=PhysicsTools/"
             tar_cmd += " --exclude='%s' " %'*.git*' 
-            tar_cmd += " -zcf %s -C %s %s" % (options.tarname + ".tgz", "$CMSSW_BASE/../", cmssw_name)
+            tar_cmd += " -zcvf %s -C %s %s" % (options.tarname + ".tgz", "$CMSSW_BASE/../", cmssw_name)
 
 
         print("Executing tar command %s \n" % tar_cmd)
@@ -216,10 +220,11 @@ def doCondor(options):
         if(options.overwrite):
             if(os.path.exists(options.outdir + options.name)):
                 os.system("rm -r " + options.outdir + options.name)
-        while(os.path.exists(options.outdir + options.name) and len(os.listdir(options.outdir + options.name)) != 0):
-            print("Directory %s exists, adding an x" % options.outdir + options.name)
-            options.name += "x"
-            #os.system('rm -r %s' % (options.outdir + options.name))
+        else:
+            while(os.path.exists(options.outdir + options.name) and len(os.listdir(options.outdir + options.name)) != 0):
+                print("Directory %s exists, adding an x" % options.outdir + options.name)
+                options.name += "x"
+                #os.system('rm -r %s' % (options.outdir + options.name))
         print("Dir is %s" %( options.outdir + options.name))
         eos_dir_name = EOS_base + 'Condor_outputs/' + options.name
         #os.system("eosrm -r %s" % eos_dir_name)

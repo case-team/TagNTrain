@@ -175,7 +175,8 @@ def tag_and_train(options):
 
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
-    cbs = [tf.keras.callbacks.History()]
+    timeout = TimeOut(t0=time.time(), timeout=24.0) #stop training after 30 hours to avoid job timeout
+    cbs = [tf.keras.callbacks.History(), timeout]
     early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)
     
@@ -226,11 +227,18 @@ def tag_and_train(options):
         print("Creating model %i" % model_idx)
         if(options.model_start == ""):
             if(options.use_images):
-                cnn_shape = (32,32,1)
-                model = CNN(cnn_shape)
+                if(not options.large_net):
+                    model = CNN(cnn_shape)
+                else:
+                    model = CNN_large(cnn_shape)
             else:
                 dense_shape = data[x_key].shape[-1]
-                model = dense_net(dense_shape)
+                #if('small_net' in options.__dict__ and options.small_net):
+                if(options.small_net or t_data.nTotal < 1e4):
+                    model = dense_small_net(dense_shape)
+                else:
+                    model = dense_net(dense_shape)
+
 
             model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy']
                     )
@@ -269,6 +277,8 @@ def tag_and_train(options):
 
         val_sig_events = val_data_plain[2] > 0.9
         val_bkg_events = val_data_plain[2] < 0.1
+        if(options.eff_cut * np.sum(val_sig_events)  < 20): options.eff_cut = max(options.eff_cut, 0.1)
+        print("Using eff_cut %.2f \n" % options.eff_cut)
         for model_idx in range(options.num_models):
             preds = model_list[model_idx].predict(val_data_plain[0])
             if(np.any(np.isnan(preds))):

@@ -8,35 +8,65 @@ from scipy.special import erf
 import matplotlib
 
 
-def plot_significances(input_files, out_dir):
+def plot_significances(input_files, out_dir, sig_masses = None):
 
     # build arrays of variables to plot
-    mass_list = []
+    if(sig_masses is None):
+        mass_list = []
+    else:
+        mass_list = sig_masses
     pval_list = []
     signif_list = []
+    nPar_list = []
+    fit_prob_list = []
+    fit_start_list = []
+
+    default_fit_start = 1450.
 
     for f in input_files:
         with open(f) as json_file:
             results = json.load(json_file)
 
-        mass_list.append(results["mass"])
+        if(sig_masses is None): mass_list.append(results["mass"])
         pval_list.append(results["pval"])
         signif_list.append(results["signif"])
+        nPar_list.append(results["nPars_QCD"])
+        fit_prob_list.append(results["bkgfit_prob"])
+        #map -1 to starting fit value
+        fit_start_list.append(max(default_fit_start, results['mjj_min']))
 
     xmax = np.amax(mass_list)
 
     corr_sigma = []
     for i in range(1, 6):
         tmp = 0.5-(0.5*(1+erf(i/np.sqrt(2)))-0.5*(1+erf(0/np.sqrt(2))))
-        if i == 1:
-            print(f"This should be 0.1586553: {tmp}")
+        #if i == 1:
+            #print(f"This should be 0.1586553: {tmp}")
         corr_sigma.append(tmp)
+
+    pval_overflow_list = []
+    mass_pval_overflow_list = []
+    for i,p in enumerate(pval_list):
+        if( p < 1e-7):
+            mass_pval_overflow_list.append(mass_list[i])
+            pval_overflow_list.append(2e-7)
+
     mass_list = np.array(mass_list)
     pval_list = np.array(pval_list)
+    mass_bins = [sig_mass_to_mbin(m) for m in mass_list]
+    colors = ['blue' if mbin < 10 else 'green' for mbin in mass_bins]
+
+    mass_pval_overflow_list = np.array(mass_pval_overflow_list)
+    pval_overflow_list = np.array(pval_overflow_list)
+    mass_bins_overflow = [sig_mass_to_mbin(m) for m in mass_pval_overflow_list]
+    colors_overflow = ['blue' if mbin < 10 else 'green' for mbin in mass_pval_overflow_list]
+
     signif_list = np.array(signif_list)
 
+    #pval plot
     plt.style.use(hep.style.CMS)
-    plt.errorbar(mass_list, pval_list, fmt="ko")
+    plt.scatter(mass_list, pval_list, s = 40.0, c = colors)
+    plt.scatter(mass_pval_overflow_list, pval_overflow_list, marker = "v", s = 80.0, c = colors_overflow)
     for i in range(len(corr_sigma)):
         xdash = np.concatenate(([0], mass_list, [8000]))
         plt.plot(xdash, np.full_like(xdash, corr_sigma[i]),
@@ -55,21 +85,65 @@ def plot_significances(input_files, out_dir):
                                            numticks=10)
     ax.yaxis.set_minor_locator(y_minor)
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    draw_mbins(plt, ymin = 1e-7, ymax = 10)
     plt.xlim(1400, xmax + 150.)
     hep.cms.text("Preliminary")
     plt.savefig(join(out_dir, "pval_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
 
+    #signif plot
     plt.style.use(hep.style.CMS)
     hep.cms.text("Preliminary")
-    plt.errorbar(mass_list, signif_list, fmt="ko")
+    plt.scatter(mass_list, signif_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel(r"Significance [$\sigma$]")
     plt.ylim(-0.2, None)
+    draw_mbins(plt)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "signif_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
-    print("Done!")
+
+
+    #nPar_qcd plot
+    plt.style.use(hep.style.CMS)
+    plt.scatter(mass_list, nPar_list, s = 40.0, c = colors)
+    plt.xlabel(r"$m_{jj}$ [GeV]")
+    plt.ylabel("nPars")
+    draw_mbins(plt)
+    plt.ylim(0., np.amax(nPar_list) + 0.5)
+    plt.xlim(1400, xmax + 150.)
+    plt.savefig(join(out_dir, "nPar_plot.png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+    #chi2 prob plot
+    plt.style.use(hep.style.CMS)
+    plt.scatter(mass_list, fit_prob_list, s = 40.0, c = colors)
+    plt.xlabel(r"$m_{jj}$ [GeV]")
+    plt.ylabel("Bkg. Only Fit Prob.")
+    #plt.ylim(1e-8, 1.1)
+    #plt.yscale('log')
+    draw_mbins(plt)
+    plt.ylim(-0.1, 1.1)
+    plt.xlim(1400, xmax + 150.)
+    plt.savefig(join(out_dir, "fit_prob_plot.png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+    #fit start plot
+    plt.style.use(hep.style.CMS)
+    plt.scatter(mass_list, fit_start_list, s = 40.0, c = colors)
+    plt.xlabel(r"$m_{jj}$ [GeV]")
+    plt.ylabel(r"Lowest $m_{jj}$ bin of fit")
+    #plt.ylim(1e-8, 1.1)
+    #plt.yscale('log')
+    draw_mbins(plt)
+    plt.ylim(1300., 2400.)
+    plt.xlim(1400, xmax + 150.)
+    plt.savefig(join(out_dir, "fit_start_plot.png"), dpi=300, bbox_inches="tight")
+    plt.close()
+
+    print("Done! Plots saved to %s" % os.path.abspath(out_dir))
 
 
 
@@ -97,7 +171,11 @@ def mbin_opts(options, mbin, sys = ""):
 
 def full_scan(options):
     if(len(options.label) == 0):
-        options.label = options.output.split("/")[-1]
+        if(options.output[-1] == "/"):
+            options.label = options.output.split("/")[-2]
+        else:
+            options.label = options.output.split("/")[-1]
+
 
     if(options.output[-1] != '/'):
         options.output += '/'
@@ -118,6 +196,7 @@ def full_scan(options):
             rel_opts.keep_LSF = options.keep_LSF #quick fix
             rel_opts.num_events = options.num_events #quick fix
             rel_opts.sys_train_all = options.sys_train_all #quick fix
+            rel_opts.recover = options.recover
             if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
             rel_opts.step = options.step
             if(len(options.effs) >0): rel_opts.effs = options.effs
@@ -151,40 +230,49 @@ def full_scan(options):
     do_plot = options.step == "plot"
 
     get_condor = get_condor or do_selection
+    
 
     #Do trainings
-    if(do_train):
-        for mbin in mass_bin_idxs:
-            t_opts = mbin_opts(options, mbin)
-            t_opts.step = "train"
-            full_run(t_opts)
+    sb_excluded_mbins = [1,11]
+    #if(do_train):
+    #    for mbin in mass_bin_idxs:
+    #        if(options.sideband and mbin in sb_excluded_mbins): continue
+    #        t_opts = mbin_opts(options, mbin)
+    #        t_opts.step = "train"
+    #        full_run(t_opts)
 
-    if(do_selection):
+    if(do_train or do_selection or do_merge or get_condor):
         for mbin in mass_bin_idxs:
+            if(options.sideband and mbin in sb_excluded_mbins): continue
             t_opts = mbin_opts(options, mbin)
-            t_opts.step = "select"
-            t_opts.reload = True
-            full_run(t_opts)
-
-    if(do_merge):
-        for mbin in mass_bin_idxs:
-            t_opts = mbin_opts(options, mbin)
-            t_opts.step = "merge"
-            t_opts.reload = True
+            t_opts.step = options.step
             t_opts.condor = True
+            if(not do_train): t_opts.reload = True
             full_run(t_opts)
 
 
+    #if(do_merge):
+    #    for mbin in mass_bin_idxs:
+    #        if(options.sideband and mbin in sb_excluded_mbins): continue
+    #        t_opts = mbin_opts(options, mbin)
+    #        t_opts.step = "merge"
+    #        t_opts.reload = True
+    #        t_opts.condor = True
+    #        full_run(t_opts)
 
+
+
+    first_sb_sig_mass = 2250.
     if(do_fit):
         for mbin in mass_bin_idxs:
+            if(options.sideband and mbin in sb_excluded_mbins): continue
             t_opts = mbin_opts(options, mbin)
             t_opts.step = "fit"
             t_opts.reload = True
             t_opts.condor = False
             if(options.sideband): t_opts.fit_start = 2000.
             for sig_mass in mass_bin_sig_mass_map[mbin]:
-                if(options.sideband and sig_mass < 2200.): continue
+                if(options.sideband and sig_mass < first_sb_sig_mass): continue
                 t_opts.mjj_sig = sig_mass
                 print("mbin %i, sig_mass %.0f" %(mbin, sig_mass))
                 full_run(t_opts)
@@ -197,26 +285,37 @@ def full_scan(options):
         pvals = []
         file_list = []
         for mbin in mass_bin_idxs:
+            if(options.sideband and mbin in sb_excluded_mbins): continue
             t_opts = mbin_opts(options, mbin)
-            fit_plot = t_opts.output + 'sbFit_test_raw.png'
+
+            fit_plot_dir = t_opts.output + "fit_plots_mbin%i/" % mbin
+            os.system('mkdir %s; mv %s/*.png %s' % (fit_plot_dir, t_opts.output, fit_plot_dir))
+
             for sig_mass in mass_bin_sig_mass_map[mbin]:
-                if(options.sideband and sig_mass < 2200): continue
+                fit_plot = fit_plot_dir + 'sbFit_m%.0f_raw.png' % sig_mass
+                if(options.sideband and sig_mass < first_sb_sig_mass): continue
 
                 os.system('cp ' + fit_plot + ' %s/plots/sbfit_mbin%i_mjj%.0f.png' % (options.output, mbin, sig_mass))
 
                 fit_file = t_opts.output + 'fit_results_%.1f.json' % sig_mass
                 if(os.path.exists(fit_file)):
                     file_list.append(fit_file)
+                    sig_masses.append(sig_mass)
                     with open(fit_file, 'r') as f:
                         fit_params = json.load(f, encoding="latin-1")
-                        sig_masses.append(fit_params['mass'])
                         signifs.append(fit_params['signif'])
                         pvals.append(fit_params['pval'])
+                        #should be the same for all signal masses in the mass bin
+                        nPars_bkg = fit_params["nPars_QCD"]
                 else:
                     print("Missing %s" % fit_file)
+
+            bkg_fit_plot = fit_plot_dir + '%ipar_qcd_fit_binned.png' % nPars_bkg
+            os.system('cp ' + bkg_fit_plot + ' %s/plots/bkgfit_mbin%i.png' % (options.output, mbin))
+
         
         print(list(zip(sig_masses, signifs)))
-        plot_significances(file_list, options.output + "plots/")
+        plot_significances(file_list, options.output + "plots/", sig_masses = sig_masses)
             
 
     write_params(options.output + "saved_params.json", options.saved_params)
@@ -239,6 +338,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--num_events", default = False, action = 'store_true', help = "Make limit plot in terms of num events (removes common prefactors)")
     parser.add_argument("--sys_train_all", default = False, action = 'store_true', help = "Perform re-training for all systematics")
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--recover", dest='recover', action = 'store_true', help = "Retrain jobs that failed")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.set_defaults(reload=True)
     parser.add_argument("--condor", dest = 'condor', action = 'store_true')

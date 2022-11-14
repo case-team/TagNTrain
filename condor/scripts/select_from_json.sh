@@ -16,3 +16,4 @@ python3 ../scripts/classifier_selection.py ${_CONDOR_SCRATCH_DIR}/select_opts_KF
 
 xrdcp -f FNAME ${1}
 xrdcp -f FNAME.npz ${1}
+xrdcp -f sig_shape* ${1}

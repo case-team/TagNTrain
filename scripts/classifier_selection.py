@@ -11,7 +11,7 @@ def get_features(data, systematic = ""):
         j1_images = data['j1_images']
         j2_images = data['j2_images']
     if('jj_images' in data.keys): jj_images = data['jj_images']
-    if('j1_features' in options.keys):
+    if('j1_features' in data.keys):
         j1_dense_inputs = data['j1_features']
         j2_dense_inputs = data['j2_features']
 
@@ -35,6 +35,7 @@ def get_features(data, systematic = ""):
 
 def classifier_selection(options):
     print("\n")
+    compute_mjj_window(options)
     options.keep_mlow = options.keep_mhigh = -1
     print(options.__dict__)
 
@@ -92,13 +93,13 @@ def classifier_selection(options):
             j2_qs = j2_QT.fit_transform(j2_score.reshape(-1,1)).reshape(-1)
 
             #combine scores into one
-            jj_scores = j1_qs * j2_qs
+            jj_scores = combine_scores(j1_qs, j2_qs, options.score_comb)
 
             if(sig_only_data is not None):
                 j1_sig_score, j2_sig_score = get_jet_scores("", f, options.model_type, j1_sig_images, j2_sig_images, j1_dense_sig_inputs, j2_dense_sig_inputs, num_models = options.num_models)
                 j1_sig_qs = j1_QT.transform(j1_sig_score.reshape(-1,1)).reshape(-1)
                 j2_sig_qs = j2_QT.transform(j2_sig_score.reshape(-1,1)).reshape(-1)
-                jj_sig_scores = j1_sig_qs * j2_sig_qs
+                jj_sig_scores = combine_scores(j1_sig_qs, j2_sig_qs, options.score_comb)
 
 
         else:
@@ -121,15 +122,22 @@ def classifier_selection(options):
     for eff in options.effs:
 
         use_sidebands = True
-        window_size = (options.mjj_high - options.mjj_low)/2.
-        window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
+        weighted_sidebands = True
 
-        window_low_size = window_frac*options.mjj_low / (1 + window_frac)
-        window_high_size = window_frac*options.mjj_high / (1 - window_frac)
-        sb_mlow = options.mjj_low - window_low_size
-        sb_mhigh = options.mjj_high + window_high_size
+        if(options.mbin > 0):
+            sb_mlow, mjj_low, mjj_high, sb_mhigh = lookup_mjj_bins(options.mbin)
+        else:
 
-        in_sb = ((mjj> sb_mlow) & (mjj < options.mjj_low)) | ((mjj > options.mjj_high) & (mjj < sb_mhigh))
+            window_size = (options.mjj_high - options.mjj_low)/2.
+            window_frac = window_size / ((options.mjj_high + options.mjj_low)/ 2.)
+
+            window_low_size = window_frac*options.mjj_low / (1 + window_frac)
+            window_high_size = window_frac*options.mjj_high / (1 - window_frac)
+            sb_mlow = options.mjj_low - window_low_size
+            sb_mhigh = options.mjj_high + window_high_size
+            mjj_low = options.mjj_low
+            mjj_high = options.mjj_high
+
 
         print("Will select events with efficiency %.3f" % eff)
         percentile_cut = 100. - eff
@@ -140,9 +148,35 @@ def classifier_selection(options):
 
         if(eff == 100.):
             mask = mjj> 0.
+            thresh = 0.
         else:
+            
+            print("bins: %.0f %.0f %.0f %.0f" % (sb_mlow, mjj_low, mjj_high, sb_mhigh))
+            low_sb = ((mjj> sb_mlow) & (mjj < mjj_low))
+            high_sb =  ((mjj > mjj_high) & (mjj < sb_mhigh))
+
+            in_sb = low_sb | high_sb
             if(use_sidebands):
-                thresh = np.percentile(jj_scores[in_sb], percentile_cut)
+                if(not weighted_sidebands):
+                    thresh = np.percentile(jj_scores[in_sb], percentile_cut)
+                else:
+                    n_low_sb = np.sum(low_sb)
+                    n_high_sb = np.sum(high_sb)
+                    sb_weights = np.zeros_like(jj_scores)
+                    sb_weights[low_sb] = 1.
+                    sb_weights[high_sb] = n_low_sb / n_high_sb
+                    print("nlow sb %.0f nhigh sb %.0f, weight = %.2f" % (n_low_sb, n_high_sb, n_high_sb / n_low_sb))
+
+                    quantile = percentile_cut / 100. #Uses 0-1 scale instead of 0-100
+                    thresh = weighted_quantile(jj_scores[in_sb].reshape(-1), [quantile], sample_weight = sb_weights[in_sb].reshape(-1))[0]
+                    old_thresh = np.percentile(jj_scores[in_sb], percentile_cut)
+
+                    new_eff = np.mean(jj_scores > thresh)
+                    old_eff = np.mean(jj_scores > old_thresh)
+
+                    print("New thresh %.4f (eff %.4f), old thresh %.4f (%.4f)" % (thresh, new_eff, old_thresh, old_eff))
+
+                    
             else:
                 thresh = np.percentile(jj_scores, percentile_cut)
 
@@ -176,6 +210,8 @@ def classifier_selection(options):
         bkg_eff = float(( Y[(Y < 0.1) & mask]).shape[0]) / nbkg
         minor_bkg_eff = float(( Y [(Y< -0.1) & mask]).shape[0]) / Y[ (Y < -0.1)].shape[0]
         bkg_eff_window =  B/ Y[(Y< 0.1) & in_window_all].shape[0]
+
+        sig_eff_window_nosel = -1.0
 
 
         print("Mjj window %f to %f " % (options.mjj_low, options.mjj_high))
@@ -219,6 +255,9 @@ def classifier_selection(options):
 
             sig_eff = np.sum(sig_weights[sig_deta_mask][sig_cut_mask]) / np.sum(sig_weights[sig_deta_mask])
             sig_eff_window = np.sum(sig_weights[sig_deta_mask][sig_cut_mask & sig_mjj_mask]) / np.sum(sig_weights[sig_deta_mask])
+            sig_eff_window_nosel = np.sum(sig_weights[sig_deta_mask][sig_mjj_mask]) / np.sum(sig_weights[sig_deta_mask])
+
+
 
             sys_effs = dict()
             for sys in sys_weights_map.keys():
@@ -230,8 +269,25 @@ def classifier_selection(options):
                 sys_effs[sys]= (sys_sig_eff, sys_sig_eff_window)
 
 
-            print("Sig eta eff %.3f, sig_eff %.3f, sig_eff_window %.3f" % (sig_eff_deta, sig_eff, sig_eff_window))
+            print("Sig eta eff %.3f, sig_eff %.3f, sig_eff_window %.3f sig_eff_window_nosel %.3f" % (sig_eff_deta, sig_eff, sig_eff_window, sig_eff_window_nosel))
 
+            sig_output_mjj = sig_mjj[sig_cut_mask]
+            print("mean input sig mass", np.mean(sig_only_data['jet_kinematics'][:,0][sig_deta_mask]))
+            print("mean output sig mass", np.mean(sig_output_mjj))
+            print(sig_output_mjj[0])
+            sig_output_weights = sig_only_data['sys_weights'][:,0][sig_deta_mask][sig_cut_mask]
+
+            if('fit_inputs' in output_name):
+                sig_output_name = output_name.replace('fit_inputs', 'sig_shape')
+            else:
+                sig_output_name = output_name.replace('.h5', '_sig_shape.h5')
+
+            print("Creating %s" % sig_output_name)
+            with h5py.File(sig_output_name, "w") as f_sig:
+                f_sig.create_dataset('mjj', data = sig_output_mjj, chunks = True, maxshape = (None))
+                f_sig.create_dataset('weights', data = sig_output_weights, chunks = True, maxshape = (None))
+                f_sig.create_dataset('truth_label', data = np.ones((sig_output_mjj.shape[0],1)), chunks = True, maxshape = (None, 1))
+                #print(f_sig['mjj'][0], np.mean(f_sig['mjj']))
 
 
         print("Outputting to %s \n\n" % output_name)
@@ -249,6 +305,8 @@ def classifier_selection(options):
             f.create_dataset("sig_eff", data=np.array([sig_eff]) )
             f.create_dataset("sig_eff_deta", data=np.array([sig_eff_deta]) )
             f.create_dataset("sig_eff_window", data=np.array([sig_eff_window]) )
+            f.create_dataset("sig_eff_window_nosel", data=np.array([sig_eff_window_nosel]) )
+            f.create_dataset("score_thresh", data = np.array([thresh]))
             if(sig_only_data is not None):
                 for sys in sys_weights_map.keys():
                     if(sys == 'nom_weight'): continue

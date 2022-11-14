@@ -12,18 +12,24 @@ def train_autoencoder(options):
     #which images to train on and which to use for labelling
     if(options.training_j == 1):
         j_label = "j1_"
-        x_key = 'j1_images'
-        opp_j_key = "j2_images"
+        opp_j_label = 'j2_'
         print("training autoencoder for j1")
 
     elif (options.training_j ==2):
         j_label = "j2_"
-        x_key = 'j2_images'
-        opp_j_key = "j1_images"
+        opp_j_label = 'j1_'
         print("training autoencoder for j2")
     else:
         print("Training jet not 1 or 2! Exiting")
         exit(1)
+
+
+    if(options.dense_AE):
+        x_key = j_label + "features"
+        opp_j_key = opp_j_label + "features"
+    else:
+        x_key  = j_label + "images"
+        opp_j_key = opp_j_label + "images"
 
     if(options.num_data == -1):
         data_stop = -1
@@ -55,6 +61,8 @@ def train_autoencoder(options):
     options.batch_size = int(options.batch_size * batch_size_scale)
     print(options.batch_size)
 
+    #TODO weight sidebands?
+
     if(do_val):
         val_mjj = val_data['mjj']
         val_mjj_cut = (val_mjj < options.mjj_low) | (val_mjj > options.mjj_high)
@@ -65,28 +73,37 @@ def train_autoencoder(options):
 
 
 
+
     mjj_cut = data['mjj']
 
 
     print("Signal frac is %.3f \n" % (np.mean(data['label'] > 0)))
 
 
+    if(options.dense_AE):
+        means = np.mean(data[x_key][()], axis = 0)
+        stds = np.std(data[x_key][()], axis = 0)
+        norms = (means, stds)
+    else:
+         norms = None
 
-    cbs = [tf.keras.callbacks.History()]
+
+    timeout = TimeOut(t0=time.time(), timeout=24.0) #stop training after 24 hours to avoid job timeout
+    cbs = [tf.keras.callbacks.History(), timeout]
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
 
 # train model
-    t_data = data.gen(x_key,x_key, batch_size = options.batch_size)
+    t_data = data.gen(x_key,x_key, batch_size = options.batch_size, key1_norm = norms, key2_norm = norms)
     if(options.randsort):
         t_data.add_dataset(opp_j_key, opp_j_key, dataset = data)
     v_data = None
     if(do_val): 
         nVal = val_data.nTrain
-        v_data = val_data.gen(x_key, x_key, batch_size = options.batch_size)
+        v_data = val_data.gen(x_key, x_key, batch_size = options.batch_size, key1_norm = norms, key2_norm = norms)
         if(options.randsort):
             v_data.add_dataset(opp_j_key, opp_j_key, dataset = val_data)
-        early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, min_delta = 1e-4, verbose=1, mode='min', baseline=None)
+        early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5 + options.num_epoch/20, min_delta = 1e-4, verbose=1, mode='min', baseline=None)
         cbs.append(early_stop)
     else:
         nVal = 0
@@ -103,8 +120,8 @@ def train_autoencoder(options):
     print("Will train %i models" % options.num_models)
     for model_idx in range(options.num_models):
         print("Creating model %i" % model_idx)
-        model = auto_encoder_large(data[x_key][0].shape, compressed_size = options.AE_size)
-        #model = auto_encoder(data[x_key][0].shape, compressed_size = options.AE_size)
+        if(options.dense_AE): model = dense_auto_encoder( data[x_key][0].shape[0], compressed_size = options.AE_size)
+        else: model = auto_encoder_large(data[x_key][0].shape, compressed_size = options.AE_size)
         model.compile(optimizer=myoptimizer,loss= tf.keras.losses.mean_squared_error)
         if(model_idx == 0): model.summary()
 
@@ -138,6 +155,10 @@ def train_autoencoder(options):
 
     print("Saving model to : ", options.output)
     best_model.save(options.output)
+
+    if(norms is not None):
+        with h5py.File(options.output) as f_model :
+            f_model.create_dataset("norms", data = np.array(norms))
 
     del data
     if(val_data is not None): del val_data

@@ -39,6 +39,24 @@ mass_bin_sig_mass_map = {
         16: [5400., 5600., 5800.],
 }
 
+def sig_mass_to_mbin(m):
+    if(m < 1750): return 0
+    if(m >= 1750 and m < 1950): return 1
+    if(m >= 1950 and m < 2150): return 11
+    if(m >= 2150 and m < 2350): return 2
+    if(m >= 2350 and m < 2550): return 12
+    if(m >= 2550 and m < 2850): return 3
+    if(m >= 2850 and m < 3150): return 13
+    if(m >= 3150 and m < 3450): return 4
+    if(m >= 3450 and m < 3850): return 14
+    if(m >= 3850 and m < 4350): return 5
+    if(m >= 4350 and m < 4750): return 15
+    if(m >= 4750 and m < 5250): return 6
+    if(m >= 5250): return 16
+    else: return -1
+
+
+
 #From the h5 maker, maps between different systematics and their index
 sys_weights_map = {
         'nom_weight' : 0,

@@ -47,22 +47,32 @@ if(options.do_ttbar):
 elif(options.labeler_name != ''): #doing TNT
     do_TNT = True
     do_both_js = False
-    options.sig_per_batch = 0
+    options.randsort = True
+
     if(options.training_j == 1):
         j_label = "j1_"
         opp_j_label = "j2_"
-        print("training classifier for j1 using j2 for labeling")
 
     elif (options.training_j ==2):
         j_label = "j2_"
         opp_j_label = "j1_"
-        print("training classifier for j2 using j1 for labeling")
 
-    if('auto' in options.labeler_name):
-        l_key = opp_j_label +  'images'
-        options.keys.append(l_key)
+
+    if('auto' in options.labeler_name or 'AE' in options.labeler_name):
+        options.keys.append(opp_j_label + "images")
+        options.keys.append(j_label + "images")
+        l_key = opp_j_label + 'images'
+        if(options.randsort):
+            l_key2 = j_label + "images"
+            x_key2 = opp_j_label +  'features'
     else:
-        l_key = opp_j_label +  'features'
+        if(options.use_images): l_key = opp_j_label +  'images'
+        else: l_key = opp_j_label +  'features'
+        if(options.randsort): 
+            l_key2 = j_label +  'features'
+            x_key2 = opp_j_label +  'features'
+
+
 else:
     do_both_js = True
 
@@ -70,6 +80,15 @@ else:
 import time
 t1 = time.time()
 data, _ = load_dataset_from_options(options)
+
+#print(data['mjj'][:5])
+#print(data['j1_images'].shape)
+#print(np.max(data['j1_images'][:5], axis = (1,2)))
+#print(np.max(data['j2_images'][:5], axis = (1,2)))
+#print(data['j1_features'][:5,0])
+#print(data['j2_features'][:5,0])
+#exit(1)
+
 
 if(options.do_ttbar):
     print("Doing ttbar regions")
@@ -81,11 +100,12 @@ if(options.do_ttbar):
 elif(do_TNT):
     print("Doing Tag N' Train regions")
     print("\n Loading labeling model from %s \n" % options.labeler_name)
+    print("l_key",  l_key)
     Y_label = 'Y_TNT'
     labeler = tf.keras.models.load_model(options.labeler_name)
 
     labeler_scores = data.labeler_scores(labeler,  l_key)
-    #labeler_scores = data['j1_features'][:,0]
+    #labeler_scores = data['j2_features'][:,0]
 
 
     print("Sig-rich region defined > %i percentile" %options.sig_cut)
@@ -95,22 +115,25 @@ elif(do_TNT):
     bkg_region_cut = np.percentile(labeler_scores, options.bkg_cut)
 
     print("cut high %.3e, cut low %.3e " % (sig_region_cut, bkg_region_cut))
-    Y = data['label']
 
     data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high,
             bkg_cut_type = options.TNT_bkg_cut)
+
+
 else:
     print("Doing CWoLa regions")
     Y_label = 'Y_mjj'
-    Y = data['label']
     data.make_Y_mjj(options.mjj_low, options.mjj_high)
 
 t2 = time.time()
 print("load time  %s " % (t2 -t1))
 
 
+Y = data['label']
 
 print_signal_fractions(Y, data[Y_label])
+minor_bkg = (Y < 0).reshape(-1)
+print("Minor bkg frac %.3f in SR %.3f in SB" % (np.mean(minor_bkg & (data[Y_label] > 0.9)), np.mean(minor_bkg & (data[Y_label] < 0.1))))
 
 
 #print(data['jet_kinematics'][:10])
@@ -169,6 +192,8 @@ if(not options.do_ttbar):
 
 true_bkg = (Y < 0.1).reshape(-1)
 true_sig = (Y > 0.9).reshape(-1)
+if(not options.draw_sig):
+    true_bkg = true_sig = (Y > -99999.).reshape(-1)
 
 
 #j1_sig_ms = data['j1_features'][:,0] [true_sig]
@@ -207,6 +232,10 @@ bkg_region_mjj = data['mjj'][bkg_region & true_bkg]
 j1_bins, j1_ratio = make_ratio_histogram([sig_region_mjj, bkg_region_mjj], labels, 
         colors, 'Mjj', "", n_bins, ratio_range = ratio_range, weights = weights_noptrw, errors = True, 
         normalize=True, save = True, fname=options.output + 'mjj' + ".png")
+
+
+mass_greater = np.mean(data['j1_features'][:,0] > data['j2_features'][:,0])
+print("J1 mass greater than J2 mass frac : %.3f \n" % mass_greater)
 
 
 for i in range(len(feature_names)):
@@ -256,4 +285,5 @@ for i in range(len(feature_names)):
                 colors, 'J2 ' +feat_name, "With pt Reweighting", n_bins, ratio_range = ratio_range, weights = [j2_ptrw_sig_region_weights, j2_ptrw_bkg_region_weights], errors = True,
                             extras = extras, normalize=True, save = True, fname=options.output + "j2_" + flabels[i] + "_ptrw" + ".png")
 
+del data
 
