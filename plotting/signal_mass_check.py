@@ -14,8 +14,6 @@ fin = options.fin
 plot_dir = options.output
 model_dir = options.model_dir
 
-
-
 model_type = options.model_type
 if(len(options.label)> 0 and options.label[-1] != '_'):
     options.label += '_'
@@ -98,38 +96,39 @@ dist_labels = []
 #mjj_dists.append(mjj[bkg_events])
 
 #No selection
-mjj_dists.append(mjj[bkg_events])
-make_outline_hist([mjj[bkg_events]],  mjj[sig_events], labels, ['b','r'], 'Dijet Mass (GeV)', "No Selection", n_m_bins, logy = True,
-         save = save_figs,  h_range = m_range, fname=plot_dir + options.label + "nocut_mass.png" )
+if(np.sum(sig_events) > 0):
+    mjj_dists.append(mjj[bkg_events])
+    make_outline_hist([mjj[bkg_events]],  mjj[sig_events], labels, ['b','r'], 'Dijet Mass (GeV)', "No Selection", n_m_bins, logy = True,
+             save = save_figs,  h_range = m_range, fname=plot_dir + options.label + "nocut_mass.png" )
 
 
 
-mjj_sig = np.mean(mjj[sig_events])
-m_low = options.mjj_low
-m_high = options.mjj_high
-if(m_low< 0):
-    m_low = mjj_sig - mjj_window/2.
-if(m_high< 0):
-    m_high = mjj_sig + mjj_window/2.
+    mjj_sig = np.mean(mjj[sig_events])
+    m_low = options.mjj_low
+    m_high = options.mjj_high
+    if(m_low< 0):
+        m_low = mjj_sig - mjj_window/2.
+    if(m_high< 0):
+        m_high = mjj_sig + mjj_window/2.
 
-in_window = (mjj > m_low) & (mjj < m_high)
-S = mjj[sig_events & in_window].shape[0]
-B = mjj[bkg_events & in_window].shape[0]
-minor_B = mjj[minor_bkg_events & in_window].shape[0]
+    in_window = (mjj > m_low) & (mjj < m_high)
+    S = mjj[sig_events & in_window].shape[0]
+    B = mjj[bkg_events & in_window].shape[0]
+    minor_B = mjj[minor_bkg_events & in_window].shape[0]
 
-if(S > 0): eff_S_in_window = S / mjj[sig_events].shape[0]
-else: eff_S_in_window = 0.
+    if(S > 0): eff_S_in_window = S / mjj[sig_events].shape[0]
+    else: eff_S_in_window = 0.
 
-overall_S = mjj[sig_events].shape[0]
-overall_B = mjj[bkg_events].shape[0]
+    overall_S = mjj[sig_events].shape[0]
+    overall_B = mjj[bkg_events].shape[0]
 
-print("Total number of signal events : %i" % np.sum(Y == 1))
-print("Mean signal mjj is %.0f" % mjj_sig);
-print("Mjj window %f to %f " % (m_low, m_high))
-print("Before selection: %i signal events and %i bkg events in mjj window (%i minor bkg)" % (S,B, minor_B))
-print("Frac. of signal in mjj window is %.3f " % eff_S_in_window)
-print("S/B %f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
-print("Sig frac (overall) %f " % (float(overall_S)/overall_B))
+    print("Total number of signal events : %i" % np.sum(Y == 1))
+    print("Mean signal mjj is %.0f" % mjj_sig);
+    print("Mjj window %f to %f " % (m_low, m_high))
+    print("Before selection: %i signal events and %i bkg events in mjj window (%i minor bkg)" % (S,B, minor_B))
+    print("Frac. of signal in mjj window is %.3f " % eff_S_in_window)
+    print("S/B %f, sigificance ~ %.1f " % (float(S)/B, S/np.sqrt(B)))
+    print("Sig frac (overall) %f " % (float(overall_S)/overall_B))
 
 
 
