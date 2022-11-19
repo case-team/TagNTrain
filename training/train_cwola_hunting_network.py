@@ -84,6 +84,16 @@ def train_cwola_hunting_network(options):
         #TODO, make validation use same reweighting ratios as training data?
         if(do_val): val_data.make_ptrw('Y_mjj', use_weights = not options.no_sample_weights, save_plots = False)
 
+    if(options.preprocess != ""):
+        print("\n Doing preprocess %s \n" % options.preprocess)
+        feats = data[x_key]
+        qts = create_transforms(feats, dist = options.preprocess)
+        data.make_preprocessed_feats(x_key, qts)
+        if(do_val): val_data.make_preprocessed_feats(x_key, qts)
+        x_key = x_key + "_normed"
+
+
+
     t_data = data.gen(x_key,'Y_mjj', key3 = sample_weights, batch_size = options.batch_size)
     v_data = None
 

@@ -24,7 +24,7 @@ single_file = True
 sic_max = 10
 
 #model_dir = "cwola_qstar_test/"
-model_dir = "../runs/smallnet_test/"
+model_dir = "../models/no_tau1_test/"
 #model_dir = "../models/AEs/"
 
 #plot_dir = "../runs/cwola_40spb_fullrun/"
@@ -34,15 +34,18 @@ model_dir = "../runs/smallnet_test/"
 f_models = [
         #'jrand_autoencoder_m3000.h5',
         #'AEs_CR_may16/jrand_AE_kfold0_mbin13.h5',
-#['test_spb30.h5', 'j2_test_spb80.h5'],
-#['j1_wp_spb20.h5', 'j2_wp_spb20.h5'],
-'{j_label}_wp_3tev_test.h5',
-'{j_label}_wp_3tev_smallnet_test.h5',
+#'{j_label}_wp_3tev_test.h5',
+#'{j_label}_wp_3tev_smallnet_test.h5',
 #'{j_label}_wp_3tev_supervised_test.h5',
 #'{j_label}_wp_3tev_supervised_smallnet_test.h5',
-'jrand_wp_3tev_test2.h5',
-'jrand_wp_smallnet_3tev_test2.h5',
+#'jrand_wp_3tev_test2.h5',
+#'jrand_wp_smallnet_3tev_test2.h5',
 #'jrand_wp_3tev_smallnet_test.h5',
+#'{j_label}_supervised_Wp.h5',
+#'{j_label}_supervised_Wp_cliptau1.h5',
+#'{j_label}_supervised_Wp_notau1.h5',
+'{j_label}_supervised_XYY.h5',
+'{j_label}_supervised_notau1_XYY.h5',
 
 ]
 
@@ -50,12 +53,11 @@ f_models = [
 labels = [
         #'AE old',
         #'AE new',
-        'cwola 30k params',
-        'cwola 3k params',
         #'supervised 30k params',
         #'supervised 3k params',
-        'TNT 30k params',
-        'TNT 3k params',
+        'supervised',
+        #'supervised clip tau1',
+        'supervised no tau1',
         ]
 
 
@@ -158,10 +160,24 @@ for idx,f in enumerate(f_models):
     print(idx, f, model_type[idx])
     if(model_type[idx]  <= 2 or model_type[idx] == 5): #classifier on each jet
 
+        if('notau1' in f):
+            non_tau_idx = [0,2,3,4,5,6,7]
+            j1_dense_inputs_ = j1_dense_inputs[:,non_tau_idx]
+            j2_dense_inputs_ = j2_dense_inputs[:,non_tau_idx]
+        elif('cliptau1' in f):
+            j1_dense_inputs_ = j1_dense_inputs
+            j2_dense_inputs_ = j2_dense_inputs
+            print(np.amax(j1_dense_inputs[:,1]), np.mean(j1_dense_inputs[:,1]))
+            j1_dense_inputs_[:,1] = np.clip(j1_dense_inputs_[:,1], 0., 0.35)
+            j2_dense_inputs_[:,1] = np.clip(j2_dense_inputs_[:,1], 0., 0.35)
+        else:
+            j1_dense_inputs_ = j1_dense_inputs
+            j2_dense_inputs_ = j2_dense_inputs
+
         if(rand_sort[idx]):
             j1_score, j2_score = get_jet_scores(model_dir, f, model_type[idx], j1rand_images, j2rand_images, j1rand_dense_inputs, j2rand_dense_inputs, num_models = num_models[idx])
         else:
-            j1_score, j2_score = get_jet_scores(model_dir, f, model_type[idx], j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, num_models = num_models [idx])
+            j1_score, j2_score = get_jet_scores(model_dir, f, model_type[idx], j1_images, j2_images, j1_dense_inputs_, j2_dense_inputs_, num_models = num_models [idx])
         Y = Y.reshape(-1)
 
         j1_QT = QuantileTransformer(copy = True)

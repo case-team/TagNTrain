@@ -121,6 +121,9 @@ def classifier_selection(options):
 
     for eff in options.effs:
 
+        #sideband, weighted_sideband, central or overall
+        #eff_definition = 'central'
+        eff_definition = 'weighted_sideband'
         use_sidebands = True
         weighted_sidebands = True
 
@@ -156,8 +159,9 @@ def classifier_selection(options):
             high_sb =  ((mjj > mjj_high) & (mjj < sb_mhigh))
 
             in_sb = low_sb | high_sb
-            if(use_sidebands):
-                if(not weighted_sidebands):
+            if('sideband' in eff_definition):
+                print("Using sideband definition of efficiency")
+                if("weighted" not in eff_definition):
                     thresh = np.percentile(jj_scores[in_sb], percentile_cut)
                 else:
                     n_low_sb = np.sum(low_sb)
@@ -177,6 +181,23 @@ def classifier_selection(options):
                     print("New thresh %.4f (eff %.4f), old thresh %.4f (%.4f)" % (thresh, new_eff, old_thresh, old_eff))
 
                     
+            elif('central' in eff_definition):
+                sig_region_mjj = (mjj_high - mjj_low ) / 2.0
+                central_bin_low = 3400.
+                central_bin_high = 3600.
+                if(options.mbin == 4):
+                    central_bin_low = 3700.
+                    central_bin_high = 4000.
+                elif(options.mbin == 14 or (sig_region_mjj > central_bin_low and sig_region_mjj < central_bin_high) ):
+                    central_bin_low = 3000.
+                    central_bin_high = 3250.
+
+                print("Using efficiency defined in central region %.0f-%0.f" % (central_bin_low, central_bin_high))
+                central_mask = (mjj > central_bin_low) & (mjj  < central_bin_high)
+                thresh = np.percentile(jj_scores[central_mask], percentile_cut)
+                eff = np.mean(jj_scores > thresh)
+                print("Overall eff is %.4f" % eff)
+
             else:
                 thresh = np.percentile(jj_scores, percentile_cut)
 
@@ -187,13 +208,16 @@ def classifier_selection(options):
         is_sig_output = Y[mask]
         event_num_output = event_num[mask]
         print("Selected %i events" % mjj_output.shape[0])
+        eps = 1e-6
 
         in_window_all = (mjj > options.mjj_low) & (mjj < options.mjj_high)
         in_window = (mjj_output > options.mjj_low) & (mjj_output < options.mjj_high)
         sig_events = is_sig_output > 0.9
         bkg_events = is_sig_output < 0.1
-        S = mjj_output[sig_events & in_window].shape[0]
-        B = mjj_output[bkg_events & in_window].shape[0]
+        S = mjj_output[sig_events & in_window].shape[0] + eps
+        B = mjj_output[bkg_events & in_window].shape[0] + eps
+
+        
 
         nsig = (Y[Y > 0.9]).shape[0] 
         nbkg = (Y[Y < 0.1]).shape[0] 
@@ -335,7 +359,7 @@ def classifier_selection(options):
             f_plt = output_name.replace(".h5", "_mjj_eff_plot.png")
             print("Creating %s" % f_plt)
             n_bins = 20
-            ratio_range = [0.0, 0.03]
+            ratio_range = [0.0, 0.1]
             make_ratio_histogram([mjj_output, mjj], ["Selected", "Inclusive"], 
                 ['blue', 'green'], "Mjj", "", n_bins, ratio_range = ratio_range, weights = None, errors = True, 
                             normalize=False, save = True, fname=f_plt, logy = True, max_rw = -1)

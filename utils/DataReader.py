@@ -194,6 +194,9 @@ class DataReader:
 
         self.max_events = kwargs.get('max_events', -1)
 
+        self.keep_tau1  = kwargs.get('keep_tau1', False)
+
+
 
         self.sig_idx = kwargs.get('sig_idx', 1)
         self.sig_file = kwargs.get('sig_file', '')
@@ -322,8 +325,10 @@ class DataReader:
         else: 
             rfeats = rfeats [:,nonLSF_idxs]
 
+
         if(self.clip_feats):
             rfeats[:,b_idx] = np.clip(rfeats[:,b_idx], 0., None)
+            #rfeats[:, 0] = np.clip(rfeats[:,0], 0., 0.45)
 
         if(self.nsubj_ratios):
             #Make tau2 tau3 and tau4  variables tau21, tau32, tau43 respectively
@@ -332,6 +337,9 @@ class DataReader:
             rfeats[:,2] = feats[:,2] / (feats[:,1] + eps)
             rfeats[:,3] = feats[:,3] / (feats[:,2] + eps)
 
+        #don't use tau1
+        if(not self.keep_tau1):
+            rfeats = rfeats[:,1:]
 
         return rfeats
 
@@ -1017,6 +1025,15 @@ class DataReader:
             return self.f_storage[key][()]
         else:
             return self.f_storage[key][()][self.mask]
+
+    def make_preprocessed_feats(self, key, qt):
+        feats = self.f_storage[key]
+        new_feats = qt.transform(feats)
+        self.f_storage.create_dataset(key + "_normed", data = new_feats)
+        self.keys.add(key + "_normed")
+
+        
+
 
     def gen(self, key1, key2, key3 = None, batch_size = 256, key1_norm =None, key2_norm = None, key3_norm = None):
         if(not self.ready):

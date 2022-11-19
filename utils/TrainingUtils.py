@@ -301,6 +301,22 @@ def get_norms(h5_file):
     with h5py.File(h5_file, mode = 'r') as f :
         return f['norms'][()]
 
+def create_transforms(feats, dist = 'normal'):
+    qt = QuantileTransformer(output_distribution = dist, copy = True)
+    qt.fit(feats)
+    return qt
+
+def save_transforms(fout, qt):
+    with  open(fout) as f:
+        pickle.dump(qt, f)
+
+
+def load_transforms(f, num = 8):
+    with open(d + "qt%i.pkl" % i) as f:
+        qt = pickle.load(f)
+    return qt
+
+
 
 def get_single_jet_scores(model_name, model_type, j_images=None, j_dense_inputs=None,  num_models = 1, batch_size = 512):
 

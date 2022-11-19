@@ -10,6 +10,7 @@ import time
 
 
 def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", output_dir = "", loop = False):
+    print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
     base_path = os.path.abspath(".") + "/"
     fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
     if(len(output_dir) == 0): output_dir = base_path + options.output
@@ -22,7 +23,8 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
     if(options.counting_fit):
         counting_str = "_counting"
 
-    dijet_cmd = "python dijetfit%s.py -i %s -p %s --rebin" % (counting_str, input_file, output_dir)
+    ftest_thresh = 0.1
+    dijet_cmd = "python dijetfit%s.py -i %s -p %s --rebin --ftest_thresh %.2f" % (counting_str, input_file, output_dir, ftest_thresh)
     #dijet_cmd = "python dijetfit%s.py -i %s -p %s " % (counting_str, input_file, output_dir)
     if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
         dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
@@ -43,17 +45,18 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
         print(fit_cmd)
         subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
 
-        if(loop): #loop until we get a good fit
+        run_fit = False
+        if(loop and (fit_start + 200. < options.mjj_sig)): #don't stop until we get a good fit
             fit_file = output_dir + 'fit_results_%.1f.json' % options.mjj_sig
             with open(fit_file, 'r') as f:
                 fit_params = json.load(f, encoding="latin-1")
-                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > 0.5 and fit_start + 200. < options.mjj_sig):
+                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.2) or fit_params['bkgfit_frac_err'] > 0.5):
                     if(fit_start < 1550.): fit_start = 1550.
                     else: fit_start += 100.
                     print("\n \n POOR Fit quality (pval %.2e, largest unc %.2f)! \n. Increasing fit start to %.0f and retrying" % 
                             (fit_params['bkgfit_prob'],  fit_params['bkgfit_frac_err'], fit_start))
-                else: run_fit = False
-        else: run_fit = False
+                    run_fit = True
+    return fit_start
 
 
 
@@ -211,6 +214,8 @@ def full_run(options):
 
     start_time = time.time()
     kfold_options = []
+
+    output = None
 
     for k in range(options.kfolds):
 
@@ -472,7 +477,8 @@ def full_run(options):
             sig_shape_file = base_path + options.output + 'sig_fit_%i.root' % options.mjj_sig
 
 
-        run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, loop = True)
+        final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, loop = True)
+        output = final_fit_start
 
 
 
@@ -536,6 +542,8 @@ def full_run(options):
         f_np = options.output + options.label + "_avg_tagging_effs.npz"
         print("Saving avg effs in  %s" % f_np)
         np.savez(f_np, sig_eff = sig_effs_avg, bkg_eff = bkg_eff_base)
+
+    return output
 
 
 if(__name__ == "__main__"):

@@ -32,6 +32,8 @@ def input_options():
     parser.add_argument("--val_batch_start", type=int, default=-1, help="Batches to use for validation start")
     parser.add_argument("--val_batch_stop", type=int, default=-1, help="Batches to use for validation stop ")
     parser.add_argument("--no_minor_bkgs", default = False, action = "store_true", help="Exclude minor backgrounds from sample")
+    parser.add_argument("--preprocess", default = "", help="What transform to apply for preprocessing")
+    parser.add_argument("--keep_tau1", default = False, action = 'store_true',  help="Use tau1 feature")
 
     parser.add_argument("--use_one", type = bool, default = True, help="Make a classifier for one jet instead of both")
     parser.add_argument("-j", "--training_j", type =int, default = 1, help="Which jet to make a classifier for (1 or 2)")

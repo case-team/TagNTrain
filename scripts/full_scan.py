@@ -266,16 +266,22 @@ def full_scan(options):
     if(do_fit):
         for mbin in mass_bin_idxs:
             if(options.sideband and mbin in sb_excluded_mbins): continue
+            eff_point = mass_bin_select_effs[mbin]
+            print("Mbin %i, eff %.1f" % (mbin, eff_point))
             t_opts = mbin_opts(options, mbin)
+            t_opts.effs = [eff_point]
             t_opts.step = "fit"
             t_opts.reload = True
             t_opts.condor = False
+            fit_start = -1
             if(options.sideband): t_opts.fit_start = 2000.
             for sig_mass in mass_bin_sig_mass_map[mbin]:
                 if(options.sideband and sig_mass < first_sb_sig_mass): continue
                 t_opts.mjj_sig = sig_mass
                 print("mbin %i, sig_mass %.0f" %(mbin, sig_mass))
-                full_run(t_opts)
+                fit_start = full_run(t_opts)
+                #for signal masses in same mass bin save time by reusing fit start
+                t_opts.fit_start = fit_start
 
 
     if(do_plot):

@@ -12,8 +12,8 @@ options.keep_mhigh = options.mjj_high
 
 j_label = "j1"
 fj_label = "jrand"
-roc_plot_name = "%s_roc_%s.png" %(fj_label, options.label)
-sic_plot_name = "%s_sic_%s.png" % (fj_label, options.label)
+roc_plot_name = "%s_roc_%s.png" %(j_label, options.label)
+sic_plot_name = "%s_sic_%s.png" % (j_label, options.label)
 
 options.no_minor_bkgs = True
 
@@ -21,16 +21,25 @@ options.no_minor_bkgs = True
 single_file = True
 options.hadronic_only = True
 
-model_dir = "../models/AEs/"
+model_dir = "../models/norm_test/"
 
 #model type: 0 is CNN, 1 is autoencoder, 2 is dense network, 5 is VAE
 
 f_models = [
         
-        "dense_AE_test/AE_mbin13_latent1.h5",
-        "dense_AE_test/AE_mbin13_latent2.h5",
-        "dense_AE_test/AE_mbin13_latent3.h5",
-        "AEs_may31/jrand_AE_kfold0_mbin13.h5",
+        #"dense_AE_test/AE_mbin13_latent1.h5",
+        #"dense_AE_test/AE_mbin13_latent2.h5",
+        #"dense_AE_test/AE_mbin13_latent3.h5",
+        #"AEs_may31/jrand_AE_kfold0_mbin13.h5",
+        #"j2_supervised_Wp.h5",
+        #"j2_supervised_Wp_gaus_norm.h5",
+        #"j2_supervised_Wp_uniform_norm.h5",
+        #"j2_cwola_Wp.h5",
+        #"j2_cwola_Wp_gaus_norm.h5",
+        #"j2_cwola_Wp_uniform_norm.h5",
+        "j1_cwola_Wp_spb10.h5",
+        "j1_cwola_Wp_spb10_gaus_norm.h5",
+        "j1_cwola_Wp_spb10_uniform_norm.h5",
 
 #'test_spb30.h5',
 #'test_batch250.h5',
@@ -39,20 +48,25 @@ f_models = [
 #'test_spb80.h5',
 
         ] 
-model_type = [-1,-1,-1,1] 
+#model_type = [-1,-1,-1,1] 
+model_type = [2,2,2,2,2,2] 
 #num_models = [5,5,5,5,5,5]
-num_models = [1,1,1,1,1]
+num_models = [1,1,1,1,1,1]
 labels = [
-        'Dense AE (latent size 1)',
-        'Dense AE (latent size 2)',
-        'Dense AE (latent size 3)',
-        'CNN AE (latent size 6)',
+        #'Dense AE (latent size 1)',
+        #'Dense AE (latent size 2)',
+        #'Dense AE (latent size 3)',
+        #'CNN AE (latent size 6)',
+        #"supervised",
+        #"supervised gaus norm",
+        #"supervised uniform norm",
+        #"cwola",
+        #"cwola gaus norm",
+        #"cwola uniform norm",
 
-        #'spb30',
-        #'spb40',
-        #'spb40 batch 1k',
-        #'spb40 batch 5k',
-        #'spb80',
+        "cwola spb10",
+        "cwola spb10 gaus norm",
+        "cwola spb10 uniform norm"
         ]
 
 
@@ -108,8 +122,20 @@ dense_inputs = data[j_label + "_features"]
 
 model_scores = []
 for idx,f in enumerate(f_models):
+    print(f)
 
-    scores = get_single_jet_scores(model_dir + f_models[idx], model_type[idx], j_images = images, j_dense_inputs = dense_inputs, 
+    dense_inputs_norm = dense_inputs
+    if("uniform" in f):
+        print("Uniform")
+        qt = create_transforms(dense_inputs, dist = 'uniform')
+        dense_inputs_norm = qt.transform(dense_inputs)
+    if("gaus" in f):
+        print("gaus")
+        qt = create_transforms(dense_inputs, dist = 'normal')
+        dense_inputs_norm = qt.transform(dense_inputs)
+
+
+    scores = get_single_jet_scores(model_dir + f_models[idx], model_type[idx], j_images = images, j_dense_inputs = dense_inputs_norm, 
             num_models = num_models[idx], batch_size = 512)
     #hist_scores = [scores[bkg_events], scores[sig_events]]
     #make_histogram(hist_scores, hist_labels, hist_colors, 'Labeler Score', "", 100,

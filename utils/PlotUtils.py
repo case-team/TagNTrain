@@ -492,6 +492,28 @@ def draw_jet_image(image, title, fname = "", do_log = False):
     if(fname != ""):
         plt.savefig(fname)
 
+
+def make_graph(x, y, labels, colors, axis_names, fname= ""  ):
+
+    fig, ax = plt.subplots()
+    size = 20.
+    x = np.array(x)
+    if(type(colors) == list):
+        for i in range(x.shape[0]):
+            ax.scatter(x[i],y[i], c = colors[i], s=size, label = labels[i])
+            
+        plt.legend()
+    else: ax.scatter(x,y, alpha = alpha, c = colors, s=size, label = labels)
+
+    ax.set_xlabel(axis_names[0], fontsize=14)
+    ax.set_ylabel(axis_names[1], fontsize=14)
+    plt.tick_params(axis='y', labelsize=12)
+    plt.tick_params(axis='x', labelsize=12)
+    if(fname != ""):
+        print("saving %s" % fname)
+        plt.savefig(fname)
+
+
 def make_scatter_plot(x, y, color, axis_names, fname= ""  ):
 
     fig, ax = plt.subplots()
