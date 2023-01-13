@@ -175,7 +175,7 @@ def tag_and_train(options):
 
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
-    timeout = TimeOut(t0=time.time(), timeout=24.0) #stop training after 30 hours to avoid job timeout
+    timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
     cbs = [tf.keras.callbacks.History(), timeout]
     early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)

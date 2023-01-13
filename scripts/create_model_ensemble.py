@@ -91,6 +91,10 @@ def create_model_ensemble(options):
             os.system("sed -i 's/SIGFILE/%s/g' %s" % ("--sig_file " + sig_fn, train_script))
         else:
             os.system("sed -i 's/SIGFILE//g' %s" % (train_script))
+
+        if(options.do_TNT and (options.mbin == 1 or options.mbin == 2 or options.mbin == 11 or options.mbin == 12)):
+            c_opts.mem = 6000
+
         c_opts.script = train_script
         c_opts.name = options.label
         c_opts.sub = True

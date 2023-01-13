@@ -169,7 +169,12 @@ def train_all_aes(options):
                 c_opts.outdir = condor_dir
                 base_script = "../condor/scripts/train_from_json.sh"
                 train_script = condor_dir + "train_script.sh"
-                bb_name = k_options.fin.split("/")[-2]
+
+                if(options.fin[-1] == "/"):
+                    bb_name = options.fin.split("/")[-2]
+                else:
+                    bb_name = options.fin.split("/")[-1]
+
                 os.system("cp %s %s" % (base_script, train_script))
                 os.system("sed -i 's/BB_NAME/%s/g' %s" % (bb_name, train_script))
                 if(len(k_options.sig_file) > 0):
@@ -182,6 +187,7 @@ def train_all_aes(options):
                 c_opts.input = k_options.opts_list
                 c_opts.job_list = to_run
                 c_opts.sub = True
+                c_opts.mem = 6000
                 #c_opts.sub = False
 
 

@@ -97,7 +97,7 @@ def train_cwola_hunting_network(options):
     t_data = data.gen(x_key,'Y_mjj', key3 = sample_weights, batch_size = options.batch_size)
     v_data = None
 
-    timeout = TimeOut(t0=time.time(), timeout=24.0) #stop training after 30 hours to avoid job timeout
+    timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
     cbs = [tf.keras.callbacks.History(), timeout]
     early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)

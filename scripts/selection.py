@@ -33,7 +33,7 @@ def get_features(data, systematic = ""):
     
 
 
-def classifier_selection(options):
+def selection(options):
     print("\n")
     compute_mjj_window(options)
     options.keep_mlow = options.keep_mhigh = -1
@@ -124,8 +124,6 @@ def classifier_selection(options):
         #sideband, weighted_sideband, central or overall
         #eff_definition = 'central'
         eff_definition = 'weighted_sideband'
-        use_sidebands = True
-        weighted_sidebands = True
 
         if(options.mbin > 0):
             sb_mlow, mjj_low, mjj_high, sb_mhigh = lookup_mjj_bins(options.mbin)
@@ -161,7 +159,7 @@ def classifier_selection(options):
             in_sb = low_sb | high_sb
             if('sideband' in eff_definition):
                 print("Using sideband definition of efficiency")
-                if("weighted" not in eff_definition):
+                if('weighted' not in eff_definition):
                     thresh = np.percentile(jj_scores[in_sb], percentile_cut)
                 else:
                     n_low_sb = np.sum(low_sb)
@@ -208,7 +206,7 @@ def classifier_selection(options):
         is_sig_output = Y[mask]
         event_num_output = event_num[mask]
         print("Selected %i events" % mjj_output.shape[0])
-        eps = 1e-6
+        eps = 1e-8
 
         in_window_all = (mjj > options.mjj_low) & (mjj < options.mjj_high)
         in_window = (mjj_output > options.mjj_low) & (mjj_output < options.mjj_high)
@@ -231,9 +229,9 @@ def classifier_selection(options):
         else:
             sig_eff = sig_eff_window = -1.
 
-        bkg_eff = float(( Y[(Y < 0.1) & mask]).shape[0]) / nbkg
-        minor_bkg_eff = float(( Y [(Y< -0.1) & mask]).shape[0]) / Y[ (Y < -0.1)].shape[0]
-        bkg_eff_window =  B/ Y[(Y< 0.1) & in_window_all].shape[0]
+        bkg_eff = float(( Y[(Y < 0.1) & mask]).shape[0]) / (nbkg + eps)
+        minor_bkg_eff = float(( Y [(Y< -0.1) & mask]).shape[0]) / (Y[ (Y < -0.1)].shape[0] + eps)
+        bkg_eff_window =  B/ (Y[(Y< 0.1) & in_window_all].shape[0] + eps)
 
         sig_eff_window_nosel = -1.0
 
@@ -385,4 +383,4 @@ if(__name__ == "__main__"):
         parser.add_argument("--do_roc", default = False, help = "Save info for roc")
         options = parser.parse_args()
 
-    classifier_selection(options)
+    selection(options)

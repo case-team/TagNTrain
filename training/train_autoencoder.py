@@ -88,7 +88,7 @@ def train_autoencoder(options):
          norms = None
 
 
-    timeout = TimeOut(t0=time.time(), timeout=24.0) #stop training after 24 hours to avoid job timeout
+    timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
     cbs = [tf.keras.callbacks.History(), timeout]
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 

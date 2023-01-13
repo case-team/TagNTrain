@@ -28,14 +28,14 @@ mass_bin_select_effs = {
         2: 1.0,
         3: 1.0,
         4: 3.0, 
-        5: 5.0,
+        5: 3.0,
         6: 5.0,
         10: 1.0,
         11: 1.0,
         12: 1.0,
         13: 1.0,
         14: 3.0,
-        15: 5.0,
+        15: 3.0,
         16: 5.0,
 }
 
@@ -65,8 +65,8 @@ def sig_mass_to_mbin(m):
     if(m >= 2350 and m < 2550): return 12
     if(m >= 2550 and m < 2850): return 3
     if(m >= 2850 and m < 3150): return 13
-    if(m >= 3150 and m < 3450): return 4
-    if(m >= 3450 and m < 3850): return 14
+    if(m >= 3150 and m < 3550): return 4
+    if(m >= 3550 and m < 3850): return 14
     if(m >= 3850 and m < 4350): return 5
     if(m >= 4350 and m < 4750): return 15
     if(m >= 4750 and m < 5250): return 6

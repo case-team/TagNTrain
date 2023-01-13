@@ -61,11 +61,13 @@ def train_supervised_network(options):
     mjjs  = data['mjj'][()]
     sig_events = data['label'].reshape(-1) > 0.9
 
-    #feats = data[x_key]
-    #qts = create_transforms(feats, dist = 'normal')
-    #data.make_preprocessed_feats(x_key, qts)
-    #if(do_val): val_data.make_preprocessed_feats(x_key, qts)
-    #x_key = x_key + "_normed"
+    if(options.preprocess != ""):
+        print("\n Doing preprocess %s \n" % options.preprocess)
+        feats = data[x_key]
+        qts = create_transforms(feats, dist = options.preprocess)
+        data.make_preprocessed_feats(x_key, qts)
+        if(do_val): val_data.make_preprocessed_feats(x_key, qts)
+        x_key = x_key + "_normed"
 
 
 

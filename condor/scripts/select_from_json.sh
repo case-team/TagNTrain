@@ -12,7 +12,7 @@ source /cvmfs/cms-lpc.opensciencegrid.org/sl7/gpu/anaconda3/bin/activate mlenv0
 mkdir temp
 cd temp
 
-python3 ../scripts/classifier_selection.py ${_CONDOR_SCRATCH_DIR}/select_opts_KFOLDNUM.json
+python3 ../scripts/selection.py ${_CONDOR_SCRATCH_DIR}/select_opts_KFOLDNUM.json
 
 xrdcp -f FNAME ${1}
 xrdcp -f FNAME.npz ${1}

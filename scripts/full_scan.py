@@ -138,7 +138,9 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     #plt.ylim(1e-8, 1.1)
     #plt.yscale('log')
     draw_mbins(plt)
-    plt.ylim(1300., 2400.)
+    fit_start_max = np.amax(fit_start_list)
+    ymax = max(2400., fit_start_max + 50.)
+    plt.ylim(1300., ymax)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "fit_start_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
@@ -298,7 +300,7 @@ def full_scan(options):
             os.system('mkdir %s; mv %s/*.png %s' % (fit_plot_dir, t_opts.output, fit_plot_dir))
 
             for sig_mass in mass_bin_sig_mass_map[mbin]:
-                fit_plot = fit_plot_dir + 'sbFit_m%.0f_raw.png' % sig_mass
+                fit_plot = fit_plot_dir + 'sbFit_M%.0f_raw.png' % sig_mass
                 if(options.sideband and sig_mass < first_sb_sig_mass): continue
 
                 os.system('cp ' + fit_plot + ' %s/plots/sbfit_mbin%i_mjj%.0f.png' % (options.output, mbin, sig_mass))

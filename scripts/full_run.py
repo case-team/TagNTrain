@@ -3,7 +3,7 @@ import os
 sys.path.append('..')
 from utils.TrainingUtils import *
 from create_model_ensemble import *
-from classifier_selection import *
+from selection import *
 import subprocess
 import h5py
 import time
@@ -308,7 +308,7 @@ def full_run(options):
             selection_options.do_roc = True
 
             if((not options.condor)): #run selection locally
-                classifier_selection(selection_options)
+                selection(selection_options)
 
             else: #submit to condor
                 selection_options.output = "fit_inputs_kfold%i_eff{eff}.h5" % k
