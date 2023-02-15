@@ -1,6 +1,7 @@
 from full_run import *
 import sys
 from plotting.draw_sys_variations import *
+import sys
 
 dedicated_searches = {
         "XToHY_MX_2600_MY_200_UL17_TIMBER.h5" : (1, "B2G-21-003"),
@@ -85,6 +86,7 @@ def get_fit_nosel_sig(options):
     plot_dir = base_path + options.output + 'sig_nosel_fit/'
     fit_file = plot_dir + 'fit_results_%.1f.json' % options.mjj_sig
     if(not os.path.exists(plot_dir)): os.system("mkdir %s" % plot_dir)
+    if(len(options.effs) == 0): options.effs = [mass_bin_select_effs[options.mbin] ]
 
     if(options.refit or not os.path.exists(fit_file)):
         print("Running fit with no selection \n")
@@ -206,9 +208,10 @@ def make_signif_plot(options, signifs):
 
     x_stop = max(np.max(xs), nosel_x)
     y_stop = max(np.max(ys), 6.)
-    print('stops', x_stop, y_stop)
-    print(xs, nosel_limit) 
-    print(ys)
+
+    #print('stops', x_stop, y_stop)
+    #print(xs, nosel_limit) 
+    #print(ys)
 
     yline = np.arange(0,y_stop,y_stop/10)
     if(nosel_x >0):
@@ -475,8 +478,8 @@ def limit_set(options):
     do_train = options.step == "train"
     get_condor = options.step == "get"
     do_selection = options.step == "select"
-    do_merge = options.step == "merge"
-    do_fit = options.step == "fit"
+    do_merge = "merge" in options.step
+    do_fit = "fit" in options.step
     do_plot = options.step == "plot"
     do_roc = options.step == "roc"
     do_sys_train = options.step == "sys_train"
@@ -501,6 +504,12 @@ def limit_set(options):
             full_run(t_opts)
 
     if(do_selection):
+        if(len(options.effs) == 0):
+            eff_point = mass_bin_select_effs[options.mbin]
+            options.effs = [eff_point]
+            print("Selecting with eff %.03f based on mbin %i" % (eff_point, options.mbin))
+
+
         for spb in spbs_to_run:
             t_opts = spb_opts(options, spb)
             t_opts.step = "select"
@@ -772,8 +781,8 @@ def limit_set(options):
             sig_effs.append(sig_eff)
             signifs.append(signif)
 
-        print(sig_effs)
-        print(signifs)
+        print("Sig Effs: ",  sig_effs)
+        print("Significances " , signifs)
 
         #take an average of the different fits (? is this right to do ?)
         options.saved_params['n_evts_exc'] = n_evts_exc_sum / n_runs
@@ -856,9 +865,12 @@ if(__name__ == "__main__"):
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.set_defaults(reload=True)
+    parser.set_defaults(deta=1.3)
     parser.add_argument("--condor", dest = 'condor', action = 'store_true')
     parser.add_argument("--no-condor", dest = 'condor', action = 'store_false')
+    parser.add_argument("--recover", default = False, dest='recover', action = 'store_true', help = "Retrain jobs that failed")
     parser.add_argument("--refit", action = 'store_true', help = 'redo no selection signal fit')
     parser.set_defaults(condor=True)
+    parser.set_defaults(num_models=3)
     options = parser.parse_args()
     limit_set(options)

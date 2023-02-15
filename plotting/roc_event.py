@@ -24,7 +24,7 @@ single_file = True
 sic_max = 10
 
 #model_dir = "cwola_qstar_test/"
-model_dir = "../models/no_tau1_test/"
+model_dir = "../models/batch_size_test/"
 #model_dir = "../models/AEs/"
 
 #plot_dir = "../runs/cwola_40spb_fullrun/"
@@ -44,8 +44,11 @@ f_models = [
 #'{j_label}_supervised_Wp.h5',
 #'{j_label}_supervised_Wp_cliptau1.h5',
 #'{j_label}_supervised_Wp_notau1.h5',
-'{j_label}_supervised_XYY.h5',
-'{j_label}_supervised_notau1_XYY.h5',
+#'{j_label}_supervised_XYY.h5',
+#'{j_label}_supervised_notau1_XYY.h5',
+'{j_label}_baseline.h5',
+'{j_label}_batch2k.h5',
+'{j_label}_batch8k.h5',
 
 ]
 
@@ -55,9 +58,12 @@ labels = [
         #'AE new',
         #'supervised 30k params',
         #'supervised 3k params',
-        'supervised',
+        #'supervised',
         #'supervised clip tau1',
-        'supervised no tau1',
+        #'supervised no tau1',
+        'baseline',
+        'batch 2k',
+        'batch 8k',
         ]
 
 

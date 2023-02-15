@@ -8,6 +8,8 @@ import subprocess
 import h5py
 import time
 
+fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
+fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
 def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", output_dir = "", loop = False):
     print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
@@ -16,8 +18,6 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
     if(len(output_dir) == 0): output_dir = base_path + options.output
     if(len(input_file) == 0): input_file = base_path + options.output + fit_inputs
 
-    fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
-    fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
     counting_str = ""
     if(options.counting_fit):
@@ -53,8 +53,8 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
                 if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.2) or fit_params['bkgfit_frac_err'] > 0.5):
                     if(fit_start < 1550.): fit_start = 1550.
                     else: fit_start += 100.
-                    print("\n \n POOR Fit quality (pval %.2e, largest unc %.2f)! \n. Increasing fit start to %.0f and retrying" % 
-                            (fit_params['bkgfit_prob'],  fit_params['bkgfit_frac_err'], fit_start))
+                    print("\n \n POOR Fit quality (bkg pval %.2e, s+b pval %.2e, fit unc %.2f)! \n. Increasing fit start to %.0f and retrying" % 
+                            (fit_params['bkgfit_prob'], fit_params['sbfit_prob'], fit_params['bkgfit_frac_err'], fit_start))
                     run_fit = True
     return fit_start
 
@@ -185,7 +185,7 @@ def full_run(options):
         print("Number of batches per kfold(%i) must be multiple of number of lfolds (%i)" % (batches_per_kfold, options.lfolds))
         sys.exit(1)
 
-    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "all"]):
+    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "bias", "all"]):
         print("Invalid option %s" % options.step)
         sys.exit(1)
 
@@ -197,6 +197,7 @@ def full_run(options):
     do_merge = options.step == "merge"
     do_fit = options.step == "fit"
     do_roc = options.step == "roc"
+    do_bias_test = options.step == "bias"
     if(options.step == "all"):
         do_train = do_selection = do_fit = do_roc = True
     if(options.step == "roc" and options.condor):
@@ -236,6 +237,8 @@ def full_run(options):
     if(do_train):
         for k,k_options in enumerate(kfold_options):
 
+
+
             if(not options.randsort):
                 k_options.label = options.label + "_j1_kfold%i" % k
                 k_options.output = options.output + "j1_kfold%i/" % k
@@ -255,7 +258,9 @@ def full_run(options):
                         print("Must supply mbin with ae_dir !")
                         exit(1)
                     else:
-                        k_options.labeler_name = options.ae_dir + "jrand_AE_kfold%i_mbin%i.h5" % (k, k_options.mbin)
+                        ae_mbin = k_options.mbin
+                        if(ae_mbin == 6 or ae_mbin == 16): ae_mbin -= 1
+                        k_options.labeler_name = options.ae_dir + "jrand_AE_kfold%i_mbin%i.h5" % (k, ae_mbin)
                 create_model_ensemble(k_options)
 
 
@@ -376,6 +381,8 @@ def full_run(options):
 
     if(do_merge):
 
+        if(len(options.effs) == 0): options.effs = [mass_bin_select_effs[options.mbin] ]
+
         if(options.condor):
             for k,k_options in enumerate(kfold_options):
 
@@ -457,12 +464,13 @@ def full_run(options):
             fit_start = options.fit_start
         run_fit = True
 
-        fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
-        fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
         if( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
             sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/diboson_interpolation_M%.1f.root" % options.mjj_sig
         else: sig_shape_file = ""
+
+        if(len(options.effs) == 0):
+            options.effs = [mass_bin_select_effs[options.mbin] ]
 
 
         if(os.path.exists(options.output + "sig_shape_eff{eff}.h5".format(eff = options.effs[0]))):
@@ -479,6 +487,44 @@ def full_run(options):
 
         final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, loop = True)
         output = final_fit_start
+
+
+    if(do_bias_test):
+
+        fit_file = options.output + 'fit_results_%.1f.json' % options.mjj_sig
+        if(not os.path.exists(fit_file)):
+            print("Fit results file not found. Run regular fit before bias test!")
+            exit(1)
+        outdir = options.output + "bias_test/"
+        os.system("mkdir " + outdir)
+        with open(fit_file, 'r') as f:
+            fit_params = json.load(f, encoding="latin-1")
+            exp_lim = fit_params['exp_lim_events']
+
+        sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/diboson_interpolation_M%.1f.root" % options.mjj_sig
+        base_path = os.path.abspath(".") + "/"
+
+        fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+        input_file = base_path + options.output + fit_inputs
+        alt_shape_ver = 2
+        num_samples = 200
+        dijet_cmd = " python bias_test.py -i %s -p %s --rebin --alt_shape_ver %i --num_samples %i " % (input_file, base_path + outdir,  alt_shape_ver, num_samples)
+
+        #roughly inject 0, 3sigma and 5sigma
+        #sigs = [0., 2.5 * exp_lim, 4.0 * exp_lim]
+        #labels = ["%isigma" % (sig) for sig in [0, 3, 5]]
+
+        sigs = [1.5 * exp_lim]
+        labels = ["2sigma"]
+
+
+        for i,num_sig in enumerate(sigs):
+            dijet_cmd_iter =  dijet_cmd + " -M %.0f --sig_shape %s --dcb-model -l %s --num_sig %i " % (options.mjj_sig, sig_shape_file,  labels[i], num_sig)
+            dijet_cmd_iter += " >& %s/bias_test_log%.0f_nsig%i.txt " % (base_path + outdir, options.mjj_sig, num_sig)
+            full_fit_cmd = fit_cmd_setup +  dijet_cmd_iter + "; " + fit_cmd_after
+            print(full_fit_cmd)
+            subprocess.call(full_fit_cmd,  shell = True, executable = '/bin/bash')
+
 
 
 

@@ -8,6 +8,27 @@ from scipy.special import erf
 import matplotlib
 
 
+def plot_biases(sig_masses, mean_pulls, err_mean_pulls, outfile):
+    plt.style.use(hep.style.CMS)
+    plt.errorbar(sig_masses, mean_pulls[0], yerr = err_mean_pulls[0], label = "0 Sigma Inj.", c = "black", fmt = "o")
+    plt.errorbar(sig_masses, mean_pulls[1], yerr = err_mean_pulls[1], label = "2 Sigma Inj.",  c = "green", fmt = "o")
+    plt.errorbar(sig_masses, mean_pulls[2], yerr = err_mean_pulls[2], label = "5 Sigma Inj.",  c = "blue",  fmt = "o")
+
+    plt.legend(loc='upper right')
+    plt.xlabel(r"$m_{jj}$ [GeV]")
+    plt.ylabel(r"Mean Bias $(\frac{\mu_{fit} - \mu_{gen}}{\sigma_{\mu}})$")
+    plt.ylim(-2.0, 2.0)
+
+    #draw_mbins(plt, ymin = -1.5, ymax = 1.5, colors = ('gray', 'gray'))
+    xmax = np.amax(sig_masses)
+    plt.xlim(1400, xmax + 150.)
+    hep.cms.text("Preliminary")
+    plt.savefig(outfile, dpi=300, bbox_inches="tight")
+    print("Wrote out %s" % outfile)
+    plt.close()
+
+
+
 def plot_significances(input_files, out_dir, sig_masses = None):
 
     # build arrays of variables to plot
@@ -151,6 +172,7 @@ def plot_significances(input_files, out_dir, sig_masses = None):
 
 
 
+
 def mbin_opts(options, mbin, sys = ""):
 
     t_opts = copy.deepcopy(options)
@@ -230,6 +252,8 @@ def full_scan(options):
     do_merge = options.step == "merge"
     do_fit = options.step == "fit"
     do_plot = options.step == "plot"
+    do_bias_test = options.step == "bias"
+    do_bias_plot = options.step == "bias_plot"
 
     get_condor = get_condor or do_selection
     
@@ -285,6 +309,55 @@ def full_scan(options):
                 #for signal masses in same mass bin save time by reusing fit start
                 t_opts.fit_start = fit_start
 
+    if(do_bias_test):
+        for mbin in mass_bin_idxs:
+            if(options.sideband and mbin in sb_excluded_mbins): continue
+            eff_point = mass_bin_select_effs[mbin]
+            print("Mbin %i, eff %.1f" % (mbin, eff_point))
+            t_opts = mbin_opts(options, mbin)
+            t_opts.effs = [eff_point]
+            t_opts.step = "bias"
+            t_opts.reload = True
+            t_opts.condor = False
+            fit_start = -1
+            if(options.sideband): t_opts.fit_start = 2000.
+
+            #Just do first sig mass per mbin for now
+            for sig_mass in mass_bin_sig_mass_map[mbin]:
+                if(options.sideband and sig_mass < first_sb_sig_mass): continue
+                t_opts.mjj_sig = sig_mass
+                print("mbin %i, sig_mass %.0f" %(mbin, sig_mass))
+                fit_start = full_run(t_opts)
+
+    if(do_bias_plot):
+        sig_masses = []
+        mean_pulls = [ [], [], [] ] 
+        err_mean_pulls = [ [], [], [] ] 
+        for mbin in mass_bin_idxs:
+            t_opts = mbin_opts(options, mbin)
+            for sig_mass in mass_bin_sig_mass_map[mbin]:
+
+                sig_masses.append(sig_mass)
+
+                for k,sigma in enumerate([0, 2, 5]):
+                    results = t_opts.output  + "bias_test/" + 'bias_test_results_%.1f_%isigma.json' % (sig_mass, sigma)
+                    pulls = []
+                    with open(results, 'r') as f:
+                        params = json.load(f, encoding="latin-1")
+                        resids =  params['resids']
+                        uncs = params['uncs']
+                    for i in range(len(resids)):
+                        #remove outliers from failed fits
+                        if(abs(resids[i]/uncs[i]) < 5.): pulls.append(resids[i] / uncs[i])
+                    mean_pull = np.mean(pulls)
+                    std_pull = np.std(pulls)
+                    mean_pulls[k].append(mean_pull)
+                    err_mean_pulls[k].append(std_pull / np.sqrt(len(pulls)))
+
+        print(mean_pulls[0])
+        print(err_mean_pulls[0])
+
+        plot_biases(sig_masses, mean_pulls, err_mean_pulls, options.output + "plots/bias_mean_pulls.png")
 
     if(do_plot):
         os.system("mkdir -p " + options.output + "plots/")
@@ -324,6 +397,8 @@ def full_scan(options):
         
         print(list(zip(sig_masses, signifs)))
         plot_significances(file_list, options.output + "plots/", sig_masses = sig_masses)
+
+
             
 
     write_params(options.output + "saved_params.json", options.saved_params)
@@ -351,6 +426,7 @@ if(__name__ == "__main__"):
     parser.set_defaults(reload=True)
     parser.add_argument("--condor", dest = 'condor', action = 'store_true')
     parser.add_argument("--no-condor", dest = 'condor', action = 'store_false')
+    parser.set_defaults(num_models=3)
     parser.set_defaults(condor=True)
     options = parser.parse_args()
     full_scan(options)

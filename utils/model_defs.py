@@ -51,16 +51,18 @@ def dense_net(input_shape, drop_rate = 0.2):
 def dense_small_net(input_shape, drop_rate = 0.2):
     model = tf.keras.models.Sequential()
     model.add(tf.keras.layers.BatchNormalization(input_shape = (input_shape,)))
-    model.add(tf.keras.layers.Dense(32, input_dim=input_shape,use_bias=True,
+    model.add(tf.keras.layers.Dense(16, input_dim=input_shape,use_bias=True,
                     bias_initializer = tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=np.sqrt(2/64))))
     model.add(tf.keras.layers.LeakyReLU(alpha=0.01))
     model.add(tf.keras.layers.Dropout(drop_rate))
-    model.add(tf.keras.layers.Dense(64, use_bias=True, activation='elu',
+    model.add(tf.keras.layers.Dense(16, use_bias=True, activation='elu',
                     bias_initializer = tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=np.sqrt(2/128))))
     model.add(tf.keras.layers.Dropout(drop_rate))
     model.add(tf.keras.layers.Dense(16, use_bias=True, activation='elu',
                     bias_initializer = tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=np.sqrt(2/16))))
     model.add(tf.keras.layers.Dense(8, use_bias=True, activation='elu',
+                    bias_initializer = tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=np.sqrt(2/8))))
+    model.add(tf.keras.layers.Dense(4, use_bias=True, activation='elu',
                     bias_initializer = tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=np.sqrt(2/8))))
     model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
     return model

@@ -145,15 +145,17 @@ print("Minor bkg frac %.3f in SR %.3f in SB" % (np.mean(minor_bkg & (data[Y_labe
 data.make_ptrw(Y_label, use_weights = not options.no_sample_weights, save_plots = True, plot_dir = options.output)
 
 if(not options.nsubj_ratios):
-    feature_names = ["jet mass", r'$\tau_1$', r"$\tau_2$", r"$\tau_3$", r"$\tau_4$", "LSF3", "DeepB", "nPFCands", "pt"]
-    flabels = ["jetmass","tau1", "tau2", "tau3", "tau4", "LSF3", "DeepB", "nPFCands", "pt"]
+    feature_names = ["jet mass", r"$\tau_2$", r"$\tau_3$", r"$\tau_4$", "LSF3", "DeepB", "nPFCands", "pt"]
+    flabels = ["jetmass", "tau2", "tau3", "tau4", "LSF3", "DeepB", "nPFCands", "pt"]
 
 else:
-    feature_names = ["jet mass", r'$\tau_1$', r"$\tau_{21}$", r"$\tau_{32}$", r"$\tau_{43}$", "LSF3", "DeepB", "nPFCands", "pt"]
-    flabels = ["jetmass","tau1", "tau21", "tau32", "tau43", "LSF3", "DeepB", "nPFCands", "pt"]
+    feature_names = ["jet mass", r"$\tau_{21}$", r"$\tau_{32}$", r"$\tau_{43}$", "LSF3", "DeepB", "nPFCands", "pt"]
+    flabels = ["jetmass", "tau21", "tau32", "tau43", "LSF3", "DeepB", "nPFCands", "pt"]
 
 if(not options.keep_LSF):
     feature_names.remove("LSF3")
+
+
 
 n_bins = 20
 colors = ['b', 'green']

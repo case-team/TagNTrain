@@ -97,10 +97,6 @@ def train_cwola_hunting_network(options):
     t_data = data.gen(x_key,'Y_mjj', key3 = sample_weights, batch_size = options.batch_size)
     v_data = None
 
-    timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
-    cbs = [tf.keras.callbacks.History(), timeout]
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
-    cbs.append(early_stop)
 
     nVal = 0
     if(do_val): 
@@ -108,8 +104,6 @@ def train_cwola_hunting_network(options):
         #v_data = val_data.gen(x_key,'label', key3 = sample_weights, batch_size = options.batch_size) #truth labels
         v_data = val_data.gen(x_key,'Y_mjj', key3 = sample_weights, batch_size = options.batch_size) #mjj labels
 
-        roc = RocCallback(training_data=(np.zeros(100), np.zeros(100)), validation_data=(val_data[x_key], val_data['label']), extra_label = "true: ")
-        cbs.append(roc)
 
 
 
@@ -152,12 +146,26 @@ def train_cwola_hunting_network(options):
         model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'])
         if(model_idx == 0): model.summary()
 
+
+
+        timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
+        early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=10 + options.num_epoch/20, verbose=1, mode='min')
+        checkpoint_loc = "checkpoint.h5"
+        checkpoint = tf.keras.callbacks.ModelCheckpoint(checkpoint_loc, monitor = 'val_loss', save_best_only = True, save_weights_only = True)
+        cbs = [tf.keras.callbacks.History(), timeout, early_stop, checkpoint]
+
+        if(do_val):
+            roc = RocCallback(training_data=(np.zeros(100), np.zeros(100)), validation_data=(val_data[x_key], val_data['label']), extra_label = "true: ")
+            cbs.append(roc)
+
         history = model.fit(t_data, 
                 epochs = options.num_epoch, 
                 validation_data = v_data,
                 callbacks = cbs,
                 verbose = 2 )
+        model.load_weights(checkpoint_loc)
         model_list.append(model)
+        os.system("rm %s" % checkpoint_loc)
 
     if(options.num_models == 1):
         best_model = model_list[0]

@@ -41,8 +41,8 @@ def input_options():
 
     parser.add_argument("--keep_mlow", type=int, default = -1,  help="Low mjj value to keep in dataset")
     parser.add_argument("--keep_mhigh", type=int, default = -1, help="High mjj value to keep in dataset")
-    parser.add_argument("--mjj_low", type=int, default = 2250,  help="Low mjj cut value")
-    parser.add_argument("--mjj_high", type=int, default = 2750, help="High mjj cut value")
+    parser.add_argument("--mjj_low", type=int, default = -1,  help="Low mjj cut value")
+    parser.add_argument("--mjj_high", type=int, default = -1, help="High mjj cut value")
     parser.add_argument("--mjj_sig", type=int, default = 2500, help="Signal mass (used for signal filtering only)")
     parser.add_argument("--mbin", type=int, default = -1, help="Mass bin based on mjj binning scheme")
 
@@ -88,7 +88,7 @@ def input_options():
 
     parser.add_argument("--local_storage", default =False, action="store_true",  help="Store temp files locally not on gpuscratch")
     parser.add_argument("--sig_cut", type=int, default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")
-    parser.add_argument("--bkg_cut", type=int, default = 40,  help="What classifier percentile to use to define bkg-rich region in TNT")
+    parser.add_argument("--bkg_cut", type=int, default = 50,  help="What classifier percentile to use to define bkg-rich region in TNT")
 
     parser.add_argument("--eff_cut", type=float, default = 0.01,  help="What classifier percentile to use for eff_cut computation")
 
@@ -191,8 +191,11 @@ def lookup_mjj_bins(mbin):
 
 
 def compute_mjj_window(options):
-    if(options.mbin > 0): # use predefined binning
+    if(options.mbin >= 0): # use predefined binning
         options.keep_mlow, options.mjj_low, options.mjj_high, options.keep_mhigh = lookup_mjj_bins(options.mbin)
+        options.eff_cut = mass_bin_select_effs[options.mbin] / 100.
+        options.sig_cut = mass_bin_TNT_cuts[options.mbin]
+
 
 
     else: #compute 

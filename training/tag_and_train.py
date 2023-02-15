@@ -175,10 +175,6 @@ def tag_and_train(options):
 
     myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
 
-    timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
-    cbs = [tf.keras.callbacks.History(), timeout]
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
-    cbs.append(early_stop)
     
     #batch_size_scale = 1./(( (100. - options.sig_cut) + options.bkg_cut)/200.)
     batch_size_scale = 1./filter_frac
@@ -206,8 +202,6 @@ def tag_and_train(options):
             val_data_plain[2] = np.append(val_data_plain[2], val_data2['Y_TNT2'], axis = 0)
             val_data_plain[3] = np.append(val_data_plain[3], val_data2[sample_weights + '2'], axis = 0)
             print(val_data_plain[0].shape, val_data_plain[1].shape)
-        roc = RocCallback(training_data=(np.zeros(100), np.zeros(100)), validation_data=val_data_plain[:2], extra_label = "true: ")
-        cbs.append(roc)
         n_val = v_data.nTotal
 
     print("Will train on %i events, validate on %i events" % (t_data.nTotal, n_val))
@@ -248,10 +242,17 @@ def tag_and_train(options):
             model = tf.keras.models.load_model(options.model_dir + j_label + options.model_start)
 
 
+        timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
+        early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=10 + options.num_epoch/20, verbose=1, mode='min')
+        checkpoint_loc = "checkpoint.h5"
+        checkpoint = tf.keras.callbacks.ModelCheckpoint(checkpoint_loc, monitor = 'val_loss', save_best_only = True, save_weights_only = True)
+        cbs = [tf.keras.callbacks.History(), timeout, early_stop, checkpoint]
+
+        if(do_val):
+            roc = RocCallback(training_data=(np.zeros(100), np.zeros(100)), validation_data=(val_data[x_key], val_data['label']), extra_label = "true: ")
+            cbs.append(roc)
 
         #additional_val = AdditionalValidationSets([(X_val, Y_true_val, "Val_true_sig")], options.batch_size = 500)
-
-        #cbs = [callbacks.History(), additional_val, roc1, roc2] 
 
 
 
@@ -260,7 +261,9 @@ def tag_and_train(options):
                 validation_data = v_data,
                 callbacks = cbs,
                 verbose = 2 )
+        model.load_weights(checkpoint_loc)
         model_list.append(model)
+        os.system("rm %s" % checkpoint_loc)
 
         preds = model.predict_proba(data[x_key][:10])
         if np.any(np.isnan(preds)): 

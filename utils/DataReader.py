@@ -568,8 +568,9 @@ class DataReader:
                 swapping_idxs = self.rng.choice(a=[True,False], size = f['jet_kinematics'][cstart:cstop][mask].shape[0])
 
 
+            num_sig_inj = 0
             #load separate signal data
-            if(self.sep_signal):
+            if(self.sep_signal and self.sig_per_batch > 0):
                 sig_mask_temp = np.ones(self.sig_chunk_size, dtype = bool)
                 s_start = self.sig_marker
                 s_stop = self.sig_marker + self.sig_chunk_size
@@ -692,7 +693,7 @@ class DataReader:
 
 
             #combine labels
-            if(self.sep_signal): 
+            if(self.sep_signal and num_sig_inj > 0): 
                 extra_labels = np.expand_dims(np.ones(num_sig_inj, dtype=np.int8),axis=-1)
                 if(self.replace_ttbar): np.expand_dims(np.array([-2]*num_sig_inj, dtype = np.int8), axis = -1)
                 t_labels = np.append(t_labels, extra_labels, axis=0)
@@ -701,7 +702,7 @@ class DataReader:
 
 
             #Shuffle before saving
-            if(self.sep_signal):
+            if(self.sep_signal and num_sig_inj > 0):
                 shuffle_order = np.random.permutation(t_labels.shape[0])
                 if(swapping_idxs.shape[0] > 0):
                     swapping_idxs = swapping_idxs[shuffle_order]
@@ -720,7 +721,7 @@ class DataReader:
 
                 data = self.get_key(f,cstart, cstop, mask, key)
 
-                if(self.sep_signal): 
+                if(self.sep_signal and num_sig_inj > 0): 
                     if(key == 'jet_kinematics'): sig_data = sig_jet_kinematics[sig_final_mask]
                     else: sig_data = self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, key)
                     data = np.append(data, sig_data, axis= 0)
@@ -730,7 +731,7 @@ class DataReader:
                     if('j1' in key): opp_key = 'j2' + key[2:]
                     else: opp_key = 'j1' + key[2:]
                     opp_data = self.get_key(f,cstart, cstop, mask, opp_key)
-                    if(self.sep_signal): opp_data = np.append(opp_data, self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, opp_key), axis=0)
+                    if(self.sep_signal and num_sig_inj > 0): opp_data = np.append(opp_data, self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, opp_key), axis=0)
                     data[swapping_idxs] = opp_data[shuffle_order][swapping_idxs]
 
 

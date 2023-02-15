@@ -21,12 +21,18 @@ options.no_minor_bkgs = True
 single_file = True
 options.hadronic_only = True
 
-model_dir = "../models/norm_test/"
+model_dir = "../models/"
 
 #model type: 0 is CNN, 1 is autoencoder, 2 is dense network, 5 is VAE
 
 f_models = [
         
+        "AEs/AEs_sep1/jrand_AE_kfold0_mbin3.h5",
+        "AEs/AEs_sep1/jrand_AE_kfold0_mbin4.h5",
+        "AEs/AEs_sep1/jrand_AE_kfold0_mbin5.h5",
+        "AEs/AEs_sep1/jrand_AE_kfold0_mbin6.h5",
+        "AEs/AEs_sep1/jrand_AE_kfold1_mbin6.h5",
+        "AEs/AEs_sep1/jrand_AE_kfold2_mbin6.h5",
         #"dense_AE_test/AE_mbin13_latent1.h5",
         #"dense_AE_test/AE_mbin13_latent2.h5",
         #"dense_AE_test/AE_mbin13_latent3.h5",
@@ -37,9 +43,9 @@ f_models = [
         #"j2_cwola_Wp.h5",
         #"j2_cwola_Wp_gaus_norm.h5",
         #"j2_cwola_Wp_uniform_norm.h5",
-        "j1_cwola_Wp_spb10.h5",
-        "j1_cwola_Wp_spb10_gaus_norm.h5",
-        "j1_cwola_Wp_spb10_uniform_norm.h5",
+        #"j1_cwola_Wp_spb10.h5",
+        #"j1_cwola_Wp_spb10_gaus_norm.h5",
+        #"j1_cwola_Wp_spb10_uniform_norm.h5",
 
 #'test_spb30.h5',
 #'test_batch250.h5',
@@ -49,7 +55,8 @@ f_models = [
 
         ] 
 #model_type = [-1,-1,-1,1] 
-model_type = [2,2,2,2,2,2] 
+model_type = [1,1,1,1,1,1] 
+#model_type = [2,2,2,2,2,2] 
 #num_models = [5,5,5,5,5,5]
 num_models = [1,1,1,1,1,1]
 labels = [
@@ -64,9 +71,15 @@ labels = [
         #"cwola gaus norm",
         #"cwola uniform norm",
 
-        "cwola spb10",
-        "cwola spb10 gaus norm",
-        "cwola spb10 uniform norm"
+        #"cwola spb10",
+        #"cwola spb10 gaus norm",
+        #"cwola spb10 uniform norm"
+        "AE mbin3",
+        "AE mbin4",
+        "AE mbin5",
+        "AE mbin6 k0",
+        "AE mbin6 k1",
+        "AE mbin6 k2",
         ]
 
 

@@ -10,11 +10,11 @@ import numpy as np
 
 fig_size = (12,9)
 
-def draw_mbins(plot, ymin = 0., ymax = 0.):
+def draw_mbins(plot, ymin = 0., ymax = 0., colors = ('blue', 'green')):
     for mass in mass_bins1:
-        plot.axvline(mass, color = 'blue', linestyle = 'dashed', linewidth = 0.7)
+        plot.axvline(mass, color = colors[0], linestyle = 'dashed', linewidth = 0.7)
     for mass in mass_bins2:
-        plot.axvline(mass, color = 'green', linestyle = 'dashed', linewidth = 0.7)
+        plot.axvline(mass, color = colors[1], linestyle = 'dashed', linewidth = 0.7)
 
 def add_patch(legend, patch, name):
     from matplotlib.patches import Patch
@@ -403,7 +403,7 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
         weights = None, fname="", ratio_range = -1, errors = False, extras = None, logy = False, max_rw = 5):
     h_type= 'step'
     alpha = 1.
-    fontsize = 16
+    fontsize = 24
     fig = plt.figure(figsize = fig_size)
     gs = gridspec.GridSpec(2,1, height_ratios = [3,1])
     ax0 =  plt.subplot(gs[0])
@@ -424,7 +424,7 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
 
     plt.xlim([low, high])
     if(logy): plt.yscale("log")
-    ax0.legend(loc='upper right')
+    ax0.legend(loc='upper right', fontsize = fontsize * 0.75)
     plt.title(title, fontsize=fontsize)
     n0 = np.clip(ns[0], 1e-8, None)
     n1 = np.clip(ns[1], 1e-8, None)
@@ -464,8 +464,8 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
 
     #plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
     plt.xlim([low,high])
-    ax1.set_ylabel("Ratio")
-    ax1.set_xlabel(axis_label)
+    ax1.set_ylabel("Ratio", fontsize = fontsize)
+    ax1.set_xlabel(axis_label, fontsize = fontsize)
 
 
     if(type(ratio_range) == list):

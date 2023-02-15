@@ -151,7 +151,7 @@ def doCondor(options):
         excludeList = options.tarexclude.split(',')
         if options.case:
             print("Using CASE tarball options")
-            excludeList = ["CASE/CASEUtils/*.h5",  "CASE/CASEUtils/*.root", "CASE/TagNTrain/data",  "CASE/TagNTrain/runs", "CASE/TagNTrain/plots", "CASE/TagNTrain/combine_sic",
+            excludeList = ["CASE/CASEUtils/*.h5",  "CASE/CASEUtils/*.root", "CASE/TagNTrain/data",  "CASE/TagNTrain/runs", "CASE/TagNTrain/plots", "CASE/TagNTrain/combo_plots",
                     "CASE/TagNTrain/condor", "CASE/LundReweighting",
                     "CASE/CASEUtils/H5_maker", "CASE/CASEUtils/fitting/fit_inputs", "CASE/TagNTrain/models/BB*", "CASE/TagNTrain/models/old", "CASE/*/DReader*.h5"]
 
