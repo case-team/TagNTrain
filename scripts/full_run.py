@@ -24,7 +24,8 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
         counting_str = "_counting"
 
     ftest_thresh = 0.1
-    dijet_cmd = "python dijetfit%s.py -i %s -p %s --rebin --ftest_thresh %.2f" % (counting_str, input_file, output_dir, ftest_thresh)
+    err_thresh = 0.15
+    dijet_cmd = "python dijetfit%s.py -i %s -p %s --rebin --ftest_thresh %.2f --err_thresh %.2f" % (counting_str, input_file, output_dir, ftest_thresh, err_thresh)
     #dijet_cmd = "python dijetfit%s.py -i %s -p %s " % (counting_str, input_file, output_dir)
     if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
         dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
@@ -50,7 +51,7 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
             fit_file = output_dir + 'fit_results_%.1f.json' % options.mjj_sig
             with open(fit_file, 'r') as f:
                 fit_params = json.load(f, encoding="latin-1")
-                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.2) or fit_params['bkgfit_frac_err'] > 0.5):
+                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.2) or fit_params['bkgfit_frac_err'] > err_thresh):
                     if(fit_start < 1550.): fit_start = 1550.
                     else: fit_start += 100.
                     print("\n \n POOR Fit quality (bkg pval %.2e, s+b pval %.2e, fit unc %.2f)! \n. Increasing fit start to %.0f and retrying" % 

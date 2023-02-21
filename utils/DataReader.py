@@ -640,10 +640,6 @@ class DataReader:
                         weight_idx = sys_weights_map[self.sig_sys]
                         sig_weights *= self.sig_file_h5['sys_weights'][s_start:s_stop,weight_idx][sig_mask_temp]
                         num_sig_inj *= self.sys_norm_reweight
-                            
-
-                    #change in weight by eta cut accounted for by eta cut efficiency already
-                    avg_sig_reweight = np.mean(sig_weights) 
 
                     #used for the random sampling
                     sum_sig_weight = np.sum(sig_weights)

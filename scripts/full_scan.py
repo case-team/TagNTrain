@@ -5,7 +5,16 @@ from matplotlib import pyplot as plt
 import mplhep as hep
 from os.path import join
 from scipy.special import erf
+import scipy.integrate as integrate
 import matplotlib
+import uncertainties
+from uncertainties import unumpy as unp
+
+
+def qcd_model(m, p1, p2, p3=0, p4=0):
+    x = m / 13000.
+    y_vals = ((1-x)**p1)/(x**(p2+p3*np.log(x)+p4*np.log(x)**2))
+    return y_vals
 
 
 def plot_biases(sig_masses, mean_pulls, err_mean_pulls, outfile):
@@ -26,6 +35,143 @@ def plot_biases(sig_masses, mean_pulls, err_mean_pulls, outfile):
     plt.savefig(outfile, dpi=300, bbox_inches="tight")
     print("Wrote out %s" % outfile)
     plt.close()
+
+
+def plot_stitched_mjj(options, mbins, outfile):
+    if(mbins[0] < 10):
+        mass_bins = mass_bins1
+    else:
+        mass_bins = mass_bins2
+
+    mjj_min = mass_bins[1]
+    mjj_max = mass_bins[-2]
+    num_div = 75
+    bin_size_scale = 100.
+
+
+    plt.style.use(hep.style.CMS)
+    a1 = plt.axes([0.0, 0.18, 1.0, 0.8], label = "a1")
+    a2 = plt. axes([0.0,0.0, 1.0, 0.16], sharex=a1, label = "a2")
+    plt.sca(a1)
+    #hep.cms.text("Simulation, Work in progress")
+
+    for mbin in mbins:
+        plt.sca(a1)
+
+        t_opts = mbin_opts(options, mbin)
+        sig_mass  = mass_bin_sig_mass_map[mbin][0]
+
+        f_data = t_opts.output + "fit_inputs_eff%.1f.h5" % mass_bin_select_effs[mbin]
+
+        with h5py.File(f_data, "r") as f:
+            mjjs = f['mjj'][()]
+
+        mjjs = mjjs[ (mjjs > mjj_min) & (mjjs < mjj_max)]
+        n_evts = mjjs.shape[0]
+        print("n_evts", n_evts)
+
+        fit_file = t_opts.output + 'fit_results_%.1f.json' % sig_mass
+        if(not os.path.exists(fit_file)): 
+            print("Missing " + fit_file)
+            exit(1)
+
+        with open(fit_file) as json_file:
+            results = json.load(json_file)
+
+
+        sr_mlow = mass_bins[mbin % 10]
+        sr_mhigh = mass_bins[ (mbin+1) % 10]
+
+
+        #tmp_mjj = mjjs[(mjjs > mjj_min) & (mjjs < mjj_max)]
+        #xbins = np.linspace(mjj_min, mjj_max, 20)
+        tmp_mjj = mjjs[(mjjs > sr_mlow) & (mjjs < sr_mhigh)]
+        xbins = np.linspace(sr_mlow, sr_mhigh, 5)
+
+        vals, edges = np.histogram(tmp_mjj, bins=xbins)
+        widths = edges[1:] - edges[:-1]
+        centers = (edges[1:] + edges[:-1])/2
+
+        #vals_norm = vals / (widths/ bin_size_scale)
+        #errs_norm = np.sqrt(vals) / (widths/ bin_size_scale)
+        vals_norm = vals
+        errs_norm = np.sqrt(vals) 
+
+        label_data = 'data'
+        plt.errorbar(centers,vals_norm, yerr=errs_norm, label=label_data, fmt="ko")
+
+
+        npars = results['nPars_QCD']
+        fit_params = results['bkg_fit_params']
+        p1 = p2 = p3 = p4 = 0
+        cov = np.array(fit_params['cov'], dtype=np.float32)
+        p1 = fit_params['p1'][0]
+        p2 = fit_params['p2'][0]
+        if(npars == 2): 
+            pars = uncertainties.correlated_values([p1,p2], cov)
+        elif(npars == 3): 
+            p3 = fit_params['p3'][0]
+            pars = uncertainties.correlated_values([p1,p2,p3], cov)
+        elif(npars == 4): 
+            p3 = fit_params['p3'][0]
+            p4 = fit_params['p4'][0]
+            pars = uncertainties.correlated_values([p1,p2,p3,p4], cov)
+
+        mjj_fit = mjjs[(mjjs > mjj_min) & (mjjs < mjj_max)]
+        n_evts_fit = mjj_fit.shape[0]
+
+
+        #normalize fit integral to total number of data events
+        fit_norm = n_evts_fit / integrate.quad(qcd_model, a=mjj_min, b=mjj_max, args = (p1,p2,p3,p4))[0]
+        print("fit norm, n_evts_fit", fit_norm, n_evts_fit)
+
+        #integrate fit pdf to get more accurate vals in each bin
+        fit_nom = [fit_norm * integrate.quad(qcd_model, a= edges[k], b = edges[k+1], args = (p1,p2,p3,p4))[0] for k in range(len(edges)-1)]
+
+
+
+        #get fractional error on fit based on bin center
+        #TODO These fractional errors don't really match those reported by the fit... 
+        fit_center_errs = qcd_model(centers, *pars)
+        fit_center_errs /= np.sum(fit_center_errs)
+        print(centers)
+        print(fit_center_errs)
+        fit_frac_err = unp.std_devs(fit_center_errs) / unp.nominal_values(fit_center_errs)
+        print(fit_frac_err)
+
+        fit_up = (1. + fit_frac_err) * fit_nom
+        fit_down = (1. - fit_frac_err) * fit_nom
+        fit_errs = (fit_up - fit_down) / 2.0
+
+
+        label_fit = 'fit'
+        plt.hist(centers, bins=edges, weights=fit_nom, histtype="step", label=label_fit, color="red") 
+        plt.hist(centers, bins=edges, weights=(fit_up), histtype="step", color="red", linestyle="dashed")
+        plt.hist(centers, bins=edges, weights=(fit_down), histtype="step", color="red", linestyle="dashed")
+
+        
+                        
+        # ratio plot
+        plt.sca(a2)
+        
+        # in first iteration, plot dashed line at zero
+        if(mbin %10 == 1):
+            plt.plot([1650.0, 5500.0], [0, 0], color="black", linestyle="dashed")
+            max_ratio = 3
+            min_ratio = -3
+        else:
+            plt.plot([edges[0], edges[0]], [min_ratio, max_ratio], color="lightgreen", linestyle="dashed", lw=1.0)
+            plt.plot([edges[-1], edges[-1]], [min_ratio, max_ratio], color="lightgreen", linestyle="dashed", lw=1.0)
+        
+        tot_unc = np.sqrt(fit_errs**2 + errs_norm**2)
+        pulls = (vals_norm-fit_nom)/tot_unc
+        print(pulls)
+        bottoms = np.copy(pulls)
+        bottoms[bottoms > 0.0] = 0.0
+        plt.hist(centers, bins=edges, weights=pulls, histtype="stepfilled", color="gray")
+
+    plt.savefig(outfile, dpi=300, bbox_inches="tight")
+
 
 
 
@@ -365,6 +511,8 @@ def full_scan(options):
         signifs = []
         pvals = []
         file_list = []
+        file_list_bins1 = []
+        file_list_bins2 = []
         for mbin in mass_bin_idxs:
             if(options.sideband and mbin in sb_excluded_mbins): continue
             t_opts = mbin_opts(options, mbin)
@@ -382,6 +530,8 @@ def full_scan(options):
                 if(os.path.exists(fit_file)):
                     file_list.append(fit_file)
                     sig_masses.append(sig_mass)
+
+
                     with open(fit_file, 'r') as f:
                         fit_params = json.load(f, encoding="latin-1")
                         signifs.append(fit_params['signif'])
@@ -397,6 +547,12 @@ def full_scan(options):
         
         print(list(zip(sig_masses, signifs)))
         plot_significances(file_list, options.output + "plots/", sig_masses = sig_masses)
+        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin < 10] , options.output + "plots/mjj_stitched_binsA.png")
+        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin > 10] , options.output + "plots/mjj_stitched_binsB.png")
+
+
+
+
 
 
             

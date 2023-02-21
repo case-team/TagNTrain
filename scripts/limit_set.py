@@ -50,6 +50,7 @@ def get_optimal_spb(options, sig_effs):
     get_signal_params(options)
 
     sig_effs = np.clip(sig_effs, 1e-4, 1.0)
+    print("had", options.hadronic_only_eff)
     injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in options.spbs])
     excluded_xsecs = np.array([(n_evts_exc / (options.hadronic_only_eff * sig_eff * options.preselection_eff * options.lumi)) for sig_eff in sig_effs])
 
@@ -173,10 +174,10 @@ def get_signal_params(options):
 
 
 
-def make_signif_plot(options, signifs):
-    fout = options.output + options.label + "_signif_plot.png"
+def make_signif_plot(options, signifs, spbs):
+    fout = options.output + "plots/" + options.label + "_signif_plot.png"
 
-    options.lumi = 28.
+    options.lumi = 26.81
     #n_evts_exc, n_evts_exc_nosel = fit_results[int(options.mjj_sig)]
     n_evts_exc = options.saved_params['n_evts_exc']
     n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
@@ -188,7 +189,7 @@ def make_signif_plot(options, signifs):
     print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_nosel))
 
 
-    injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in options.spbs])
+    injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs])
 
     xs = injected_xsecs
     ys = signifs
@@ -245,9 +246,9 @@ def make_signif_plot(options, signifs):
 
 
 
-def make_limit_plot(options, sig_effs):
-    fout = options.output + options.label + "_limit_plot.png"
-    if(options.num_events): fout = options.output + options.label + "_limit_plot_numevents.png"
+def make_limit_plot(options, sig_effs, spbs):
+    fout = options.output + "plots/" + options.label + "_limit_plot.png"
+    if(options.num_events): fout = options.output + "plots/" + options.label + "_limit_plot_numevents.png"
 
     n_evts_exc = options.saved_params['n_evts_exc']
     n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
@@ -258,11 +259,11 @@ def make_limit_plot(options, sig_effs):
 
 
     sig_effs = np.clip(sig_effs, 1e-4, 1.0)
-    injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in options.spbs])
+    injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs])
     excluded_xsecs = np.array([(n_evts_exc / (options.hadronic_only_eff * sig_eff * options.preselection_eff * options.lumi)) for sig_eff in sig_effs])
     nosel_limit = n_evts_exc_nosel / (options.preselection_eff  * options.lumi * options.hadronic_only_eff)
 
-    injected_nsig  = np.array( [spb * options.numBatches  for spb in options.spbs])
+    injected_nsig  = np.array( [spb * options.numBatches  for spb in spbs])
     excluded_nsig = np.array([n_evts_exc / sig_eff  for sig_eff in sig_effs])
     nosel_limit_nsig = n_evts_exc_nosel / (options.preselection_eff)
 
@@ -287,7 +288,7 @@ def make_limit_plot(options, sig_effs):
             best_lim = lim
             best_i = i
 
-        print(options.spbs[i], x,y)
+        print(spbs[i], x,y)
 
     if(options.num_events): 
         best_lim_label = "Best Limit (%.1f events)" % best_lim
@@ -351,7 +352,7 @@ def make_limit_plot(options, sig_effs):
 
 def make_sys_plot(options, nom_eff, sys_diffs, extra_label = ""):
 
-    fout = options.output + options.label + extra_label + "_sys_plot.png"
+    fout = options.output + "plots/" + options.label + extra_label + "_sys_plot.png"
     names = []
     ups = []
     downs = []
@@ -455,10 +456,11 @@ def limit_set(options):
 
             options = rel_opts
     else:
-        spbs_to_run = options.spbs
+        spbs_to_run = sorted(options.spbs)
 
 
     #save options
+    options.spbs = sorted(options.spbs)
     options_dict = options.__dict__
     write_options_to_json(options_dict, options.output + "run_opts.json" )
 
@@ -760,6 +762,8 @@ def limit_set(options):
             full_run(t_opts)
 
     if(do_plot):
+        if(not os.path.exists(os.path.join(options.output, "plots/"))):
+            os.system("mkdir " + os.path.join(options.output, "plots/"))
         sig_effs = []
         signifs = []
         get_signal_params(options)
@@ -788,16 +792,17 @@ def limit_set(options):
         options.saved_params['n_evts_exc'] = n_evts_exc_sum / n_runs
         
 
+        options.saved_params['spbs'] = spbs_to_run
         options.saved_params['signifs'] = signifs
         options.saved_params['sig_effs'] = sig_effs
 
         sig_effs = np.array(sig_effs)
         np.savez(f_sig_effs, sig_eff = sig_effs)
 
-        make_limit_plot(options, sig_effs)
+        make_limit_plot(options, sig_effs, spbs_to_run)
 
-        if(signifs[-1] > 0):
-            make_signif_plot(options, signifs)
+        if(np.sum(signifs) > 0):
+            make_signif_plot(options, signifs, spbs_to_run)
     if(do_sys_train):
         if(len(spbs_to_run) == 1):
             inj_spb = spbs_to_run[0]
