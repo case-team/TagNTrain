@@ -399,8 +399,16 @@ def get_sig_eff(outdir, eff = 1.0, sys = ""):
         sig_eff = f[eff_key][0]
         return sig_eff
 
-def get_fit_results(outdir, m):
-    fname = outdir + "fit_results_%.1f.json" % m
+def get_fit_results(options = None, outdir = "", m = 3000.):
+    if(len(outdir) > 0): fname = outdir + "fit_results_%.1f.json" % m
+    else:
+        TNT_base = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_scan_nov19/"
+        cwola_base = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/cwola_scan_nov19/"
+        if(options.do_TNT):
+            fname = TNT_base + ("mbin%i/" % options.mbin) + "fit_results_%.1f.json" % m
+        else:
+            fname = cwola_base + ("mbin%i/" % options.mbin) + "fit_results_%.1f.json" % m
+
     if(not os.path.exists(fname)):
         print("Can't find fit inputs " + fname)
         return None
@@ -693,7 +701,8 @@ def limit_set(options):
         t_opts.reload = False
         t_opts.condor = False
         full_run(t_opts)
-        fit_results = get_fit_results(t_opts.output, options.mjj_sig)
+        fit_results = get_fit_results(outdir=t_opts.output, m=options.mjj_sig)
+        #fit_results = get_fit_results(options = options, m=options.mjj_sig)
         #print(fit_results)
         n_evts_exc = fit_results.exp_lim_events
         get_signal_params(options)
@@ -774,7 +783,7 @@ def limit_set(options):
 
         for spb in spbs_to_run:
             sig_eff = float(get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0]))
-            fit_res = get_fit_results(options.output + "spb" + str(float(spb)) + "/",  options.mjj_sig)
+            fit_res = get_fit_results(outdir = options.output + "spb" + str(float(spb)) + "/",  m = options.mjj_sig)
             if(fit_res is not None): 
                 signif = float(fit_res.signif)
                 if(fit_res.exp_lim_events > 0 and fit_res.exp_lim_events < 99999.):

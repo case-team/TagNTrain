@@ -11,11 +11,17 @@ import uncertainties
 from uncertainties import unumpy as unp
 
 
+
+#@uncertainties.wrap
 def qcd_model(m, p1, p2, p3=0, p4=0):
     x = m / 13000.
     y_vals = ((1-x)**p1)/(x**(p2+p3*np.log(x)+p4*np.log(x)**2))
     return y_vals
 
+@uncertainties.wrap
+def integrate_qcd_model(a,b, p1,p2,p3=0,p4=0):
+    integral, error = integrate.quad(qcd_model, a=a,b=b, args = (p1,p2,p3,p4))
+    return integral 
 
 def plot_biases(sig_masses, mean_pulls, err_mean_pulls, outfile):
     plt.style.use(hep.style.CMS)
@@ -68,7 +74,6 @@ def plot_stitched_mjj(options, mbins, outfile):
 
         mjjs = mjjs[ (mjjs > mjj_min) & (mjjs < mjj_max)]
         n_evts = mjjs.shape[0]
-        print("n_evts", n_evts)
 
         fit_file = t_opts.output + 'fit_results_%.1f.json' % sig_mass
         if(not os.path.exists(fit_file)): 
@@ -81,21 +86,26 @@ def plot_stitched_mjj(options, mbins, outfile):
 
         sr_mlow = mass_bins[mbin % 10]
         sr_mhigh = mass_bins[ (mbin+1) % 10]
+        nbins_sr = 5
+        nbins_fine = 100
 
 
         #tmp_mjj = mjjs[(mjjs > mjj_min) & (mjjs < mjj_max)]
         #xbins = np.linspace(mjj_min, mjj_max, 20)
         tmp_mjj = mjjs[(mjjs > sr_mlow) & (mjjs < sr_mhigh)]
-        xbins = np.linspace(sr_mlow, sr_mhigh, 5)
+        xbins = np.linspace(sr_mlow, sr_mhigh, nbins_sr)
+        xbins_fine = np.linspace(sr_mlow, sr_mhigh, nbins_fine)
 
         vals, edges = np.histogram(tmp_mjj, bins=xbins)
-        widths = edges[1:] - edges[:-1]
-        centers = (edges[1:] + edges[:-1])/2
+        widths = np.diff(xbins)
+        centers = (xbins[:-1] + xbins[1:])/2
+        centers_fine = (xbins_fine[:-1] + xbins_fine[1:])/2
+        widths_fine = np.diff(xbins_fine)
 
-        #vals_norm = vals / (widths/ bin_size_scale)
-        #errs_norm = np.sqrt(vals) / (widths/ bin_size_scale)
-        vals_norm = vals
-        errs_norm = np.sqrt(vals) 
+        vals_norm = vals * (bin_size_scale / widths)
+        errs_norm = np.sqrt(vals) * ( bin_size_scale/ widths)
+        #vals_norm = vals
+        #errs_norm = np.sqrt(vals) 
 
         label_data = 'data'
         plt.errorbar(centers,vals_norm, yerr=errs_norm, label=label_data, fmt="ko")
@@ -122,32 +132,30 @@ def plot_stitched_mjj(options, mbins, outfile):
 
 
         #normalize fit integral to total number of data events
-        fit_norm = n_evts_fit / integrate.quad(qcd_model, a=mjj_min, b=mjj_max, args = (p1,p2,p3,p4))[0]
-        print("fit norm, n_evts_fit", fit_norm, n_evts_fit)
+        #fit_norm = n_evts_fit / integrate.quad(qcd_model, a=mjj_min, b=mjj_max, args = (p1,p2,p3,p4))[0]
+        fit_norm = n_evts_fit / integrate_qcd_model(mjj_min, mjj_max, *pars)
 
-        #integrate fit pdf to get more accurate vals in each bin
-        fit_nom = [fit_norm * integrate.quad(qcd_model, a= edges[k], b = edges[k+1], args = (p1,p2,p3,p4))[0] for k in range(len(edges)-1)]
+        #integrate fit pdf in each bin to get more accurate vals
+        fit_vals_fine = np.array([fit_norm * integrate_qcd_model(xbins_fine[k], xbins_fine[k+1], *pars) for k in range(len(xbins_fine)-1)])
+        fit_vals = np.array([fit_norm * integrate_qcd_model(edges[k], edges[k+1], *pars) for k in range(len(edges)-1)])
+        
 
+        #for ratio panel
+        fit_errs = unp.std_devs(fit_vals) * (bin_size_scale  / widths)
+        fit_nom = unp.nominal_values(fit_vals) * (bin_size_scale  / widths)
 
-
-        #get fractional error on fit based on bin center
-        #TODO These fractional errors don't really match those reported by the fit... 
-        fit_center_errs = qcd_model(centers, *pars)
-        fit_center_errs /= np.sum(fit_center_errs)
-        print(centers)
-        print(fit_center_errs)
-        fit_frac_err = unp.std_devs(fit_center_errs) / unp.nominal_values(fit_center_errs)
-        print(fit_frac_err)
-
-        fit_up = (1. + fit_frac_err) * fit_nom
-        fit_down = (1. - fit_frac_err) * fit_nom
-        fit_errs = (fit_up - fit_down) / 2.0
+        #for upper panel
+        fit_fine_nom = unp.nominal_values(fit_vals_fine) * (bin_size_scale / widths_fine)
+        fit_fine_unc = unp.std_devs(fit_vals_fine) * (bin_size_scale / widths_fine)
+        fit_fine_up = fit_fine_nom + fit_fine_unc
+        fit_fine_down = fit_fine_nom - fit_fine_unc
 
 
-        label_fit = 'fit'
-        plt.hist(centers, bins=edges, weights=fit_nom, histtype="step", label=label_fit, color="red") 
-        plt.hist(centers, bins=edges, weights=(fit_up), histtype="step", color="red", linestyle="dashed")
-        plt.hist(centers, bins=edges, weights=(fit_down), histtype="step", color="red", linestyle="dashed")
+        #plot fit with fine binning
+        plt.fill_between(centers_fine, fit_fine_down, fit_fine_up, color = 'red', alpha = 0.4)
+        plt.plot(centers_fine, fit_fine_nom, color = 'red') 
+
+        plt.errorbar(centers, vals_norm, fmt="ko", xerr=xbins[1:]-centers, yerr=errs_norm, label="Data", elinewidth=0.5, capsize=2.0)
 
         
                         
@@ -155,35 +163,38 @@ def plot_stitched_mjj(options, mbins, outfile):
         plt.sca(a2)
         
         # in first iteration, plot dashed line at zero
+        max_ratio = 4
+        min_ratio = -4
         if(mbin %10 == 1):
             plt.plot([1650.0, 5500.0], [0, 0], color="black", linestyle="dashed")
-            max_ratio = 3
-            min_ratio = -3
-        else:
-            plt.plot([edges[0], edges[0]], [min_ratio, max_ratio], color="lightgreen", linestyle="dashed", lw=1.0)
-            plt.plot([edges[-1], edges[-1]], [min_ratio, max_ratio], color="lightgreen", linestyle="dashed", lw=1.0)
         
         tot_unc = np.sqrt(fit_errs**2 + errs_norm**2)
         pulls = (vals_norm-fit_nom)/tot_unc
-        print(pulls)
         bottoms = np.copy(pulls)
         bottoms[bottoms > 0.0] = 0.0
         plt.hist(centers, bins=edges, weights=pulls, histtype="stepfilled", color="gray")
 
 
     plt.sca(a1)
-    plt.ylabel("Events")
+    plt.ylabel("Events / 100 GeV")
     plt.yscale("log")
+    ymin,ymax = a1.get_ylim()
     #plt.legend(loc="upper right")
+
+    for i in range(len(mass_bins)):
+        plt.plot([mass_bins[i], mass_bins[i]], [ymin, ymax], color="green", linestyle="dashed", lw=1.0)
 
     plt.sca(a2)
     plt.xlabel(r"$m_{jj}$ (GeV)")
-    plt.ylabel(r"$\frac{\mathrm{Data-Fit}}{\sigma_{\mathrm{tot.}}}$")
+    plt.ylabel(r"$\frac{\mathrm{Data-Fit}}{\mathrm{Unc.}}$")
     plt.ylim(min_ratio, max_ratio)
     plt.xlim(mjj_min, mjj_max)
+    for i in range(len(mass_bins)):
+        plt.plot([mass_bins[i], mass_bins[i]], [min_ratio, max_ratio], color="green", linestyle="dashed", lw=1.0)
     a1.tick_params(axis='x', labelbottom=False)
 
     plt.savefig(outfile, dpi=300, bbox_inches="tight")
+    plt.close()
 
 
 
@@ -556,11 +567,11 @@ def full_scan(options):
             bkg_fit_plot = fit_plot_dir + '%ipar_qcd_fit_binned.png' % nPars_bkg
             os.system('cp ' + bkg_fit_plot + ' %s/plots/bkgfit_mbin%i.png' % (options.output, mbin))
 
+        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin < 10] , options.output + "plots/mjj_stitched_binsA.png")
+        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin > 10] , options.output + "plots/mjj_stitched_binsB.png")
         
         print(list(zip(sig_masses, signifs)))
         plot_significances(file_list, options.output + "plots/", sig_masses = sig_masses)
-        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin < 10] , options.output + "plots/mjj_stitched_binsA.png")
-        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin > 10] , options.output + "plots/mjj_stitched_binsB.png")
 
 
 
