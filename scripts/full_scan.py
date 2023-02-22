@@ -50,8 +50,8 @@ def plot_stitched_mjj(options, mbins, outfile):
 
 
     plt.style.use(hep.style.CMS)
-    a1 = plt.axes([0.0, 0.18, 1.0, 0.8], label = "a1")
-    a2 = plt. axes([0.0,0.0, 1.0, 0.16], sharex=a1, label = "a2")
+    a1 = plt.axes([0.0, 0.18, 1.0, 0.8])
+    a2 = plt. axes([0.0,0.0, 1.0, 0.16], sharex=a1)
     plt.sca(a1)
     #hep.cms.text("Simulation, Work in progress")
 
@@ -170,8 +170,20 @@ def plot_stitched_mjj(options, mbins, outfile):
         bottoms[bottoms > 0.0] = 0.0
         plt.hist(centers, bins=edges, weights=pulls, histtype="stepfilled", color="gray")
 
-    plt.savefig(outfile, dpi=300, bbox_inches="tight")
 
+    plt.sca(a1)
+    plt.ylabel("Events")
+    plt.yscale("log")
+    #plt.legend(loc="upper right")
+
+    plt.sca(a2)
+    plt.xlabel(r"$m_{jj}$ (GeV)")
+    plt.ylabel(r"$\frac{\mathrm{Data-Fit}}{\sigma_{\mathrm{tot.}}}$")
+    plt.ylim(min_ratio, max_ratio)
+    plt.xlim(mjj_min, mjj_max)
+    a1.tick_params(axis='x', labelbottom=False)
+
+    plt.savefig(outfile, dpi=300, bbox_inches="tight")
 
 
 
