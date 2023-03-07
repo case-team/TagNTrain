@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.append('..')
 from utils.TrainingUtils import *
+from plotting.model_interpretation import model_interp
 from create_model_ensemble import *
 from selection import *
 import subprocess
@@ -11,26 +12,23 @@ import time
 fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
 fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
-def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", output_dir = "", loop = False):
+def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False):
     print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
     base_path = os.path.abspath(".") + "/"
-    fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
     if(len(output_dir) == 0): output_dir = base_path + options.output
-    if(len(input_file) == 0): input_file = base_path + options.output + fit_inputs
+    if(len(input_file) == 0): 
+        fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+        input_file = base_path + options.output + fit_inputs
 
 
-    counting_str = ""
-    if(options.counting_fit):
-        counting_str = "_counting"
 
     ftest_thresh = 0.1
     err_thresh = 0.15
-    dijet_cmd = "python dijetfit%s.py -i %s -p %s --rebin --ftest_thresh %.2f --err_thresh %.2f" % (counting_str, input_file, output_dir, ftest_thresh, err_thresh)
-    #dijet_cmd = "python dijetfit%s.py -i %s -p %s " % (counting_str, input_file, output_dir)
+    dijet_cmd = "python dijetfit.py -i %s -p %s --rebin --ftest_thresh %.2f --err_thresh %.2f" % (input_file, output_dir, ftest_thresh, err_thresh)
     if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
         dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
     if(len(sig_shape_file) > 0):
-        dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model -l M%0.f" % (options.mjj_sig, sig_shape_file,  options.mjj_sig)
+        dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model -l %sM%0.f" % (options.mjj_sig, sig_shape_file,  label, options.mjj_sig)
 
 
 
@@ -41,7 +39,7 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
         if(fit_start > 0):
             dijet_cmd_iter += " --mjj_min %.0f" % fit_start
 
-        dijet_cmd_iter += " >& %s/fit_log%.1f.txt " % (output_dir, options.mjj_sig)
+        dijet_cmd_iter += " >& %s/fit_log_%s%.1f.txt " % (output_dir, label, options.mjj_sig)
         fit_cmd = fit_cmd_setup +  dijet_cmd_iter + "; " + fit_cmd_after
         print(fit_cmd)
         subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
@@ -51,7 +49,7 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
             fit_file = output_dir + 'fit_results_%.1f.json' % options.mjj_sig
             with open(fit_file, 'r') as f:
                 fit_params = json.load(f, encoding="latin-1")
-                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.2) or fit_params['bkgfit_frac_err'] > err_thresh):
+                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.15) or fit_params['bkgfit_frac_err'] > err_thresh):
                     if(fit_start < 1550.): fit_start = 1550.
                     else: fit_start += 100.
                     print("\n \n POOR Fit quality (bkg pval %.2e, s+b pval %.2e, fit unc %.2f)! \n. Increasing fit start to %.0f and retrying" % 
@@ -149,10 +147,10 @@ def full_run(options):
         rel_opts.step = options.step
         if(len(options.effs) >0): rel_opts.effs = options.effs
         if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
-        if(options.counting_fit): rel_opts.counting_fit = True
         if('fit_start' in options.__dict__.keys() and options.fit_start > 0): rel_opts.fit_start = options.fit_start
-        else: rel_opts.counting_fit = False
         rel_opts.condor = options.condor
+        if('fit_label' in options.__dict__.keys()): rel_opts.fit_label = options.fit_label
+        if('generic_sig_shape' in options.__dict__.keys()): rel_opts.generic_sig_shape = options.generic_sig_shape
         rel_opts.keep_LSF = options.keep_LSF #quick fix
         rel_opts.redo_roc = options.redo_roc #quick fix
         rel_opts.recover = options.recover
@@ -186,7 +184,7 @@ def full_run(options):
         print("Number of batches per kfold(%i) must be multiple of number of lfolds (%i)" % (batches_per_kfold, options.lfolds))
         sys.exit(1)
 
-    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "bias", "all"]):
+    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "bias", "interp", "all"]):
         print("Invalid option %s" % options.step)
         sys.exit(1)
 
@@ -198,6 +196,7 @@ def full_run(options):
     do_merge = options.step == "merge"
     do_fit = options.step == "fit"
     do_roc = options.step == "roc"
+    do_interp = options.step == "interp"
     do_bias_test = options.step == "bias"
     if(options.step == "all"):
         do_train = do_selection = do_fit = do_roc = True
@@ -233,6 +232,8 @@ def full_run(options):
         k_options.data_batch_list = k_list
 
         kfold_options += [k_options]
+
+
 
     #Do trainings
     if(do_train):
@@ -369,7 +370,6 @@ def full_run(options):
 
                 #tar models together
                 tarname = options.output + "models.tar"
-                print(tarname)
                 os.system("tar -cf %s %s --exclude=*/condor_jobs/*" %(tarname, options.output + "j*/"))
 
                 inputs_list = [selection_opts_fname, tarname]
@@ -378,6 +378,21 @@ def full_run(options):
 
                 doCondor(c_opts)
 
+    if(do_interp):
+        for k,k_options in enumerate(kfold_options):
+            interp_options = copy.deepcopy(k_options)
+            interp_options.data_batch_list = k_options.holdouts
+            interp_options.val_batch_list = None
+            interp_options.num_models = options.lfolds
+            #interp_options.num_models = 1
+
+
+            if(not options.randsort): interp_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
+            else: interp_options.labeler_name = k_options.output + "jrand_kfold%i/" % k
+            interp_options.output = interp_options.output + "interp/"
+            os.system("mkdir " + interp_options.output)
+            model_interp(interp_options)
+            break
 
 
     if(do_merge):
@@ -474,7 +489,7 @@ def full_run(options):
             options.effs = [mass_bin_select_effs[options.mbin] ]
 
 
-        if(os.path.exists(options.output + "sig_shape_eff{eff}.h5".format(eff = options.effs[0]))):
+        if(not options.generic_sig_shape and os.path.exists(options.output + "sig_shape_eff{eff}.h5".format(eff = options.effs[0]))):
             #fit the signal shape
             sig_shape_h5 = base_path + options.output + 'sig_shape_eff{eff}.h5'.format(eff = options.effs[0])
             sig_fit_cmd = "python fit_signalshapes.py -i %s -o %s -M %i --dcb-model --fitRange 0.3 >& %s" % (sig_shape_h5, 
@@ -486,7 +501,7 @@ def full_run(options):
             sig_shape_file = base_path + options.output + 'sig_fit_%i.root' % options.mjj_sig
 
 
-        final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, loop = True)
+        final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, label = options.fit_label, loop = True)
         output = final_fit_start
 
 
@@ -496,8 +511,6 @@ def full_run(options):
         if(not os.path.exists(fit_file)):
             print("Fit results file not found. Run regular fit before bias test!")
             exit(1)
-        outdir = options.output + "bias_test/"
-        os.system("mkdir " + outdir)
         with open(fit_file, 'r') as f:
             fit_params = json.load(f, encoding="latin-1")
             exp_lim = fit_params['exp_lim_events']
@@ -507,16 +520,20 @@ def full_run(options):
 
         fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
         input_file = base_path + options.output + fit_inputs
-        alt_shape_ver = 2
+        alt_shape_ver = 4
         num_samples = 200
+
+        outdir = options.output + "bias_test_alt%i/" % alt_shape_ver
+        os.system("mkdir " + outdir)
+
         dijet_cmd = " python bias_test.py -i %s -p %s --rebin --alt_shape_ver %i --num_samples %i " % (input_file, base_path + outdir,  alt_shape_ver, num_samples)
 
-        #roughly inject 0, 3sigma and 5sigma
-        #sigs = [0., 2.5 * exp_lim, 4.0 * exp_lim]
-        #labels = ["%isigma" % (sig) for sig in [0, 3, 5]]
+        #roughly inject 0, 2sigma and 5sigma
+        sigs = [0., 1.5 * exp_lim, 4.0 * exp_lim]
+        labels = ["%isigma" % (sig) for sig in [0, 2, 5]]
 
-        sigs = [1.5 * exp_lim]
-        labels = ["2sigma"]
+        #sigs = [1.5 * exp_lim]
+        #labels = ["2sigma"]
 
 
         for i,num_sig in enumerate(sigs):
@@ -605,9 +622,10 @@ if(__name__ == "__main__"):
     parser.add_argument("--do_ttbar",  default=False, action = 'store_true',  help="Do ttbar CR training")
     parser.add_argument("--condor", dest = 'condor', action = 'store_true')
     parser.add_argument("--no-condor", dest = 'condor', action = 'store_false')
+    parser.add_argument("--fit_label", dest = 'fit_label', default = "")
+    parser.add_argument("--generic_sig_shape", default = False, action ='store_true')
     parser.set_defaults(condor=False)
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
-    parser.add_argument("--counting_fit", default = False,  action = 'store_true', help = 'Do counting version of dijet fit')
     parser.add_argument("--fit_start", default = -1.,  type = float, help = 'Lowest mjj value for dijet fit')
     parser.add_argument("--redo_roc", default = False,  action = 'store_true', help = 'Remake roc')
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")

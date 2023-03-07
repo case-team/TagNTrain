@@ -1,5 +1,4 @@
 from full_run import *
-import sys
 from plotting.draw_sys_variations import *
 import sys
 
@@ -67,21 +66,29 @@ def get_preselection_params(sig_fname, hadronic_only_cut = False, sig_mass = 250
         return 0., 1.0
 
     f = h5py.File(sig_fname, "r")
-    presel_eff = f['preselection_eff'][0]
-    deta_eff = f['d_eta_eff'][0]
-    #print(deta_eff)
     is_lep = f['event_info'][:,4]
-    hadronic_only = 1.0 - np.mean(is_lep)
-    hadronic_only_mask = is_lep < 0.1
     weights = f['sys_weights'][:,0]
     mjj = f['jet_kinematics'][:,0]
+    deta = f['jet_kinematics'][:,1]
+
+    presel_eff = f['preselection_eff'][0]
+    deta_eff = f['d_eta_eff'][0]
+    deta_mask = np.abs(deta) < 1.3
     mjj_mask = (mjj  > 0.8 * sig_mass)  & (mjj < 1.2 * sig_mass)
+    mjj_lowcut = mjj > 1455.
+
+    mjj_lowcut_eff = np.sum(weights[deta_mask & mjj_lowcut])/ np.sum(weights[deta_mask])
+
+    print(presel_eff, deta_eff, mjj_lowcut_eff)
+
+    hadronic_only = 1.0 - np.mean(is_lep)
+    hadronic_only_mask = is_lep < 0.1
     if(hadronic_only_cut): mjj_window_eff = np.sum(weights[mjj_mask & hadronic_only_mask]) / np.sum(weights[hadronic_only_mask])
     else: mjj_window_eff = np.sum(weights[mjj_mask]) / np.sum(weights)
     f.close()
-    return presel_eff * deta_eff, hadronic_only, mjj_window_eff
+    return presel_eff * deta_eff * mjj_lowcut_eff, hadronic_only, mjj_window_eff
 
-def get_fit_nosel_sig(options):
+def get_fit_nosel_params(options):
     base_path = os.path.abspath(".") + "/"
     nosel_fname = base_path + "../data/fit_inputs_nocut.h5"
     plot_dir = base_path + options.output + 'sig_nosel_fit/'
@@ -125,7 +132,7 @@ def get_fit_nosel_sig(options):
         n_evts_exc_nosel = fit_params['exp_lim_events'] 
 
     print("No selection num events lim %.0f "  % n_evts_exc_nosel)
-    return n_evts_exc_nosel
+    return fit_params
 
 
 
@@ -140,8 +147,11 @@ def get_signal_params(options):
     if(len(options.sig_file) > 0):
 
         options.preselection_eff, hadronic_only_, options.mjj_window_nosel_eff = get_preselection_params(options.sig_file, options.hadronic_only, options.mjj_sig)
+        
+        fit_nosel = get_fit_nosel_params(options)
 
-        options.saved_params['n_evts_exc_nosel'] = get_fit_nosel_sig(options)
+        options.saved_params['n_evts_exc_nosel'] =  fit_nosel['exp_lim_events']
+        options.saved_params['fit_nosel'] =  fit_nosel
 
         
         if(options.hadronic_only): options.hadronic_only_eff = hadronic_only_
@@ -189,15 +199,16 @@ def make_signif_plot(options, signifs, spbs):
     print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_nosel))
 
 
-    injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs])
+    injected_xsecs = [( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs]
+    options.saved_params['injected_xsecs'] = injected_xsecs
 
-    xs = injected_xsecs
+    xs = np.array(injected_xsecs)
     ys = signifs
     #print('window_eff', options.mjj_window_nosel_eff)
     #nosel_limit = n_evts_exc_nosel / (options.preselection_eff * options.mjj_window_nosel_eff * options.lumi * options.hadronic_only_eff)
     nosel_limit = n_evts_exc_nosel / (options.preselection_eff *  options.lumi * options.hadronic_only_eff)
+    print(nosel_limit, n_evts_exc_nosel, options.preselection_eff, options.lumi, options.hadronic_only_eff)
 
-    nosel_x = nosel_limit
 
 
 
@@ -207,7 +218,7 @@ def make_signif_plot(options, signifs, spbs):
     linewidth = 4
     pointsize = 70.
 
-    x_stop = max(np.max(xs), nosel_x)
+    x_stop = max(np.max(xs), nosel_limit)
     y_stop = max(np.max(ys), 6.)
 
     #print('stops', x_stop, y_stop)
@@ -215,9 +226,9 @@ def make_signif_plot(options, signifs, spbs):
     #print(ys)
 
     yline = np.arange(0,y_stop,y_stop/10)
-    if(nosel_x >0):
-        label = "Inclusive Limit (%.1f fb)" % nosel_x
-        plt.plot([nosel_x]*10, yline, linestyle = "--", color = "green", linewidth = linewidth, label = label)
+    if(nosel_limit >0):
+        label = "Inclusive Limit (%.1f fb)" % nosel_limit
+        plt.plot([nosel_limit]*10, yline, linestyle = "--", color = "green", linewidth = linewidth, label = label)
 
     #if(options.dedicated_lim > 0):
         #plt.plot([options.dedicated_lim] * 10, yline, linestyle = "--", color = "cyan", linewidth = 2, label = options.dedicated_label)
@@ -257,11 +268,13 @@ def make_limit_plot(options, sig_effs, spbs):
 
     get_signal_params(options)
 
+    print("presel eff",  options.preselection_eff)
 
     sig_effs = np.clip(sig_effs, 1e-4, 1.0)
     injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs])
     excluded_xsecs = np.array([(n_evts_exc / (options.hadronic_only_eff * sig_eff * options.preselection_eff * options.lumi)) for sig_eff in sig_effs])
     nosel_limit = n_evts_exc_nosel / (options.preselection_eff  * options.lumi * options.hadronic_only_eff)
+    print(nosel_limit, n_evts_exc_nosel, options.preselection_eff, options.lumi, options.hadronic_only_eff)
 
     injected_nsig  = np.array( [spb * options.numBatches  for spb in spbs])
     excluded_nsig = np.array([n_evts_exc / sig_eff  for sig_eff in sig_effs])
@@ -297,6 +310,9 @@ def make_limit_plot(options, sig_effs, spbs):
 
     print("Limit without NN selection: %.1f" % nosel_y)
     print("Best lim : %.3f"  % best_lim)
+    options.saved_params['best_lim'] = best_lim
+    options.saved_params['best_spb'] = spbs[best_i]
+    options.saved_params['inc_lim'] = nosel_y
         
     fig_size = (12,9)
     plt.figure(figsize=fig_size)
@@ -449,6 +465,8 @@ def limit_set(options):
             if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
             rel_opts.step = options.step
             rel_opts.condor = options.condor
+            rel_opts.seed = options.seed
+            rel_opts.BB_seed = options.BB_seed
             rel_opts.refit = options.refit
             if(len(options.effs) >0): rel_opts.effs = options.effs
             if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
@@ -694,16 +712,16 @@ def limit_set(options):
         #frac_unc = 0.0001
 
 
-        #for now use expected lim from fit to injected, eventually switch to fit to data/signaless mc
+        #for now use expected lim from fit to BB, eventually switch to fit to data
         t_opts = spb_opts(options, inj_spb)
         t_opts.step = "fit"
         t_opts.sig_norm_unc = frac_unc
         t_opts.reload = False
         t_opts.condor = False
         full_run(t_opts)
-        fit_results = get_fit_results(outdir=t_opts.output, m=options.mjj_sig)
         #fit_results = get_fit_results(options = options, m=options.mjj_sig)
-        #print(fit_results)
+        #Use expected limit from b-only scan
+        fit_results = get_fit_results(options = options, m=options.mjj_sig)
         n_evts_exc = fit_results.exp_lim_events
         get_signal_params(options)
 
@@ -758,9 +776,33 @@ def limit_set(options):
         for spb in spbs_to_run:
             t_opts = spb_opts(options, spb)
             t_opts.step = "fit"
+
+
+
             t_opts.reload = True
             t_opts.condor = True
+
+
+
+            #run with specific shape
+            #t_opts.fit_label = "sig_shape_"
+            #t_opts.generic_sig_shape = False
+            #full_run(t_opts)
+            #os.system("mv %s %s" % (t_opts.output + "fit_results_%.1f.json" % options.mjj_sig, t_opts.output + "fit_results_sig_shape_%.1f.json" % options.mjj_sig))
+
+            #run with generic shape
+            if("Wp" in options.sig_file): 
+                #max significance w/ generic shape comes from lower mass point b/c of long tail
+                #TODO More proper is to scan over nearby and take lowest pval... 
+                t_opts.mjj_sig = options.mjj_sig - 200.
+            t_opts.fit_label = ""
+            t_opts.generic_sig_shape = True
             full_run(t_opts)
+            if("Wp" in options.sig_file): 
+                os.system("mv %s %s" % (t_opts.output + "fit_results_%.1f.json" % (float(options.mjj_sig) -200.), t_opts.output + "fit_results_%.1f.json" % float(options.mjj_sig)))
+
+
+
 
     if(do_roc):
         for spb in spbs_to_run:
@@ -775,43 +817,46 @@ def limit_set(options):
             os.system("mkdir " + os.path.join(options.output, "plots/"))
         sig_effs = []
         signifs = []
+        pvals = []
         get_signal_params(options)
-
-        n_evts_exc_sum = 0.
-        n_runs = 0
-
 
         for spb in spbs_to_run:
             sig_eff = float(get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0]))
             fit_res = get_fit_results(outdir = options.output + "spb" + str(float(spb)) + "/",  m = options.mjj_sig)
             if(fit_res is not None): 
                 signif = float(fit_res.signif)
-                if(fit_res.exp_lim_events > 0 and fit_res.exp_lim_events < 99999.):
-                    n_evts_exc_sum += fit_res.exp_lim_events
-                    n_runs += 1
-            else: signif = 0.
+                pval = float(fit_res.pval)
+            else: 
+                pval = signif = 0.
+
 
             sig_effs.append(sig_eff)
             signifs.append(signif)
+            pvals.append(pval)
 
         print("Sig Effs: ",  sig_effs)
         print("Significances " , signifs)
 
-        #take an average of the different fits (? is this right to do ?)
-        options.saved_params['n_evts_exc'] = n_evts_exc_sum / n_runs
-        
+        #Use expected limit from b-only scan
+        fit_results_bonly = get_fit_results(options = options, m=options.mjj_sig)
+        options.saved_params['n_evts_exc'] = fit_results_bonly.exp_lim_events
+        options.saved_params['fit_bonly'] = fit_results_bonly.__dict__
+
 
         options.saved_params['spbs'] = spbs_to_run
         options.saved_params['signifs'] = signifs
+        options.saved_params['pvals'] = pvals
         options.saved_params['sig_effs'] = sig_effs
 
         sig_effs = np.array(sig_effs)
         np.savez(f_sig_effs, sig_eff = sig_effs)
 
         make_limit_plot(options, sig_effs, spbs_to_run)
+        options.saved_params['preselection_eff'] = options.preselection_eff
 
         if(np.sum(signifs) > 0):
             make_signif_plot(options, signifs, spbs_to_run)
+
     if(do_sys_train):
         if(len(spbs_to_run) == 1):
             inj_spb = spbs_to_run[0]

@@ -86,7 +86,6 @@ class MyGenerator(tf.keras.utils.Sequence):
         self.key2 = [key2]
         self.key3 = [key3]
 
-        print("init", key1, key2, key3)
 
         self.key1_norm = key1_norm
         self.key2_norm = key2_norm
@@ -233,18 +232,20 @@ class DataReader:
         self.nsubj_ratios = kwargs.get('nsubj_ratios', True)
         self.clip_pts = kwargs.get('clip_pts', True)
 
+        self.verbose = kwargs.get('verbose', True)
 
-        print("Creating dataset. Mass range %.0f - %.0f. Delta Eta %.1f -  %.1f" % (self.keep_mlow, self.keep_mhigh, self.deta_min, self.deta))
+
+        if(self.verbose): print("Creating dataset. Mass range %.0f - %.0f. Delta Eta %.1f -  %.1f" % (self.keep_mlow, self.keep_mhigh, self.deta_min, self.deta))
 
         self.sys_norm_reweight = 1.0
         if(len(self.sig_file ) > 0 ):
-            print("Loading signal %s " % self.sig_file)
+            if(self.verbose): print("Loading signal %s " % self.sig_file)
             self.sig_file_h5 = h5py.File(self.sig_file, "r")
 
             if(len(self.sig_sys) > 0 and self.sig_sys in sys_weights_map.keys()):
                 #change normalization of signal
                 self.sys_norm_reweight = get_avg_sys_reweight(self.sig_file_h5, self.sig_sys, self.deta, self.deta_min)
-                print("Sig norm reweight is %.4f" % self.sys_norm_reweight)
+                if(self.verbose): print("Sig norm reweight is %.4f" % self.sys_norm_reweight)
 
         self.sep_signal = len(self.sig_file) > 0 and not self.sig_only
 
@@ -257,15 +258,15 @@ class DataReader:
         else:
             self.keys = set(copy.deepcopy(kwargs.get('keys')))
 
-        print(self.keys)
+            if(self.verbose): print(self.keys)
 
-        if(self.randsort): print("Rand sort")
+        if(self.randsort and self.verbose): print("Rand sort")
 
         self.multi_batch = False
         if(batch_start != -1 and batch_stop != -1 and self.batch_list is None):
             self.batch_list = list(range(batch_start, batch_stop+1))
 
-        print("Batch_list:", self.batch_list)
+        if(self.verbose): print("Batch_list:", self.batch_list)
 
         if(self.batch_list is not None):
             self.multi_batch = True
@@ -288,7 +289,7 @@ class DataReader:
             DataReader.DR_count += 1
             self.f_storage_name = self.storage_dir + "DReader%i_temp.h5" % DataReader.DR_count
 
-        print("Making temp file at %s \n" % self.f_storage_name)
+        if(self.verbose): print("Making temp file at %s \n" % self.f_storage_name)
         self.f_storage = h5py.File(self.f_storage_name, "w")
 
         self.mask = np.array([])
@@ -460,8 +461,8 @@ class DataReader:
                 self.sig_per_batch /= nChunks
             
 
-        print("\nLoading file %s" % f_name)
-        print("Will read %i events in %i chunks \n" % (self.nEvents_file, nChunks))
+        if(self.verbose): print("\nLoading file %s" % f_name)
+        if(self.verbose): print("Will read %i events in %i chunks \n" % (self.nEvents_file, nChunks))
 
 
 
@@ -502,7 +503,7 @@ class DataReader:
                 if(not self.sep_signal):
                     sig_mask = (raw_labels == self.sig_idx).reshape(-1)
                     sig_mean_val = np.mean(is_lep[sig_mask] < 0.1)
-                    print("Hadronic only mask has mean %.3f " % sig_mean_val)
+                    if(self.verbose): print("Hadronic only mask has mean %.3f " % sig_mean_val)
             if(self.keep_mlow > 0. and self.keep_mhigh >0.):
                 mjj = f["jet_kinematics"][cstart:cstop,0]
                 mjj_mask = (mjj > self.keep_mlow) & (mjj < self.keep_mhigh)
@@ -510,7 +511,7 @@ class DataReader:
                 mask = mask & mjj_mask
             if(self.sideband):
                 sb_mask = get_sideband_mask(f)
-                print("SB mask eff", np.mean(sb_mask))
+                if(self.verbose): print("SB mask eff", np.mean(sb_mask))
                 mask = mask & get_sideband_mask(f)
             elif(self.deta > 0. or self.deta_min > 0.):
                 deta = f['jet_kinematics'][cstart:cstop,1]
@@ -527,7 +528,7 @@ class DataReader:
                     num_sig = np.sum(labels[mask] > 0)
                     do_filter = num_sig > self.sig_per_batch
                     sig_to_keep = self.sig_per_batch
-                    print("%i sig events in batch and we want %i. Filter %i" %(num_sig, self.sig_per_batch, do_filter))
+                    if(self.verbose): print("%i sig events in batch and we want %i. Filter %i" %(num_sig, self.sig_per_batch, do_filter))
                 elif(self.sig_frac >= 0.): #filter signal based on S/B in signal region
                     sig_mask = (raw_labels == self.sig_idx).reshape(-1)
                     bkg_mask = (raw_labels <=0).reshape(-1)
@@ -545,7 +546,7 @@ class DataReader:
                     do_filter = cur_sig_frac_window > self.sig_frac
                     num_sig_overall = np.sum(labels[mask] > 0)
                     sig_to_keep = int(self.sig_frac/cur_sig_frac_window * num_sig_overall)
-                    print("Num sig overall is %i, Sig frac %.4f in SR and we want %.4f in window: Filter %i" %(num_sig_overall, cur_sig_frac_window, self.sig_frac, do_filter))
+                    if(self.verbose) : print("Num sig overall is %i, Sig frac %.4f in SR and we want %.4f in window: Filter %i" %(num_sig_overall, cur_sig_frac_window, self.sig_frac, do_filter))
                 if(do_filter): 
                     #mask_sig = get_signal_mask_rand(labels, mask, new_sig_frac, self.BB_seed)
                     mask_sig = get_signal_mask(labels, mask, sig_to_keep, self.rng)
@@ -581,7 +582,7 @@ class DataReader:
                 if(self.hadronic_only):
                     is_lep = self.sig_file_h5['event_info'][s_start:s_stop:,4] # stored as a float
                     sig_mask_temp = sig_mask_temp & (is_lep < 0.1)
-                    print("Hadronic only mask has mean %.3f " % np.mean(is_lep < 0.1))
+                    if(self.verbose): print("Hadronic only mask has mean %.3f " % np.mean(is_lep < 0.1))
 
                 #local copy to allow JME modifications
                 sig_jet_kinematics = np.copy(self.sig_file_h5["jet_kinematics"][s_start:s_stop])
@@ -648,7 +649,7 @@ class DataReader:
 
                 if(self.spb_before_selection):
                     num_sig_inj *= sig_mjj_eff * sig_deta_eff
-                    print("Sig mjj eff %.4f deta eff %.4f. Spb now %i" % (sig_mjj_eff, sig_deta_eff, num_sig_inj))
+                    if(self.verbose): print("Sig mjj eff %.4f deta eff %.4f. Spb now %i" % (sig_mjj_eff, sig_deta_eff, num_sig_inj))
 
                 #num_sig_inj = int(round(num_sig_inj))
 
@@ -665,7 +666,7 @@ class DataReader:
                 else:
                     num_sig_inj = int(round(num_sig_inj))
 
-                print("Injecting %i signal events" % num_sig_inj)
+                if(self.verbose): print("Injecting %i signal events" % num_sig_inj)
 
                     
 

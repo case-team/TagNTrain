@@ -19,16 +19,13 @@ options.hadronic_only = True
 options.deta = 1.3
 
 
-single_file = True
-
 sic_max = 10
 
-#model_dir = "cwola_qstar_test/"
-model_dir = "../models/batch_size_test/"
+#model_dir = "../models/batch_size_test/"
 #model_dir = "../models/AEs/"
 
-#plot_dir = "../runs/cwola_40spb_fullrun/"
-#model_dir = "../runs/cwola_40spb_fullrun/"
+model_dir = "../runs/TNT_X3000_Y170_Yp170_feb16/spb3.0/"
+plot_dir = "../runs/TNT_X3000_Y170_Yp170_feb16/spb3.0/"
 
 
 f_models = [
@@ -46,9 +43,14 @@ f_models = [
 #'{j_label}_supervised_Wp_notau1.h5',
 #'{j_label}_supervised_XYY.h5',
 #'{j_label}_supervised_notau1_XYY.h5',
-'{j_label}_baseline.h5',
-'{j_label}_batch2k.h5',
-'{j_label}_batch8k.h5',
+#'{j_label}_baseline.h5',
+#'{j_label}_batch2k.h5',
+#'{j_label}_batch8k.h5',
+'jrand_kfold0/',
+'jrand_kfold1/',
+'jrand_kfold2/',
+'jrand_kfold3/',
+'jrand_kfold4/',
 
 ]
 
@@ -61,9 +63,11 @@ labels = [
         #'supervised',
         #'supervised clip tau1',
         #'supervised no tau1',
-        'baseline',
-        'batch 2k',
-        'batch 8k',
+        'kfold 0',
+        'kfold 1',
+        'kfold 2',
+        'kfold 3',
+        'kfold 4',
         ]
 
 
@@ -73,8 +77,8 @@ labels = [
 model_type = [2,2,2,2,2,2]
 #model_type = [2,2,2,2,2,2]
 num_models = [1,1,1,1,1,1]
-rand_sort = [False, False, False, False, False, False]
-#rand_sort = [True, True]
+#rand_sort = [False, False, False, False, False, False]
+rand_sort = [True]*6
 
 #f_models = ["autoencoder_m3500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]
 #f_models = ["autoencoder_m3500.h5",  "mar15_deta/dense_deta_sig025_TNT1_s%i.h5", "mar15_deta/cwola_hunting_dense_deta_sig025_s%i.h5"]
@@ -99,57 +103,32 @@ else:
     options.keys = ["j1_features", "j2_features", "jj_features", 'jet_kinematics']
 
 
-if(single_file):
-    data, _ = load_dataset_from_options(options)
-    j1_dense_inputs = data['j1_features']
-    j2_dense_inputs = data['j2_features']
-    jj_dense_inputs = data['jj_features']
+data, _ = load_dataset_from_options(options)
+j1_dense_inputs = data['j1_features']
+j2_dense_inputs = data['j2_features']
+jj_dense_inputs = data['jj_features']
 
-    j1_images = j2_images = jj_images = None
-    if(need_images):
-        j1_images = data['j1_images']
-        j2_images = data['j2_images']
-        jj_images = data['jj_images']
-    Y = data['label'].reshape(-1)
-
-else:
-    bkg_start = 1000000
-    n_bkg = 400000
-    sig_start = 20000
-    sig_stop = -1
-    d_bkg = DataReader(f_bkg, keys = keys, signal_idx = -1, start = bkg_start, stop = bkg_start + n_bkg, m_low = m_low, m_high = m_high, hadronic_only = hadronic_only, eta_cut = eta_cut )
-    d_bkg.read()
-    d_sig = DataReader(f_sig, keys = keys, signal_idx = -1, start = sig_start, stop = sig_stop, m_low = m_low, m_high = m_high, hadronic_only = hadronic_only, eta_cut = eta_cut )
-    d_sig.read()
-
-    j1_im_bkg = d_bkg['j1_images']
-    j1_im_sig = d_sig['j1_images']
-    j1_images = np.concatenate((j1_im_bkg, j1_im_sig), axis = 0)
-
-    j2_im_bkg = d_bkg['j2_images']
-    j2_im_sig = d_sig['j2_images']
-    j2_images = np.concatenate((j2_im_bkg, j2_im_sig), axis = 0)
-
-    jj_im_bkg = d_bkg['jj_images']
-    jj_im_sig = d_sig['jj_images']
-    jj_images = np.concatenate((jj_im_bkg, jj_im_sig), axis = 0)
-
-    Y = np.concatenate((np.zeros(j1_im_bkg.shape[0], dtype=np.int8), np.ones(j1_im_sig.shape[0], dtype=np.int8)))
+j1_images = j2_images = jj_images = None
+if(need_images):
+    j1_images = data['j1_images']
+    j2_images = data['j2_images']
+    jj_images = data['jj_images']
+Y = data['label'].reshape(-1)
 
 
+j1rand_images = j2rand_images = j1rand_dense_inputs = j2rand_dense_inputs = None
 if(any(rand_sort)):
     swapping_idxs = np.random.choice(a=[True,False], size = Y.shape[0])
-    j1rand_images = copy.deepcopy(j1_images)
-    j2rand_images = copy.deepcopy(j2_images)
-    j1rand_images[swapping_idxs] = j2_images[swapping_idxs]
-    j2rand_images[swapping_idxs] = j1_images[swapping_idxs]
+    if(need_images):
+        j1rand_images = copy.deepcopy(j1_images)
+        j2rand_images = copy.deepcopy(j2_images)
+        j1rand_images[swapping_idxs] = j2_images[swapping_idxs]
+        j2rand_images[swapping_idxs] = j1_images[swapping_idxs]
 
     j1rand_dense_inputs = copy.deepcopy(j1_dense_inputs)
     j2rand_dense_inputs = copy.deepcopy(j2_dense_inputs)
     j1rand_dense_inputs[swapping_idxs] = j2_dense_inputs[swapping_idxs]
     j2rand_dense_inputs[swapping_idxs] = j1_dense_inputs[swapping_idxs]
-else:
-    j1rand_images = j2rand_images = j1rand_dense_inputs = j2rand_dense_inputs = None
 
 
 

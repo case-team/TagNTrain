@@ -37,7 +37,7 @@ def plot_biases(sig_masses, mean_pulls, err_mean_pulls, outfile):
     #draw_mbins(plt, ymin = -1.5, ymax = 1.5, colors = ('gray', 'gray'))
     xmax = np.amax(sig_masses)
     plt.xlim(1400, xmax + 150.)
-    hep.cms.text("Preliminary")
+    hep.cms.text(" Preliminary")
     plt.savefig(outfile, dpi=300, bbox_inches="tight")
     print("Wrote out %s" % outfile)
     plt.close()
@@ -59,7 +59,7 @@ def plot_stitched_mjj(options, mbins, outfile):
     a1 = plt.axes([0.0, 0.18, 1.0, 0.8])
     a2 = plt. axes([0.0,0.0, 1.0, 0.16], sharex=a1)
     plt.sca(a1)
-    #hep.cms.text("Simulation, Work in progress")
+    hep.cms.text(" Preliminary")
 
     for mbin in mbins:
         plt.sca(a1)
@@ -76,6 +76,7 @@ def plot_stitched_mjj(options, mbins, outfile):
         n_evts = mjjs.shape[0]
 
         fit_file = t_opts.output + 'fit_results_%.1f.json' % sig_mass
+        print(fit_file)
         if(not os.path.exists(fit_file)): 
             print("Missing " + fit_file)
             exit(1)
@@ -93,8 +94,8 @@ def plot_stitched_mjj(options, mbins, outfile):
         #tmp_mjj = mjjs[(mjjs > mjj_min) & (mjjs < mjj_max)]
         #xbins = np.linspace(mjj_min, mjj_max, 20)
         tmp_mjj = mjjs[(mjjs > sr_mlow) & (mjjs < sr_mhigh)]
-        xbins = np.linspace(sr_mlow, sr_mhigh, nbins_sr)
-        xbins_fine = np.linspace(sr_mlow, sr_mhigh, nbins_fine)
+        xbins = np.linspace(sr_mlow, sr_mhigh, nbins_sr + 1)
+        xbins_fine = np.linspace(sr_mlow, sr_mhigh, nbins_fine + 1)
 
         vals, edges = np.histogram(tmp_mjj, bins=xbins)
         widths = np.diff(xbins)
@@ -107,8 +108,6 @@ def plot_stitched_mjj(options, mbins, outfile):
         #vals_norm = vals
         #errs_norm = np.sqrt(vals) 
 
-        label_data = 'data'
-        plt.errorbar(centers,vals_norm, yerr=errs_norm, label=label_data, fmt="ko")
 
 
         npars = results['nPars_QCD']
@@ -135,27 +134,28 @@ def plot_stitched_mjj(options, mbins, outfile):
         #fit_norm = n_evts_fit / integrate.quad(qcd_model, a=mjj_min, b=mjj_max, args = (p1,p2,p3,p4))[0]
         fit_norm = n_evts_fit / integrate_qcd_model(mjj_min, mjj_max, *pars)
 
-        #integrate fit pdf in each bin to get more accurate vals
+        #integrate fit pdf in each bin to get predictions
         fit_vals_fine = np.array([fit_norm * integrate_qcd_model(xbins_fine[k], xbins_fine[k+1], *pars) for k in range(len(xbins_fine)-1)])
-        fit_vals = np.array([fit_norm * integrate_qcd_model(edges[k], edges[k+1], *pars) for k in range(len(edges)-1)])
         
 
-        #for ratio panel
+        #for ratio panel use big bins
+        fit_vals = np.array([fit_norm * integrate_qcd_model(edges[k], edges[k+1], *pars) for k in range(len(edges)-1)])
         fit_errs = unp.std_devs(fit_vals) * (bin_size_scale  / widths)
         fit_nom = unp.nominal_values(fit_vals) * (bin_size_scale  / widths)
 
-        #for upper panel
+        #for upper panel use fine binning
         fit_fine_nom = unp.nominal_values(fit_vals_fine) * (bin_size_scale / widths_fine)
         fit_fine_unc = unp.std_devs(fit_vals_fine) * (bin_size_scale / widths_fine)
         fit_fine_up = fit_fine_nom + fit_fine_unc
         fit_fine_down = fit_fine_nom - fit_fine_unc
 
 
-        #plot fit with fine binning
-        plt.fill_between(centers_fine, fit_fine_down, fit_fine_up, color = 'red', alpha = 0.4)
-        plt.plot(centers_fine, fit_fine_nom, color = 'red') 
+        if(mbin % 10 == 1): label_fit, label_data = "Bkg. fit", "Data"
+        else: label_fit, label_data = "",""
+        plt.fill_between(centers_fine, fit_fine_down, fit_fine_up, color = 'red', linewidth=0, alpha = 0.4)
+        plt.plot(centers_fine, fit_fine_nom, color = 'red', linewidth=3, label = label_fit) 
 
-        plt.errorbar(centers, vals_norm, fmt="ko", xerr=xbins[1:]-centers, yerr=errs_norm, label="Data", elinewidth=0.5, capsize=2.0)
+        plt.errorbar(centers, vals_norm, fmt="ko", xerr=xbins[1:]-centers, yerr=errs_norm,  elinewidth=0.5, capsize=2.0, label = label_data)
 
         
                         
@@ -176,18 +176,39 @@ def plot_stitched_mjj(options, mbins, outfile):
 
 
     plt.sca(a1)
-    plt.ylabel("Events / 100 GeV")
+    plt.ylabel("Events / 100 GeV", fontsize = 36)
     plt.yscale("log")
     ymin,ymax = a1.get_ylim()
+
+    handles, labels = plt.gca().get_legend_handles_labels()
+    #reorder data to be first in legend
+    order = [1,0]
+
+    #add legend to plot
+    plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc = "upper right", fontsize = 'x-large')
+
+    method_label = "Tag N' Train : " if options.do_TNT else "CWoLa Hunting : "
+    sr_label = "A Signal Regions" if mbins[0] < 10 else "B Signal Regions"
+    plt.text(0.04, 0.9, method_label + sr_label, transform = a1.transAxes, fontsize = 24)
+
+
+
     #plt.legend(loc="upper right")
 
-    for i in range(len(mass_bins)):
-        plt.plot([mass_bins[i], mass_bins[i]], [ymin, ymax], color="green", linestyle="dashed", lw=1.0)
+    ymax *= 5
+    print(ymin, ymax)
+    for i in range(len(mass_bins)-1):
+        l_ymax = ymax / ((i+1)**(2))
+        print(mass_bins[i+1], l_ymax)
+        plt.plot([mass_bins[i+1], mass_bins[i+1]], [ymin, l_ymax ], color="green", linestyle="dashed", lw=1.0)
 
     plt.sca(a2)
-    plt.xlabel(r"$m_{jj}$ (GeV)")
-    plt.ylabel(r"$\frac{\mathrm{Data-Fit}}{\mathrm{Unc.}}$")
+    plt.xlabel(r"$m_{jj}$ (GeV)", fontsize = 36)
+    plt.ylabel(r"$\frac{\mathrm{Data-Fit}}{\mathrm{Unc.}}$", fontsize = 30, loc = 'center')
     plt.ylim(min_ratio, max_ratio)
+    tick_spacing = 2.0
+    a2.yaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
+    a2.yaxis.set_minor_locator(ticker.MultipleLocator(tick_spacing/2))
     plt.xlim(mjj_min, mjj_max)
     for i in range(len(mass_bins)):
         plt.plot([mass_bins[i], mass_bins[i]], [min_ratio, max_ratio], color="green", linestyle="dashed", lw=1.0)
@@ -277,13 +298,13 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
     draw_mbins(plt, ymin = 1e-7, ymax = 10)
     plt.xlim(1400, xmax + 150.)
-    hep.cms.text("Preliminary")
+    hep.cms.text(" Preliminary")
     plt.savefig(join(out_dir, "pval_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
 
     #signif plot
     plt.style.use(hep.style.CMS)
-    hep.cms.text("Preliminary")
+    hep.cms.text(" Preliminary")
     plt.scatter(mass_list, signif_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel(r"Significance [$\sigma$]")

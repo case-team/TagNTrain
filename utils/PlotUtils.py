@@ -2,6 +2,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import cm
+import matplotlib.ticker as ticker
 from matplotlib import gridspec
 from sklearn.metrics import roc_curve,auc
 from .Consts import *
@@ -273,22 +274,24 @@ def make_profile_hist(x,y, x_bins, xaxis_label="", yaxis_label="", fname = "", f
 
 
 def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_bins, logy = False,  normalize = False, save=False, h_type = 'step', 
-        h_range = None, fontsize = 16, fname="", yaxis_label = ""):
+        h_range = None, fontsize = 24, fname="", yaxis_label = ""):
     alpha = 1.
     n_stacks = len(stacks)
     fig = plt.figure(figsize=fig_size)
     if(n_stacks > 0):
         plt.hist(stacks, bins=num_bins, range=h_range, color=colors[:n_stacks], alpha=0.2,label=labels[:n_stacks], density = normalize, histtype='barstacked')
     if(len(outlines) > 0):
-        plt.hist(outlines, bins=num_bins, range=h_range, color=colors[n_stacks:], alpha=1.,label=labels[n_stacks:], density = normalize, histtype='step')
+        plt.hist(outlines, bins=num_bins, range=h_range, color=colors[n_stacks:], alpha=1.,label=labels[n_stacks:], density = normalize, histtype='step', linewidth = 2)
     plt.xlabel(xaxis_label, fontsize =fontsize)
     plt.tick_params(axis='x', labelsize=fontsize)
+    plt.tick_params(axis='y', labelsize=fontsize)
     if(logy): plt.yscale('log')
     if(yaxis_label != ""):
         plt.ylabel(yaxis_label, fontsize=fontsize)
-        plt.tick_params(axis='y', labelsize=fontsize)
     plt.title(title, fontsize=fontsize)
-    plt.legend(loc='upper right', fontsize = fontsize)
+    _, high = plt.gca().get_ylim()
+    plt.ylim (0., high * 1.2)
+    plt.legend(loc='upper center', fontsize = fontsize * 0.8)
     if(save): 
         print("saving fig %s" %fname)
         plt.savefig(fname)

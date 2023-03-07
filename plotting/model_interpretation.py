@@ -66,6 +66,7 @@ def model_interp(options):
     compute_mjj_window(options)
     options.keep_mlow = options.mjj_low
     options.keep_mhigh = options.mjj_high
+    options.verbose = False
     data, _ = load_dataset_from_options(options)
 
     if(options.model_type != 2):
@@ -85,8 +86,10 @@ def model_interp(options):
         feature_names = ["jet_mass", "tau1", "tau21", "tau32", "tau43", "LSF", "DeepB", "nPFCands"]
     else:
         feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "LSF", "DeepB", "nPFCands"]
-    if(not options.keep_LSF):
-        feature_names.remove("LSF")
+
+    if(not options.keep_LSF): feature_names.remove("LSF")
+    if(not options.keep_tau1): feature_names.remove("tau1")
+
 
 
     Y = data['label']
@@ -139,35 +142,39 @@ def model_interp(options):
     mean_top_j2_nsubj, std_top_j2_nsubj = avg_nsubj_ratios(options, j2_feats[top_j2_scores_idxs])
 
     print("J1: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j1_scores_idxs] > 0)))
-    plot_labels = ("All", "Most Signal-like (Top %i)" % num_top)
     plot_colors = ("b", "r")
     num_bins = 20
+    title = "All Jets vs. Top %i Most Signal-like" % num_top
     for idx,feat in enumerate(feature_names):
-        title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j1_feats[idx], std_j1_feats[idx], mean_top_j1[idx], std_top_j1[idx])
-        make_outline_hist( [], (j1_feats[:,idx], j1_feats[top_j1_scores_idxs][:,idx]), plot_labels, plot_colors, feat, title, num_bins, normalize = True, 
+        plot_labels = ("Top (Avg : %.2f, Std %.2f)" %( mean_top_j1[idx], std_top_j1[idx]), 
+                       "All (Avg : %.2f, Std %.2f)"% (mean_j1_feats[idx], std_j1_feats[idx]))
+        make_outline_hist( [], ( j1_feats[top_j1_scores_idxs][:,idx], j1_feats[:,idx]), plot_labels, plot_colors, feat, title, num_bins, normalize = True, 
                         save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
-        print(title)
+        print(feat, plot_labels)
 
     if(not options.nsubj_ratios):
         for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
-            title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j1_nsubj[idx], std_j1_nsubj[idx], mean_top_j1_nsubj[idx], std_top_j1_nsubj[idx])
-            make_outline_hist( [], (j1_feats[:,idx+2]/j1_feats[:,idx+1], j1_feats[top_j1_scores_idxs][:,idx+2]/j1_feats[top_j1_scores_idxs][:,idx+1]), 
+            plot_labels = ("Top (Avg : %.2f, Std %.2f)" %( mean_top_j1[idx], std_top_j1[idx]), 
+                           "All (Avg : %.2f, Std %.2f)"% (mean_j1_feats[idx], std_j1_feats[idx]))
+            make_outline_hist( [], ( j1_feats[top_j1_scores_idxs][:,idx+2]/j1_feats[top_j1_scores_idxs][:,idx+1], j1_feats[:,idx+2]/j1_feats[:,idx+1] ), 
                     plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
-            print(title)
+            print(feat, plot_labels)
 
     print("J2: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j2_scores_idxs] > 0)))
     for idx,feat in enumerate(feature_names):
-        title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j2_feats[idx], std_j2_feats[idx], mean_top_j2[idx], std_top_j2[idx])
-        make_outline_hist( [], (j2_feats[:,idx], j2_feats[top_j2_scores_idxs][:,idx]), plot_labels, plot_colors, feat, title, num_bins, normalize = True, 
+        plot_labels = ("Top (Avg : %.2f, Std %.2f)" %( mean_top_j2[idx], std_top_j2[idx]), 
+                       "All (Avg : %.2f, Std %.2f)"% (mean_j2_feats[idx], std_j2_feats[idx]))
+        make_outline_hist( [], ( j2_feats[top_j2_scores_idxs][:,idx],  j2_feats[:,idx] ), plot_labels, plot_colors, feat, title, num_bins, normalize = True, 
                         save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
-        print(title)
+        print(feat, plot_labels)
 
     if(not options.nsubj_ratios):
         for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
-            title = "Feature %s: All %.2f +/- %.2f      Top %.2f +/- %.2f" % (feat, mean_j2_nsubj[idx], std_j2_nsubj[idx], mean_top_j2_nsubj[idx], std_top_j2_nsubj[idx])
-            make_outline_hist( [], (j2_feats[:,idx+2]/j2_feats[:,idx+1], j2_feats[top_j2_scores_idxs][:,idx+2]/j2_feats[top_j2_scores_idxs][:,idx+1]), 
+            plot_labels = ("Top (Avg : %.2f, Std %.2f)" %(  mean_top_j2[idx], std_top_j2[idx]), 
+                           "All (Avg : %.2f, Std %.2f)"% (mean_j2_feats[idx], std_j2_feats[idx]))
+            make_outline_hist( [], (j2_feats[top_j2_scores_idxs][:,idx+2]/j2_feats[top_j2_scores_idxs][:,idx+1], j2_feats[:,idx+2]/j2_feats[:,idx+1]), 
                     plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
-            print(title)
+            print(feat, plot_labels)
 
 
     if(include_bkg_like):
