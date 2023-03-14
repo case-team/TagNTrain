@@ -27,6 +27,8 @@ sic_max = 10
 model_dir = "../runs/TNT_X3000_Y170_Yp170_feb16/spb3.0/"
 plot_dir = "../runs/TNT_X3000_Y170_Yp170_feb16/spb3.0/"
 
+#model_dir = "../runs/TNT_XYY_model1_test_mar6/"
+#plot_dir = "../runs/TNT_XYY_model1_test_mar6/"
 
 f_models = [
         #'jrand_autoencoder_m3000.h5',
@@ -76,7 +78,7 @@ labels = [
 #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
 model_type = [2,2,2,2,2,2]
 #model_type = [2,2,2,2,2,2]
-num_models = [1,1,1,1,1,1]
+num_models = [4,4,4,4,4,4]
 #rand_sort = [False, False, False, False, False, False]
 rand_sort = [True]*6
 
