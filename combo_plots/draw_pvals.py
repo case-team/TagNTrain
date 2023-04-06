@@ -122,8 +122,8 @@ fs_X[4] = [0.3, 0.3, 0.3, 0.3, 0.3]
 fs_Wp[4] = [0.3, 0.3, 0.3, 0.3, 0.3] 
 
 #QUAK vals
-fs_X[5]  = [0.005475946508677022, 3.278519482915818e-05, 5.9118509545289e-09, 8.952804533183322e-13, 2.50492289311613e-20]
-fs_Wp[5] = [0.0009054009349003622, 6.5419615368228896e-06, 6.19083971768793e-11, 3.2752568900693405e-15, 8.796212141735043e-19, 4.0716871922065627e-14]
+fs_X[5]  = [0.00017847156614762385, 4.627340705203891e-07, 9.183889271214063e-10, 1.3519075736748065e-21, 3.726752847109815e-24]
+fs_Wp[5] = [0.014529040565424547, 0.007918894920774956, 5.5576386611810706e-05, 3.689073304061652e-08, 3.1774383879140555e-08, 1.0004245087099021e-07]
 
 fs = [fs_Wp, fs_X]
 fouts = ["Wp_pvals.png", "XYYp_pvals.png"]
@@ -137,12 +137,9 @@ for l_idx,flist  in enumerate(fs):
             with open(odir + o, 'r') as fo:
                 saved_params = json.load(fo, encoding="latin-1")
 
-            print(o)
             spbs = np.array(saved_params['spbs'])
             xsecs = np.array(saved_params['injected_xsecs'])
-            print('og', xsecs)
             pvals = np.array(saved_params['pvals'])
-            print('og-p', pvals)
             ilist = []
             xsecs_filt = []
             for i in range(len(xsecs)):
@@ -150,12 +147,8 @@ for l_idx,flist  in enumerate(fs):
                     ilist.append(i)
                     xsecs_filt.append(xsecs[i])
             xsecs_filt = np.array(xsecs_filt)
-            print(xsecs_filt)
-            print(xsecs_filt.argsort())
             pvals_out = pvals[ilist][xsecs_filt.argsort()]
             xsecs_out = xsecs_filt[xsecs_filt.argsort()]
-            print('pval-o', pvals_out)
-            print('xsec-o', xsecs_out)
             all_pvals.append(pvals_out)
         else:
             #just store list of pvals for other methods

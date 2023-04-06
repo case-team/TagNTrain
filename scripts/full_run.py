@@ -482,7 +482,7 @@ def full_run(options):
 
 
         if( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
-            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/diboson_interpolation_M%.1f.root" % options.mjj_sig
+            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
         else: sig_shape_file = ""
 
         if(len(options.effs) == 0):
@@ -515,7 +515,7 @@ def full_run(options):
             fit_params = json.load(f, encoding="latin-1")
             exp_lim = fit_params['exp_lim_events']
 
-        sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/diboson_interpolation_M%.1f.root" % options.mjj_sig
+        sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
         base_path = os.path.abspath(".") + "/"
 
         fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])

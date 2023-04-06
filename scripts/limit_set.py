@@ -21,6 +21,7 @@ def spb_opts(options, spb, sys = ""):
     spb = float(spb)
 
     t_opts = copy.deepcopy(options)
+    t_opts.saved_params = None
     t_opts.sig_per_batch = spb
 
     if(len(sys) > 0):
@@ -83,10 +84,10 @@ def get_preselection_params(sig_fname, hadronic_only_cut = False, sig_mass = 250
 
     hadronic_only = 1.0 - np.mean(is_lep)
     hadronic_only_mask = is_lep < 0.1
-    if(hadronic_only_cut): mjj_window_eff = np.sum(weights[mjj_mask & hadronic_only_mask]) / np.sum(weights[hadronic_only_mask])
-    else: mjj_window_eff = np.sum(weights[mjj_mask]) / np.sum(weights)
+    if(hadronic_only_cut): mjj_window_eff = float(np.sum(weights[mjj_mask & hadronic_only_mask]) / np.sum(weights[hadronic_only_mask]))
+    else: mjj_window_eff = float(np.sum(weights[mjj_mask]) / np.sum(weights))
     f.close()
-    return presel_eff * deta_eff * mjj_lowcut_eff, hadronic_only, mjj_window_eff
+    return float(presel_eff * deta_eff * mjj_lowcut_eff), float(hadronic_only), float(mjj_window_eff)
 
 def get_fit_nosel_params(options):
     base_path = os.path.abspath(".") + "/"
@@ -511,9 +512,6 @@ def limit_set(options):
     do_plot = options.step == "plot"
     do_roc = options.step == "roc"
     do_sys_train = options.step == "sys_train"
-    do_rand_train = options.step == "rand_train"
-    do_rand_select = options.step == "rand_select"
-    do_rand_merge = options.step == "rand_merge"
     do_sys_merge = options.step == "sys_merge"
     do_sys_selection = options.step == "sys_select"
     do_sys_plot = options.step == "sys_plot"
@@ -706,6 +704,9 @@ def limit_set(options):
         down_tot = down_tot ** 0.5
 
         print(" \n Eff final %.3f + %.3f - %.3f \n" % (sig_eff_nom, up_tot, down_tot))
+        options.saved_params['sig_eff_nom'] = sig_eff_nom
+        options.saved_params['sig_eff_up_unc'] = up_tot
+        options.saved_params['sig_eff_up_down'] = down_tot
 
 
         frac_unc = (up_tot + down_tot) / (2. * sig_eff_nom)
@@ -718,6 +719,7 @@ def limit_set(options):
         t_opts.sig_norm_unc = frac_unc
         t_opts.reload = False
         t_opts.condor = False
+        t_opts.generic_sig_shape = False
         full_run(t_opts)
         #fit_results = get_fit_results(options = options, m=options.mjj_sig)
         #Use expected limit from b-only scan
@@ -891,7 +893,7 @@ def limit_set(options):
             t_opts = spb_opts(options, inj_spb, sys = sys)
             t_opts.step = "train"
             t_opts.condor = True
-            #full_run(t_opts)
+            full_run(t_opts)
 
 
         #do rand trainings too
@@ -900,7 +902,7 @@ def limit_set(options):
             t_opts.BB_seed = seed
             t_opts.step = "train"
             t_opts.condor = True
-            #full_run(t_opts)
+            full_run(t_opts)
 
     write_params(options.output + "saved_params.json", options.saved_params)
 

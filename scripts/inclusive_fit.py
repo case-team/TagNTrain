@@ -8,8 +8,6 @@ from limit_set import *
 
 def inclusive_fit(options):
 
-    
-
     base_path = os.path.abspath(".") + "/"
 
     spbs = copy.copy(options.spbs)
