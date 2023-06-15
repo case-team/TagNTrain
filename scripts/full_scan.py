@@ -49,8 +49,6 @@ def plot_stitched_mjj(options, mbins, outfile):
     else:
         mass_bins = mass_bins2
 
-    mjj_min = mass_bins[1]
-    mjj_max = mass_bins[-2]
     num_div = 75
     bin_size_scale = 100.
 
@@ -59,7 +57,7 @@ def plot_stitched_mjj(options, mbins, outfile):
     a1 = plt.axes([0.0, 0.18, 1.0, 0.8])
     a2 = plt. axes([0.0,0.0, 1.0, 0.16], sharex=a1)
     plt.sca(a1)
-    hep.cms.text(" Preliminary")
+    hep.cms.label(llabel = " Preliminary", lumi = 138)
 
     for mbin in mbins:
         plt.sca(a1)
@@ -72,8 +70,6 @@ def plot_stitched_mjj(options, mbins, outfile):
         with h5py.File(f_data, "r") as f:
             mjjs = f['mjj'][()]
 
-        mjjs = mjjs[ (mjjs > mjj_min) & (mjjs < mjj_max)]
-        n_evts = mjjs.shape[0]
 
         fit_file = t_opts.output + 'fit_results_%.1f.json' % sig_mass
         print(fit_file)
@@ -85,14 +81,13 @@ def plot_stitched_mjj(options, mbins, outfile):
             results = json.load(json_file)
 
 
+
         sr_mlow = mass_bins[mbin % 10]
         sr_mhigh = mass_bins[ (mbin+1) % 10]
         nbins_sr = 5
         nbins_fine = 100
 
 
-        #tmp_mjj = mjjs[(mjjs > mjj_min) & (mjjs < mjj_max)]
-        #xbins = np.linspace(mjj_min, mjj_max, 20)
         tmp_mjj = mjjs[(mjjs > sr_mlow) & (mjjs < sr_mhigh)]
         xbins = np.linspace(sr_mlow, sr_mhigh, nbins_sr + 1)
         xbins_fine = np.linspace(sr_mlow, sr_mhigh, nbins_fine + 1)
@@ -126,13 +121,14 @@ def plot_stitched_mjj(options, mbins, outfile):
             p4 = fit_params['p4'][0]
             pars = uncertainties.correlated_values([p1,p2,p3,p4], cov)
 
-        mjj_fit = mjjs[(mjjs > mjj_min) & (mjjs < mjj_max)]
+        fit_mjj_start = max(1450, results['mjj_min'])
+        fit_mjj_stop = min(6500, results['mjj_max'])
+        mjj_fit = mjjs[ (mjjs > fit_mjj_start) & (mjjs < fit_mjj_stop )]
         n_evts_fit = mjj_fit.shape[0]
 
 
         #normalize fit integral to total number of data events
-        #fit_norm = n_evts_fit / integrate.quad(qcd_model, a=mjj_min, b=mjj_max, args = (p1,p2,p3,p4))[0]
-        fit_norm = n_evts_fit / integrate_qcd_model(mjj_min, mjj_max, *pars)
+        fit_norm = n_evts_fit / integrate_qcd_model(fit_mjj_start, fit_mjj_stop, *pars)
 
         #integrate fit pdf in each bin to get predictions
         fit_vals_fine = np.array([fit_norm * integrate_qcd_model(xbins_fine[k], xbins_fine[k+1], *pars) for k in range(len(xbins_fine)-1)])
@@ -209,6 +205,8 @@ def plot_stitched_mjj(options, mbins, outfile):
     tick_spacing = 2.0
     a2.yaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
     a2.yaxis.set_minor_locator(ticker.MultipleLocator(tick_spacing/2))
+    mjj_min = mass_bins[1]
+    mjj_max = mass_bins[-2]
     plt.xlim(mjj_min, mjj_max)
     for i in range(len(mass_bins)):
         plt.plot([mass_bins[i], mass_bins[i]], [min_ratio, max_ratio], color="green", linestyle="dashed", lw=1.0)
@@ -230,9 +228,10 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     signif_list = []
     nPar_list = []
     fit_prob_list = []
-    fit_start_list = []
+    fit_range_list = []
 
     default_fit_start = 1450.
+    default_fit_stop = 7000.
 
     for f in input_files:
         with open(f) as json_file:
@@ -242,9 +241,12 @@ def plot_significances(input_files, out_dir, sig_masses = None):
         pval_list.append(results["pval"])
         signif_list.append(results["signif"])
         nPar_list.append(results["nPars_QCD"])
-        fit_prob_list.append(results["bkgfit_prob"])
+        fit_prob = max(results['bkgfit_prob'], results['sbfit_prob'])
+        fit_prob_list.append(fit_prob)
         #map -1 to starting fit value
-        fit_start_list.append(max(default_fit_start, results['mjj_min']))
+        fit_start = max(default_fit_start, results['mjj_min'])
+        fit_stop = min(default_fit_stop, results['mjj_max'])
+        fit_range_list.append([fit_start, fit_stop])
 
     xmax = np.amax(mass_list)
 
@@ -276,6 +278,9 @@ def plot_significances(input_files, out_dir, sig_masses = None):
 
     #pval plot
     plt.style.use(hep.style.CMS)
+    a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
+    plt.sca(a1)
+    hep.cms.label(llabel = " Preliminary", lumi = 138)
     plt.scatter(mass_list, pval_list, s = 40.0, c = colors)
     plt.scatter(mass_pval_overflow_list, pval_overflow_list, marker = "v", s = 80.0, c = colors_overflow)
     for i in range(len(corr_sigma)):
@@ -298,13 +303,14 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
     draw_mbins(plt, ymin = 1e-7, ymax = 10)
     plt.xlim(1400, xmax + 150.)
-    hep.cms.text(" Preliminary")
     plt.savefig(join(out_dir, "pval_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
 
     #signif plot
     plt.style.use(hep.style.CMS)
-    hep.cms.text(" Preliminary")
+    a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
+    plt.sca(a1)
+    hep.cms.label(llabel = " Preliminary", lumi = 138)
     plt.scatter(mass_list, signif_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel(r"Significance [$\sigma$]")
@@ -317,6 +323,9 @@ def plot_significances(input_files, out_dir, sig_masses = None):
 
     #nPar_qcd plot
     plt.style.use(hep.style.CMS)
+    a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
+    plt.sca(a1)
+    hep.cms.label(llabel = " Preliminary", lumi = 138)
     plt.scatter(mass_list, nPar_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel("nPars")
@@ -329,9 +338,12 @@ def plot_significances(input_files, out_dir, sig_masses = None):
 
     #chi2 prob plot
     plt.style.use(hep.style.CMS)
+    a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
+    plt.sca(a1)
+    hep.cms.label(llabel = " Preliminary", lumi = 138)
     plt.scatter(mass_list, fit_prob_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
-    plt.ylabel("Bkg. Only Fit Prob.")
+    plt.ylabel("Chi2/ndof Prob.")
     #plt.ylim(1e-8, 1.1)
     #plt.yscale('log')
     draw_mbins(plt)
@@ -341,17 +353,20 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     plt.close()
 
 
-    #fit start plot
+    #fit range plot
     plt.style.use(hep.style.CMS)
-    plt.scatter(mass_list, fit_start_list, s = 40.0, c = colors)
+    a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
+    plt.sca(a1)
+    hep.cms.label(llabel = " Preliminary", lumi = 138)
+    for i in range(len(mass_list)):
+        plt.plot([mass_list[i], mass_list[i]], fit_range_list[i], linewidth = 6, c = colors[i])
+
     plt.xlabel(r"$m_{jj}$ [GeV]")
-    plt.ylabel(r"Lowest $m_{jj}$ bin of fit")
+    plt.ylabel(r"Range of fit [GeV]")
     #plt.ylim(1e-8, 1.1)
     #plt.yscale('log')
     draw_mbins(plt)
-    fit_start_max = np.amax(fit_start_list)
-    ymax = max(2400., fit_start_max + 50.)
-    plt.ylim(1300., ymax)
+    plt.ylim(1200., 7500.)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "fit_start_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
@@ -410,10 +425,13 @@ def full_scan(options):
             rel_opts.keep_LSF = options.keep_LSF #quick fix
             rel_opts.num_events = options.num_events #quick fix
             rel_opts.sys_train_all = options.sys_train_all #quick fix
+            rel_opts.condor_mem = options.condor_mem #quick fix
             rel_opts.recover = options.recover
             if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
             rel_opts.step = options.step
             if(len(options.effs) >0): rel_opts.effs = options.effs
+            if(len(options.mbins) >0): rel_opts.mbins = options.mbins
+            else: rel_opts.mbins = []
             if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
 
             options = rel_opts
@@ -459,8 +477,13 @@ def full_scan(options):
 
     if(do_train or do_selection or do_merge or get_condor):
         for mbin in mass_bin_idxs:
+            if(len(options.mbins) > 0 and mbin not in options.mbins): continue
             if(options.sideband and mbin in sb_excluded_mbins): continue
             t_opts = mbin_opts(options, mbin)
+
+            eff_point = mass_bin_select_effs[mbin]
+            t_opts.effs = [eff_point]
+
             t_opts.step = options.step
             t_opts.condor = True
             if(not do_train): t_opts.reload = True
@@ -481,6 +504,7 @@ def full_scan(options):
     first_sb_sig_mass = 2250.
     if(do_fit):
         for mbin in mass_bin_idxs:
+            if(len(options.mbins) > 0 and mbin not in options.mbins): continue
             if(options.sideband and mbin in sb_excluded_mbins): continue
             eff_point = mass_bin_select_effs[mbin]
             print("Mbin %i, eff %.1f" % (mbin, eff_point))
@@ -489,6 +513,8 @@ def full_scan(options):
             t_opts.step = "fit"
             t_opts.reload = True
             t_opts.condor = False
+            t_opts.generic_sig_shape = True
+            t_opts.fit_label = ""
             fit_start = -1
             if(options.sideband): t_opts.fit_start = 2000.
             for sig_mass in mass_bin_sig_mass_map[mbin]:
@@ -501,6 +527,7 @@ def full_scan(options):
 
     if(do_bias_test):
         for mbin in mass_bin_idxs:
+            if(len(options.mbins) > 0 and mbin not in options.mbins): continue
             if(options.sideband and mbin in sb_excluded_mbins): continue
             eff_point = mass_bin_select_effs[mbin]
             print("Mbin %i, eff %.1f" % (mbin, eff_point))
@@ -557,8 +584,12 @@ def full_scan(options):
         file_list = []
         file_list_bins1 = []
         file_list_bins2 = []
+        added_mbins = []
         for mbin in mass_bin_idxs:
+            if(len(options.mbins) > 0 and mbin not in options.mbins): continue
             if(options.sideband and mbin in sb_excluded_mbins): continue
+
+            added_mbins.append(mbin)
             t_opts = mbin_opts(options, mbin)
 
             fit_plot_dir = t_opts.output + "fit_plots_mbin%i/" % mbin
@@ -588,11 +619,12 @@ def full_scan(options):
             bkg_fit_plot = fit_plot_dir + '%ipar_qcd_fit_binned.png' % nPars_bkg
             os.system('cp ' + bkg_fit_plot + ' %s/plots/bkgfit_mbin%i.png' % (options.output, mbin))
 
-        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin < 10] , options.output + "plots/mjj_stitched_binsA.png")
-        plot_stitched_mjj( options, [mbin for mbin in mass_bin_idxs if mbin > 10] , options.output + "plots/mjj_stitched_binsB.png")
-        
         print(list(zip(sig_masses, signifs)))
         plot_significances(file_list, options.output + "plots/", sig_masses = sig_masses)
+
+        plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin < 10] , options.output + "plots/mjj_stitched_binsA.png")
+        plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin > 10] , options.output + "plots/mjj_stitched_binsB.png")
+        
 
 
 
@@ -612,6 +644,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--sig_norm_unc", default = -1.0, type = float, help = "parameter for fit (uncertainty on signal efficiency)")
     parser.add_argument("--ae_dir", default = "", help = "directory with all the autoencoders (auto pick the right mbin and kfold)")
     parser.add_argument("--effs", nargs="+", default = [], type = float)
+    parser.add_argument("--mbins", nargs="+", default = [], type = int)
     parser.add_argument("--kfolds", default = 5, type = int)
     parser.add_argument("--lfolds", default = 4, type = int)
     parser.add_argument("--numBatches", default = 40, type = int)
@@ -621,6 +654,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--num_events", default = False, action = 'store_true', help = "Make limit plot in terms of num events (removes common prefactors)")
     parser.add_argument("--sys_train_all", default = False, action = 'store_true', help = "Perform re-training for all systematics")
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--condor_mem", default = -1, type = int, help = "Memory for condor jobs")
     parser.add_argument("--recover", dest='recover', action = 'store_true', help = "Retrain jobs that failed")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.set_defaults(reload=True)

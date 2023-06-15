@@ -46,6 +46,8 @@ def condor_options():
     parser.add_argument("-g", "--getEOS", default = False, action='store_true',  help="Get EOS files and save to out directory")
     parser.add_argument("-y", "--year", dest='year', type=int, default = 2016,  help="Year for output file location")
 
+    parser.add_argument("--output_transfer", default = "ON_EXIT_OR_EVICT",  help="condor_transfer")
+
     parser.add_argument("--tar", dest='tar', default = False, action='store_true',  help="Create tarball of current directory")
     parser.add_argument("--tarname", dest='tarname', default = "CASE", help="Name of directory to tar (relative to cmssw_base)")
     parser.add_argument("--tarexclude", dest='tarexclude', default = '', 
@@ -132,7 +134,7 @@ def doCondor(options):
             for f in options.input:
                 input_files += " , "  + os.path.abspath(options.outdir + options.name + "/" + f.split("/")[-1]) 
             condor_file.write(input_files + "\n")
-            condor_file.write('WhenToTransferOutput = ON_EXIT \n')
+            condor_file.write('WhenToTransferOutput = %s \n' % options.output_transfer)
             condor_file.write('use_x509userproxy = true\n')
             condor_file.write('x509userproxy = $ENV(X509_USER_PROXY)\n')
             condor_file.write('Output = %s.stdout\n' % os.path.abspath(condor_file.name))
@@ -152,7 +154,7 @@ def doCondor(options):
         if options.case:
             print("Using CASE tarball options")
             excludeList = ["CASE/CASEUtils/*.h5",  "CASE/CASEUtils/*.root", "CASE/TagNTrain/data",  "CASE/TagNTrain/runs", "CASE/TagNTrain/plots", "CASE/TagNTrain/combo_plots",
-                    "CASE/TagNTrain/condor", "CASE/LundReweighting",
+                    "CASE/TagNTrain/condor",
                     "CASE/CASEUtils/H5_maker", "CASE/CASEUtils/fitting/fit_inputs", "CASE/TagNTrain/models/BB*", "CASE/TagNTrain/models/old", "CASE/*/DReader*.h5"]
 
             options.tarname = "CASE"

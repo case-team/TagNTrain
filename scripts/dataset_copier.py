@@ -36,7 +36,8 @@ for f in file_list:
         print("Skipping %s" % f)
 
 if(len(options.sig_file) > 0 and len(options.sig_file_out) > 0):
-    sig_file_base = eos_base + "/store/user/oamram/case/sig_files/"
+    #sig_file_base = eos_base + "/store/user/oamram/case/sig_files/"
+    sig_file_base = eos_base + "/store/user/oamram/case/sig_files/LundRW/"
     print("Copying sig file %s %s"  % (sig_file_base + options.sig_file, options.sig_file_out))
     os.system("xrdcp %s %s" % (sig_file_base + options.sig_file, options.sig_file_out))
 

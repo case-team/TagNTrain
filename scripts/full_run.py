@@ -12,7 +12,7 @@ import time
 fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
 fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
-def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False):
+def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False):
     print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
     base_path = os.path.abspath(".") + "/"
     if(len(output_dir) == 0): output_dir = base_path + options.output
@@ -33,11 +33,15 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
 
 
     run_fit = True
+    last_change = 'start'
     while(run_fit):
         dijet_cmd_iter = copy.copy(dijet_cmd)
 
         if(fit_start > 0):
             dijet_cmd_iter += " --mjj_min %.0f" % fit_start
+
+        if(fit_stop > 0):
+            dijet_cmd_iter += " --mjj_max %.0f" % fit_stop
 
         dijet_cmd_iter += " >& %s/fit_log_%s%.1f.txt " % (output_dir, label, options.mjj_sig)
         fit_cmd = fit_cmd_setup +  dijet_cmd_iter + "; " + fit_cmd_after
@@ -45,16 +49,39 @@ def run_dijetfit(options, fit_start = -1, sig_shape_file = "", input_file = "", 
         subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
 
         run_fit = False
-        if(loop and (fit_start + 200. < options.mjj_sig)): #don't stop until we get a good fit
+        no_results = False
+        if(loop): #don't stop until we get a good fit
             fit_file = output_dir + 'fit_results_%.1f.json' % options.mjj_sig
-            with open(fit_file, 'r') as f:
-                fit_params = json.load(f, encoding="latin-1")
-                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.15) or fit_params['bkgfit_frac_err'] > err_thresh):
-                    if(fit_start < 1550.): fit_start = 1550.
-                    else: fit_start += 100.
-                    print("\n \n POOR Fit quality (bkg pval %.2e, s+b pval %.2e, fit unc %.2f)! \n. Increasing fit start to %.0f and retrying" % 
-                            (fit_params['bkgfit_prob'], fit_params['sbfit_prob'], fit_params['bkgfit_frac_err'], fit_start))
+            if(not os.path.exists(fit_file)):
+                print("\nFit didn't converge")
+                no_results = True
+                run_fit = True
+            else:
+                with open(fit_file, 'r') as f:
+                    fit_params = json.load(f, encoding="latin-1")
+
+                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > err_thresh):
                     run_fit = True
+                    print("\nPOOR Fit quality (bkg pval %.2e, s+b pval %.2e, fit unc %.2f)!" % 
+                            (fit_params['bkgfit_prob'], fit_params['sbfit_prob'], fit_params['bkgfit_frac_err']))
+
+            if(run_fit):
+                if(fit_start < 1550.): fit_start = 1550.
+                elif(fit_stop < 0 or fit_stop > 6500.): fit_stop = 6500.
+                elif(last_change == "end" and (fit_start + 400. <= options.mjj_sig) ): 
+                    fit_start += 100.
+                    last_change = 'start'
+                elif(fit_stop - 500. >= options.mjj_sig): 
+                    if(fit_stop > 5000): fit_stop -= 500
+                    else: fit_stop -= 200.
+                    last_change = 'end'
+                elif((fit_start + 250. <= options.mjj_sig) ): 
+                    fit_start += 100.
+                else:
+                    print("No boundary changes found!")
+                    run_fit = False
+
+                print("Changing fit start/stop to %.0f/%.0f and retrying" % (fit_start, fit_stop))
     return fit_start
 
 
@@ -153,7 +180,9 @@ def full_run(options):
         if('generic_sig_shape' in options.__dict__.keys()): rel_opts.generic_sig_shape = options.generic_sig_shape
         rel_opts.keep_LSF = options.keep_LSF #quick fix
         rel_opts.redo_roc = options.redo_roc #quick fix
+        rel_opts.condor_mem = options.condor_mem #quick fix
         rel_opts.recover = options.recover
+        rel_opts.lund_weights = options.__dict__.get('lund_weights', True)
         if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
         rel_opts.output = options.output #allows renaming / moving directories
         options = rel_opts
@@ -184,7 +213,7 @@ def full_run(options):
         print("Number of batches per kfold(%i) must be multiple of number of lfolds (%i)" % (batches_per_kfold, options.lfolds))
         sys.exit(1)
 
-    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "bias", "interp", "all"]):
+    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "bias", "interp", "clean", "all"]):
         print("Invalid option %s" % options.step)
         sys.exit(1)
 
@@ -198,6 +227,8 @@ def full_run(options):
     do_roc = options.step == "roc"
     do_interp = options.step == "interp"
     do_bias_test = options.step == "bias"
+    do_clean = options.step == "clean"
+
     if(options.step == "all"):
         do_train = do_selection = do_fit = do_roc = True
     if(options.step == "roc" and options.condor):
@@ -239,8 +270,6 @@ def full_run(options):
     if(do_train):
         for k,k_options in enumerate(kfold_options):
 
-
-
             if(not options.randsort):
                 k_options.label = options.label + "_j1_kfold%i" % k
                 k_options.output = options.output + "j1_kfold%i/" % k
@@ -261,7 +290,7 @@ def full_run(options):
                         exit(1)
                     else:
                         ae_mbin = k_options.mbin
-                        if(ae_mbin == 6 or ae_mbin == 16): ae_mbin -= 1
+                        if(ae_mbin == 6 or ae_mbin == 16 and not options.data): ae_mbin -= 1
                         k_options.labeler_name = options.ae_dir + "jrand_AE_kfold%i_mbin%i.h5" % (k, ae_mbin)
                 create_model_ensemble(k_options)
 
@@ -320,6 +349,7 @@ def full_run(options):
             else: #submit to condor
                 selection_options.output = "fit_inputs_kfold%i_eff{eff}.h5" % k
                 selection_options.local_storage = True
+                selection_options.save_mem = True
                 selection_options.fin = "../data/BB/"
                 selection_options_dict = selection_options.__dict__
                 selection_opts_fname  = options.output + "select_opts_%i.json" % k
@@ -374,9 +404,32 @@ def full_run(options):
 
                 inputs_list = [selection_opts_fname, tarname]
                 c_opts.input = inputs_list
+                if(options.condor_mem > 0):
+                    c_opts.mem = condor_mem
 
 
                 doCondor(c_opts)
+
+    if(do_clean):
+        condor_dir = options.output + "selection_condor_jobs/"
+        os.system("rm %s/models.tar" % options.output)
+
+        for k,k_options in enumerate(kfold_options):
+
+            c_opts_name = options.label + "_select_kfold%i" % k 
+            cmd = "rm %s/models.tar" % (condor_dir + c_opts_name)
+            os.system(cmd)
+
+            if(not options.randsort):
+                output1 = options.output + "j1_kfold%i/" % k
+                output2 = options.output + "j2_kfold%i/" % k
+                os.system("rm %s/model*.h5" % output1)
+                os.system("rm %s/model*.h5" % output2)
+
+            else:
+                output1 = options.output + "jrand_kfold%i/" % k
+                os.system("rm %s/model*.h5" % output1)
+
 
     if(do_interp):
         for k,k_options in enumerate(kfold_options):
@@ -629,6 +682,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--fit_start", default = -1.,  type = float, help = 'Lowest mjj value for dijet fit')
     parser.add_argument("--redo_roc", default = False,  action = 'store_true', help = 'Remake roc')
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
+    parser.add_argument("--condor_mem", default = -1, type = int, help = "Memory for condor jobs")
     parser.add_argument("--recover", dest='recover', action = 'store_true', help = "Retrain jobs that failed")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.set_defaults(reload=True)

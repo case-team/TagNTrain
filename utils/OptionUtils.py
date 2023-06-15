@@ -60,6 +60,8 @@ def input_options():
     parser.add_argument("--sig_file", type = str, default = "",  help="Load signal from separate file")
     parser.add_argument("--replace_ttbar", default = False, action = "store_true", help = "Filter out ttbar events from the dataset (to replace with separate sample")
     parser.add_argument("--sig_weights", default = True, action = "store_true",  help="Use weighted random sampling ( based on SF's) for signal file (only matters for separate sig_file used)")
+    parser.add_argument("--lund_weights", default = False, action = "store_true",  help="Use Lund Weights for signal file")
+    parser.add_argument("--no_lund_weights", dest='lund_weights', action = "store_false",  help="Don't use Lund Weights for signal file")
     parser.add_argument("--sig_sys", type= str, default = "",  help="Use weights (SF's) for signal file")
     parser.add_argument("-s", "--sig_frac", type = float, default = -1.,  help="Reduce signal to S/B in signal region (< 0 to not use )")
     parser.add_argument("--sig_per_batch", type = float, default = -1.,  help="Reduce signal to this number of events in each batch (< 0 to not use )")
@@ -69,6 +71,7 @@ def input_options():
     parser.add_argument("--BB_seed", type = int, default = 123456,  help="RNG seed for dataset")
     parser.add_argument("--num_models", type = int, default = 1,  help="How many networks to train (if >1 will save the one with best validation loss)")
     parser.add_argument("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
+    parser.add_argument("--save_mem", default = False, action = "store_true", help="Delete BB files in condor jobs after reading them")
 
     parser.add_argument("--keep_LSF",  action = "store_true", help="Keep LSF for dense inputs")
     parser.add_argument("--no_LSF", dest = 'keep_LSF', action = "store_false", help="Dont Keep LSF for dense inputs")
@@ -167,7 +170,9 @@ def load_signal_file(options):
     s_opts.deta = s_opts.deta_min = s_opts.keep_mlow = s_opts.keep_mhigh = -1.
     s_opts.sig_per_batch = s_opts.sig_frac = -1
     s_opts.sig_only = True
-    s_opts.keys += ["jet_kinematics", "sys_weights", "j1_JME_vars", "j2_JME_vars"]
+    s_opts.keys += ["jet_kinematics", "sys_weights", "j1_JME_vars", "j2_JME_vars" ]
+    if(s_opts.lund_weights):
+        s_opts.keys += ['lund_weights', 'lund_weights_stat_var', 'lund_weights_pt_var', 'lund_weights_sys_var']
     #s_opts.keys += ["jet_kinematics" ]
 
     s_opts_dict = vars(s_opts)

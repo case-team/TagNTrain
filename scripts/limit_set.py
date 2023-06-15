@@ -742,6 +742,14 @@ def limit_set(options):
             full_run(t_opts)
 
 
+    #Clean 
+    if(do_clean):
+        for spb in options.spbs:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "clean"
+            full_run(t_opts)
+
+
     if(do_sys_merge):
         if(len(spbs_to_run) == 1):
             inj_spb = spbs_to_run[0]

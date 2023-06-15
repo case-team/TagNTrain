@@ -62,6 +62,8 @@ def create_model_ensemble(options):
             options_copy.output = "model%i.h5" % i
             options_copy.local_storage = True
             options_copy.fin = "../data/BB/"
+            options_copy.save_mem = True
+
             options_dict = options_copy.__dict__
 
             write_options_to_json(options_dict, "train_opts_%i.json" % i )
@@ -77,6 +79,8 @@ def create_model_ensemble(options):
         c_opts = condor_options().parse_args([])
         c_opts.nJobs = num_ensemble_models
         c_opts.outdir = condor_dir
+        if('condor_mem' in options.__dict__.keys() and options.condor_mem > 0): 
+            c_opts.mem = options.condor_mem
         base_script = "../condor/scripts/train_from_json.sh"
         train_script = condor_dir + "train_script.sh"
         if(options.fin[-1] == "/"):
@@ -116,5 +120,6 @@ if(__name__ == "__main__"):
     parser.add_argument("--do_ttbar",  default=False, action = 'store_true',  help="Do ttbar CR training")
     parser.add_argument("--condor",  default=False, action = 'store_true',  help="Submit all NN trainings to condor")
     parser.add_argument("--recover", dest='recover', action = 'store_true', help = "Retrain jobs that failed")
+    parser.add_argument("--condor_mem", default = -1, type = int, help = "Memory for condor jobs")
     options = parser.parse_args()
     create_model_ensemble(options)

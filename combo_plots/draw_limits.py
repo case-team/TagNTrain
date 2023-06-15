@@ -12,6 +12,7 @@ from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 
 def make_limit_plot(vals, labels, colors, fout = ""):
     plt.style.use(hep.style.CMS)
+    plt.figure(figsize=(12,9))
 
 
     legend_elems = []
@@ -30,25 +31,25 @@ def make_limit_plot(vals, labels, colors, fout = ""):
                 legend_elems.append((exp,obs))
 
     plt.xlabel("Signal Model", labelpad =20)
-    plt.ylabel("95% CL Exclusion Limit (fb)")
+    plt.ylabel("95% CL Exclusion Limit on $\sigma$ (fb)")
     plt.gca().minorticks_off()
     y_minor = matplotlib.ticker.MultipleLocator(1)
     plt.gca().yaxis.set_minor_locator(y_minor)
     ymax = np.amax(vals)
-    plt.ylim(0, 1.4*ymax)
+    plt.ylim(0, 1.5*ymax)
     plt.xlim(0.5, 5.5)
     plt.xticks([1,2,3,4,5], [r"$X \rightarrow YY'$" "\n(2+2)", r"$W' \rightarrow B't $" "\n(3+3)", r"$W_{kk}' \rightarrow RW $" "\n(4+2)",
         r"$Z' \rightarrow T'T'$" "\n(5+5)", r"$Y \rightarrow HH$" "\n(6+6)"  ])
-    hep.cms.text(" Preliminary")
+    hep.cms.label( data = True, lumi = 138)
 
 
     exp = plt.errorbar(-999, -999, yerr = 1, fmt = 'x', color = 'gray', label = label, capsize = 2.0) 
     obs = plt.plot(-999, -999, linewidth = 0, marker = 's', color = 'gray')[0]
     legend_elems2 = [exp, obs]
-    labels2 = ['Expected              ', 'Observed             ']
+    labels2 = ['Expected', 'Observed']
 
-    leg1 = plt.legend(legend_elems, labels,  ncol = 2, loc = 'upper left', bbox_to_anchor = (0.095, 1.01), numpoints = 1, handler_map={tuple: HandlerTuple(ndivide=None)})
-    leg2 = plt.legend(legend_elems2, labels2,  ncol = 2, loc = 'upper left', bbox_to_anchor = (0.08, 0.84))
+    leg1 = plt.legend(legend_elems, labels,  ncol = 2, loc = 'upper left', bbox_to_anchor = (0.3, 1.01), numpoints = 1, handler_map={tuple: HandlerTuple(ndivide=None)})
+    leg2 = plt.legend(legend_elems2, labels2,  ncol = 1, loc = 'upper left', bbox_to_anchor = (-0.02, 0.95))
     for text in leg2.get_texts(): text.set_color("gray")
     plt.gca().add_artist(leg1)
     plt.gca().add_artist(leg2)
@@ -59,18 +60,18 @@ def make_limit_plot(vals, labels, colors, fout = ""):
 
 
 
-labels = ['Inclusive', 'CWoLa Hunting', 'TNT', 'CATHODE', 'VAE-QR', 'QUAK']
-colors = ['black', 'blue', 'green', 'purple', 'red', 'orange']
+labels = ['Inclusive', 'CWoLa Hunting', 'TNT', 'CATHODE', 'CATHODE-b', 'VAE-QR', 'QUAK']
+colors = ['black', 'blue', 'green', 'purple', 'magenta', 'red', 'orange']
 
 n_sigs = 5
-n_methods = 6
+n_methods = 7
 
 rng = np.random
 
 rands = rng.uniform(low = 0.5, high = 1.0, size = (n_sigs, n_methods))
 sig_scalings = [20., 30., 30., 40., 20.]
-method_scalings = [1.0, 0.5, 0.5, 0.5, 0.5, 0.5]
-method_obs_scaling = [1.05, 1.12, 0.95, 1.03, 0.93, 0.88]
+method_scalings = [0.9, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+method_obs_scaling = [1.05, 1.12, 0.95, 1.03, 1.08, 0.93, 0.88]
 
 vals = []
 for j in range(n_methods):

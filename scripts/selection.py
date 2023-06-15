@@ -249,6 +249,8 @@ def selection(options):
 
             #signal weights
             sig_weights = sig_only_data['sys_weights'][:,0]
+            if(options.lund_weights):
+                sig_weights *= sig_only_data['lund_weights'][:]
 
             if(len(options.sig_sys) > 0 and options.sig_sys in sys_weights_map.keys()):
                 print("Using systematic %s" % options.sig_sys)
@@ -290,6 +292,27 @@ def selection(options):
                 sys_sig_eff_window = np.sum(weights[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights[sig_deta_mask])
                 sys_effs[sys]= (sys_sig_eff, sys_sig_eff_window)
 
+            if(options.lund_weights):
+                nToys = 100
+                sig_effs_stat = []
+                sig_effs_pt = []
+                sig_effs_window_stat = []
+                sig_effs_window_pt = []
+                for idx in range(nToys):
+                    weights_stat = sig_only_data['sys_weights'][:,0] * sig_only_data['lund_weights_stat_var'][:,idx]
+                    weights_pt = sig_only_data['sys_weights'][:,0] * sig_only_data['lund_weights_pt_var'][:,idx]
+
+                    sig_effs_stat.append(np.sum(weights_stat[sig_deta_mask][sig_cut_mask])/ np.sum(weights_stat[sig_deta_mask]))
+                    sig_effs_pt.append(np.sum(weights_stat[sig_deta_mask][sig_cut_mask])/ np.sum(weights_pt[sig_deta_mask]))
+
+                    sig_effs_window_stat.append(np.sum(weights_stat[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights_stat[sig_deta_mask]))
+                    sig_effs_window_pt.append(np.sum(weights_stat[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights_pt[sig_deta_mask]))
+
+                sys_effs['lund_stat'] = (sig_effs_stat, sig_effs_window_stat)
+                sys_effs['lund_pt'] = (sig_effs_pt, sig_effs_window_pt)
+
+
+
 
             print("Sig eta eff %.3f, sig_eff %.3f, sig_eff_window %.3f sig_eff_window_nosel %.3f" % (sig_eff_deta, sig_eff, sig_eff_window, sig_eff_window_nosel))
 
@@ -330,7 +353,9 @@ def selection(options):
             f.create_dataset("sig_eff_window_nosel", data=np.array([sig_eff_window_nosel]) )
             f.create_dataset("score_thresh", data = np.array([thresh]))
             if(sig_only_data is not None):
-                for sys in sys_weights_map.keys():
+                sys_list = list(sys_weights_map.keys())  
+                if(options.lund_weights): sys_list += ["lund_stat", "lund_pt"]
+                for sys in sys_list:
                     if(sys == 'nom_weight'): continue
                     print(sys, sys_effs[sys])
                     f.create_dataset("sig_eff" + "_"+ sys, data=np.array([sys_effs[sys][0]]) )

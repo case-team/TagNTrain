@@ -132,8 +132,11 @@ JME_vars_map = {
         'm_JMR_up' : 10,
         'm_JMR_down' : 11
         }
+Lund_vars = {"lund_sys_up", "lund_sys_down", "lund_bquark_up", "lund_bquark_down"}
 
-sys_list = sorted((set(sys_weights_map.keys()) | JME_vars))
+Lund_vars_map = { "lund_sys_up" : 0, "lund_sys_down" : 1, "lund_bquark_up": 2, "lund_bquark_down":3}
+
+sys_list = sorted((set(sys_weights_map.keys()) | JME_vars | Lund_vars))
 sys_list.remove("nom_weight")
 sys_weight_list = sorted(set(sys_weights_map.keys()))
 sys_weight_list.remove("nom_weight")

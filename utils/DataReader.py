@@ -37,7 +37,7 @@ def mjj_from_4vecs(j1, j2):
     mjj = np.sqrt((E1 + E2)**2 - (px1 + px2)**2 - (py1 + py2)**2 - (pz1 + pz2)**2)
     return mjj
 
-def get_avg_sys_reweight(f, sys, deta, deta_min):
+def get_avg_sys_reweight(f, sys, deta, deta_min, lund_weights = True):
     if('btag' in sys): #shape only, don't change normalization
         return 1.0
     deta_min = max(0., deta_min)
@@ -45,9 +45,15 @@ def get_avg_sys_reweight(f, sys, deta, deta_min):
     deta_var = f['jet_kinematics'][:,1]
     deta_mask = (deta_var < deta) & (deta_var > deta_min)
     nom_weight = f['sys_weights'][:,0][deta_mask]
+    if(lund_weights): nom_weight *= f['lund_weights'][:,0][deta_mask]
 
-    weight_idx = sys_weights_map[sys]
-    sig_weights = nom_weight * f['sys_weights'][:,weight_idx][deta_mask]
+    if('lund' in sys):
+        weight_idx = lund_weights_map[sys]
+        sig_weights = nom_weight * f['lund_weights_sys_var'][:,weight_idx][deta_mask]
+
+    else:
+        weight_idx = sys_weights_map[sys]
+        sig_weights = nom_weight * f['sys_weights'][:,weight_idx][deta_mask]
 
     return np.mean(sig_weights) / np.mean(nom_weight)
 
@@ -188,6 +194,7 @@ class DataReader:
         self.keep_mlow = kwargs.get('keep_mlow', -1.)
         self.keep_mhigh = kwargs.get('keep_mhigh', -1.)
         self.mjj_sig = kwargs.get('mjj_sig', -1.)
+        self.save_mem = kwargs.get('save_mem', False)
 
         self.data = kwargs.get('data', False)
 
@@ -200,6 +207,7 @@ class DataReader:
         self.sig_idx = kwargs.get('sig_idx', 1)
         self.sig_file = kwargs.get('sig_file', '')
         self.sig_weights = kwargs.get('sig_weights', False)
+        self.lund_weights = kwargs.get('lund_weights', True)
         self.sig_frac = kwargs.get('sig_frac', -1.)
         self.sig_per_batch = kwargs.get('sig_per_batch', -1.0)
         self.spb_before_selection = kwargs.get('spb_before_selection', False)
@@ -208,7 +216,7 @@ class DataReader:
         self.sig_only = kwargs.get('sig_only', False)
 
         if (len(self.sig_sys) > 0):
-            if(self.sig_sys not in sys_weights_map.keys() and self.sig_sys not in JME_vars):
+            if(self.sig_sys not in sys_weights_map.keys() and self.sig_sys not in JME_vars and self.sig_sys not in Lund_vars):
                 print("Un recognized systematic %s! " % self.sig_sys)
                 sys.exit(1)
 
@@ -242,9 +250,9 @@ class DataReader:
             if(self.verbose): print("Loading signal %s " % self.sig_file)
             self.sig_file_h5 = h5py.File(self.sig_file, "r")
 
-            if(len(self.sig_sys) > 0 and self.sig_sys in sys_weights_map.keys()):
+            if(len(self.sig_sys) > 0 and self.sig_sys in (set(sys_weights_map.keys()) | Lund_vars)  ):
                 #change normalization of signal
-                self.sys_norm_reweight = get_avg_sys_reweight(self.sig_file_h5, self.sig_sys, self.deta, self.deta_min)
+                self.sys_norm_reweight = get_avg_sys_reweight(self.sig_file_h5, self.sig_sys, self.deta, self.deta_min, lund_weights = self.lund_weights)
                 if(self.verbose): print("Sig norm reweight is %.4f" % self.sys_norm_reweight)
 
         self.sep_signal = len(self.sig_file) > 0 and not self.sig_only
@@ -393,6 +401,8 @@ class DataReader:
                 if(not os.path.exists(f_name)):
                     f_name = self.fin + preface + "batch%i.h5" % i
                 self.read_batch(f_name)
+                if(self.save_mem):
+                    os.system("rm " + f_name)
         else:
             self.read_batch(self.fin)
 
@@ -636,10 +646,16 @@ class DataReader:
 
                 if(self.sig_weights): #do weighted random sampling of signal events
                     sig_weights = self.sig_file_h5['sys_weights'][s_start:s_stop, 0][sig_mask_temp]
+                    if(self.lund_weights): sig_weights *= self.sig_file_h5['lund_weights'][s_start:s_stop][sig_mask_temp]
 
                     if(len(self.sig_sys) > 0 and self.sig_sys in sys_weights_map.keys()):
                         weight_idx = sys_weights_map[self.sig_sys]
                         sig_weights *= self.sig_file_h5['sys_weights'][s_start:s_stop,weight_idx][sig_mask_temp]
+                        num_sig_inj *= self.sys_norm_reweight
+
+                    elif(len(self.sig_sys) > 0 and self.sig_sys in Lund_vars):
+                        weight_idx = Lund_vars_map[self.sig_sys]
+                        sig_weights *= self.sig_file_h5['lund_weights_sys_var'][s_start:s_stop,weight_idx][sig_mask_temp]
                         num_sig_inj *= self.sys_norm_reweight
 
                     #used for the random sampling
@@ -740,7 +756,7 @@ class DataReader:
                     self.nTrain += tdata.shape[0]
                 if(self.first_write):
                     c_shape = expandable_shape(data.shape)
-                    self.f_storage.create_dataset(key, data = tdata, chunks = True, maxshape = c_shape)
+                    self.f_storage.create_dataset(key, data = tdata, chunks = True, maxshape = c_shape, compression = 'gzip')
                 else:
                     append_h5(self.f_storage, key, tdata)
 

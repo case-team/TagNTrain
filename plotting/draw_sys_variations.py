@@ -82,6 +82,7 @@ def draw_sys_variations(options, frac_const = 5):
     j1_m_nom = np.clip(j1_m_nom, m_min, m_max)
 
     sig_weights_nom = sig_only_data['sys_weights'][:,0]
+    if(options.lund_weights): sig_weights_nom *= sig_only_data['lund_weights'][:]
 
     print("nom", np.mean(sig_weights_nom))
 
@@ -146,14 +147,24 @@ def draw_sys_variations(options, frac_const = 5):
 
 
 
-    for sys in sys_weight_list_clean:
+    for sys in sys_list_clean:
+        if("JE" in sys or "JM" in sys): continue
+
         sys_up = sys + "_up"
         sys_down = sys + "_down"
 
-        up_weight_idx = sys_weights_map[sys_up]
-        up_weights = sig_weights_nom *  sig_only_data['sys_weights'][:,up_weight_idx]
-        down_weight_idx = sys_weights_map[sys_down]
-        down_weights = sig_weights_nom *  sig_only_data['sys_weights'][:,down_weight_idx]
+        if("lund" in sys):
+            up_weight_idx = Lund_vars_map[sys_up]
+            up_weights = sig_weights_nom * sig_only_data['lund_weights_sys_var'][:,up_weight_idx]
+            down_weight_idx = Lund_vars_map[sys_down]
+            down_weights = sig_weights_nom * sig_only_data['lund_weights_sys_var'][:,down_weight_idx]
+            print(up_weights[:5], down_weights[:5])
+
+        else:
+            up_weight_idx = sys_weights_map[sys_up]
+            up_weights = sig_weights_nom *  sig_only_data['sys_weights'][:,up_weight_idx]
+            down_weight_idx = sys_weights_map[sys_down]
+            down_weights = sig_weights_nom *  sig_only_data['sys_weights'][:,down_weight_idx]
 
         print(sys, np.mean(up_weights), np.mean(down_weights))
 

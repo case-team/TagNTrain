@@ -105,11 +105,11 @@ def tag_and_train(options):
         val_data2 = copy.deepcopy(val_data)
     do_val = val_data is not None
 
+
+
+
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
-
-
-
 
 
 #labeler_plot = plot_dir+ opp_j_label +  plot_prefix + "_labeler_regions.png"
@@ -121,6 +121,9 @@ def tag_and_train(options):
     labeler = tf.keras.models.load_model(options.labeler_name)
 
     labeler_scores = data.labeler_scores(labeler,  l_key)
+    t3 = time.time()
+
+    print("Labeling time  %s " % (t3 -t2))
 
 
     print("Sig-rich region defined > %i percentile" %options.sig_cut)
@@ -238,11 +241,12 @@ def tag_and_train(options):
                     )
             if(model_idx == 0): model.summary()
         else:
-            print("Starting with model from %s " % options.model_start)
+            print("Starting with model from %s " % options.model_start, flush = True)
             model = tf.keras.models.load_model(options.model_dir + j_label + options.model_start)
 
 
-        timeout = TimeOut(t0=time.time(), timeout=30.0/ options.num_models) #stop training after 30 hours to avoid job timeout
+        label_time_hours = (t3 - t1) / 60. / 60.
+        timeout = TimeOut(t0=time.time(), timeout=(34.0 - label_time_hours)/ options.num_models) #stop training after 30 hours to avoid job timeout
         early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=10 + options.num_epoch/20, verbose=1, mode='min')
         checkpoint_loc = "checkpoint.h5"
         checkpoint = tf.keras.callbacks.ModelCheckpoint(checkpoint_loc, monitor = 'val_loss', save_best_only = True, save_weights_only = True)
@@ -294,7 +298,7 @@ def tag_and_train(options):
                     auc = roc_auc_score(val_data_plain[1], preds)
             eff_cut_metric = compute_effcut_metric(preds[val_sig_events], preds[val_bkg_events], eff = options.eff_cut, 
                     weights = val_data_plain[3][val_bkg_events], labels = val_data_plain[1][val_sig_events])
-            print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric))
+            print("Model %i,  loss %.3f, true loss %.3f, auc %.3f, effcut metric %.3f" % (model_idx, loss, true_loss, auc, eff_cut_metric), flush = True)
             loss = -eff_cut_metric
             if(loss < min_loss):
                 min_loss = loss
