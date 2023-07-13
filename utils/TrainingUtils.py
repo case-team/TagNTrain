@@ -14,6 +14,11 @@ from scipy.stats import entropy
 from numpy.linalg import norm
 from sklearn.utils import shuffle as sk_shuffle
 from sklearn.preprocessing import QuantileTransformer
+import os
+
+def print_and_do(s):
+    print(s)
+    os.system(s)
 
 def JSD(P, Q):
     _P = P / norm(P, ord=1)

@@ -64,7 +64,7 @@ def get_preselection_params(sig_fname, hadronic_only_cut = False, sig_mass = 250
     print("Getting preselection params from %s" % sig_fname)
     if(not os.path.exists(sig_fname)):
         print("Can't find file " + sig_fname)
-        return 0., 1.0
+        exit(1)
 
     f = h5py.File(sig_fname, "r")
     is_lep = f['event_info'][:,4]
@@ -76,7 +76,7 @@ def get_preselection_params(sig_fname, hadronic_only_cut = False, sig_mass = 250
     deta_eff = f['d_eta_eff'][0]
     deta_mask = np.abs(deta) < 1.3
     mjj_mask = (mjj  > 0.8 * sig_mass)  & (mjj < 1.2 * sig_mass)
-    mjj_lowcut = mjj > 1455.
+    mjj_lowcut = mjj > 1460.
 
     mjj_lowcut_eff = np.sum(weights[deta_mask & mjj_lowcut])/ np.sum(weights[deta_mask])
 
@@ -91,7 +91,8 @@ def get_preselection_params(sig_fname, hadronic_only_cut = False, sig_mass = 250
 
 def get_fit_nosel_params(options):
     base_path = os.path.abspath(".") + "/"
-    nosel_fname = base_path + "../data/fit_inputs_nocut.h5"
+    if(options.data): nosel_fname = base_path + "../data/fit_inputs_DATA_nosel.h5"
+    else: nosel_fname = base_path + "../data/fit_inputs_nosel.h5"
     plot_dir = base_path + options.output + 'sig_nosel_fit/'
     fit_file = plot_dir + 'fit_results_%.1f.json' % options.mjj_sig
     if(not os.path.exists(plot_dir)): os.system("mkdir %s" % plot_dir)
@@ -130,7 +131,7 @@ def get_fit_nosel_params(options):
 
     with open(fit_file, 'r') as f:
         fit_params = json.load(f, encoding="latin-1")
-        n_evts_exc_nosel = fit_params['exp_lim_events'] 
+        n_evts_exc_nosel = fit_params['obs_lim_events'] 
 
     print("No selection num events lim %.0f "  % n_evts_exc_nosel)
     return fit_params
@@ -141,7 +142,7 @@ def get_fit_nosel_params(options):
 
 def get_signal_params(options):
     #modifies options struct
-    options.lumi = 26.81
+    options.lumi = 26.81 if not options.data else 138.0
     options.dedicated_lim = -1
     options.dedicated_label = ""
     options.mjj_window_nosel_eff = 1.0
@@ -151,32 +152,13 @@ def get_signal_params(options):
         
         fit_nosel = get_fit_nosel_params(options)
 
-        options.saved_params['n_evts_exc_nosel'] =  fit_nosel['exp_lim_events']
+        options.saved_params['n_evts_exc_nosel'] =  fit_nosel['obs_lim_events']
         options.saved_params['fit_nosel'] =  fit_nosel
 
         
         if(options.hadronic_only): options.hadronic_only_eff = hadronic_only_
         else: options.hadronic_only_eff = 1.0
         sig_fn = options.sig_file.split('/')[-1]
-        if( sig_fn in dedicated_searches.keys()):
-            options.dedicated_lim, AN_name = dedicated_searches[sig_fn]
-        
-            #lumi scale the limit
-            options.dedicated_lim *= (138./options.lumi)**0.5
-            options.dedicated_label = "Dedicated Search, %s (%.1f fb)" % (AN_name, options.dedicated_lim)
-    elif(options.sig_idx ==1):
-        options.preselection_eff = 0.92 * 0.88
-        options.hadronic_only_eff = 1.0
-        options.dedicated_lim = 1 * (138./options.lumi)**0.5
-        options.dedicated_label = "Dedicated Search, B2G-20-009 (%.1f fb)" % options.dedicated_lim
-    elif(options.sig_idx == 3):
-        options.preselection_eff = 0.76*0.59
-        options.dedicated_lim = 8 * (138./options.lumi)**0.5
-        options.dedicated_label = "Dedicated Search, B2G-21-002 (%.1f fb)" % options.dedicated_lim
-        if(options.hadronic_only):
-            options.hadronic_only_eff = 0.36
-        else:
-            options.hadronic_only_eff = 1.0
             
         
     else:
@@ -188,7 +170,7 @@ def get_signal_params(options):
 def make_signif_plot(options, signifs, spbs):
     fout = options.output + "plots/" + options.label + "_signif_plot.png"
 
-    options.lumi = 26.81
+    options.lumi = 26.81 if not options.data else 138.0
     #n_evts_exc, n_evts_exc_nosel = fit_results[int(options.mjj_sig)]
     n_evts_exc = options.saved_params['n_evts_exc']
     n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
@@ -257,15 +239,34 @@ def make_signif_plot(options, signifs, spbs):
 
 
 
+def get_excluded_xsecs(options, nevts_exc, sig_effs):
+    return np.array([(nevts_exc / (options.hadronic_only_eff * sig_eff * options.preselection_eff * options.lumi)) for sig_eff in sig_effs])
+
+def output_json(options):
+    sig_name = options.sig_file.split("/")[-1]
+
+    outfile = options.output + sig_name.replace("_Lund.h5", ".json")
+    #if("XToYY" in outfile): outfile += "_narrow"
+    #outfile += "_TuneCP5_13TeV-madgraph-pythia8_TIMBER.json"
+    results = dict()
+
+    results['obs'] = options.saved_params['xsec_exc_obs'] 
+    results['exp'] = options.saved_params['xsec_exc_exp']
+    results['exp+1'] = options.saved_params['xsec_exc_exp_1sig_high'] 
+    results['exp-1'] = options.saved_params['xsec_exc_exp_1sig_low'] 
+    print("Writing output to %s" % outfile)
+    write_params(outfile, results)
+
 
 def make_limit_plot(options, sig_effs, spbs):
     fout = options.output + "plots/" + options.label + "_limit_plot.png"
     if(options.num_events): fout = options.output + "plots/" + options.label + "_limit_plot_numevents.png"
 
-    n_evts_exc = options.saved_params['n_evts_exc']
+    n_evts_exc_obs = options.saved_params['n_evts_exc_obs']
+    n_evts_exc_exp = options.saved_params['n_evts_exc_exp']
     n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
 
-    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc, n_evts_exc_nosel))
+    print("N_evts_exc %.0f No cut %.0f " % ( n_evts_exc_obs, n_evts_exc_nosel))
 
     get_signal_params(options)
 
@@ -273,53 +274,56 @@ def make_limit_plot(options, sig_effs, spbs):
 
     sig_effs = np.clip(sig_effs, 1e-4, 1.0)
     injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs])
-    excluded_xsecs = np.array([(n_evts_exc / (options.hadronic_only_eff * sig_eff * options.preselection_eff * options.lumi)) for sig_eff in sig_effs])
+    print(options.preselection_eff, options.lumi, options.hadronic_only_eff)
     nosel_limit = n_evts_exc_nosel / (options.preselection_eff  * options.lumi * options.hadronic_only_eff)
-    print(nosel_limit, n_evts_exc_nosel, options.preselection_eff, options.lumi, options.hadronic_only_eff)
 
-    injected_nsig  = np.array( [spb * options.numBatches  for spb in spbs])
-    excluded_nsig = np.array([n_evts_exc / sig_eff  for sig_eff in sig_effs])
-    nosel_limit_nsig = n_evts_exc_nosel / (options.preselection_eff)
-
-
-    if(options.num_events): 
-        xs = injected_nsig
-        ys = excluded_nsig
-        nosel_y = nosel_limit_nsig
-    else:
-        xs = injected_xsecs
-        ys = excluded_xsecs
-        nosel_y = nosel_limit
+    obs_excluded_xsecs = get_excluded_xsecs(options, options.saved_params['n_evts_exc_obs'], sig_effs)
+    exp_excluded_xsecs = get_excluded_xsecs(options, options.saved_params['n_evts_exc_exp'], sig_effs)
+    exp_excluded_xsecs_1sig_high = get_excluded_xsecs(options, options.saved_params['n_evts_exc_exp_1sig_high'], sig_effs)
+    exp_excluded_xsecs_1sig_low = get_excluded_xsecs(options, options.saved_params['n_evts_exc_exp_1sig_low'], sig_effs)
 
 
 
+    best_lim_obs = 999999
+    best_lim_exp = 999999
+    for i,x_inj in enumerate(injected_xsecs):
+        x_exc_obs = obs_excluded_xsecs[i]
+        x_exc_exp = exp_excluded_xsecs[i]
+        obs_lim = max(x_inj, x_exc_obs)
+        exp_lim = max(x_inj, x_exc_exp)
 
-    best_lim = 999999
-    for i,x in enumerate(xs):
-        y = ys[i]
-        lim = max(x, y)
-        if(lim < best_lim):
-            best_lim = lim
+        if(obs_lim < best_lim_obs):
+            best_lim_obs = obs_lim
             best_i = i
+        if(exp_lim < best_lim_exp):
+            best_lim_exp = exp_lim
+            best_i_exp = i
 
-        print(spbs[i], x,y)
+        print(spbs[i], x_inj, x_exc_obs)
 
-    if(options.num_events): 
-        best_lim_label = "Best Limit (%.1f events)" % best_lim
-    else:
-        best_lim_label = "Best Limit (%.1f fb)" % best_lim
-
-    print("Limit without NN selection: %.1f" % nosel_y)
-    print("Best lim : %.3f"  % best_lim)
-    options.saved_params['best_lim'] = best_lim
+    options.saved_params['best_sig_eff'] = sig_effs[best_i]
+    options.saved_params['best_lim'] = best_lim_obs
     options.saved_params['best_spb'] = spbs[best_i]
-    options.saved_params['inc_lim'] = nosel_y
+    options.saved_params['inc_lim'] = nosel_limit
+
+    options.saved_params['xsec_exc_obs'] = max(obs_excluded_xsecs[best_i], injected_xsecs[best_i])
+    options.saved_params['xsec_exc_exp'] = max(exp_excluded_xsecs[best_i_exp], injected_xsecs[best_i_exp])
+    options.saved_params['xsec_exc_exp_1sig_high'] = max(exp_excluded_xsecs_1sig_high[best_i_exp], injected_xsecs[best_i_exp])
+    options.saved_params['xsec_exc_exp_1sig_low'] = max(exp_excluded_xsecs_1sig_low[best_i_exp], injected_xsecs[best_i_exp])
         
     fig_size = (12,9)
     plt.figure(figsize=fig_size)
     size = 0.4
     linewidth = 4
     pointsize = 70.
+
+    xs = injected_xsecs
+    ys = obs_excluded_xsecs
+    nosel_y = nosel_limit
+
+    best_lim_label = "Best Limit (obs) %.1f fb" % best_lim_obs
+    print("Limit without NN selection: %.2f" % nosel_y)
+    print("Best lim : %.3f"  % best_lim_obs)
 
     x_stop = max(np.max(xs), nosel_limit)
     xline = np.arange(0,x_stop,x_stop/10)
@@ -338,9 +342,9 @@ def make_limit_plot(options, sig_effs, spbs):
     lim_line_max = min(xs[best_i], ys[best_i])*0.97
 
     if(vertical_line):
-        plt.plot([best_lim, best_lim], [0., lim_line_max], linestyle="--", color = "red", linewidth =linewidth, label = best_lim_label)
+        plt.plot([best_lim_obs, best_lim_obs], [0., lim_line_max], linestyle="--", color = "red", linewidth =linewidth, label = best_lim_label)
     else: #horizontal line
-        plt.plot( [0., lim_line_max], [best_lim, best_lim], linestyle="--", color = "red", linewidth =linewidth, label = best_lim_label)
+        plt.plot( [0., lim_line_max], [best_lim_obs, best_lim_obs], linestyle="--", color = "red", linewidth =linewidth, label = best_lim_label)
 
     plt.scatter(xs, ys, c ='b' , s=pointsize, label="Injections")
 
@@ -416,6 +420,35 @@ def get_sig_eff(outdir, eff = 1.0, sys = ""):
         sig_eff = f[eff_key][0]
         return sig_eff
 
+def get_fit_data_file(options):
+    if(options.do_TNT):
+        f_base = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_DATA_scan_june9/"
+    else:
+        f_base = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/cwola_DATA_scan_june9/"
+    f_base += "mbin%i/fit_inputs_eff%.1f.h5" % (options.mbin, options.effs[0])
+    return f_base
+
+
+def get_data_fit_results(options):
+    get_fit_nosel_params(options)
+    fname = options.output + "data_fit_results.json"
+    if(os.path.exists(fname)):
+        fit_res = get_options_from_json(fname)
+    else:
+        # fit this signal template to the selected data
+        base_path = os.path.abspath(".") + "/"
+        sig_shape_file = base_path + options.output + "sig_nosel_fit/sig_fit_%i.root" % options.mjj_sig
+        data_file = get_fit_data_file(options)
+        plot_dir = base_path + options.output + "sig_selected_fit/"
+        os.system("mkdir " + plot_dir)
+
+        run_dijetfit(options, fit_start = -1, input_file = data_file, output_dir = plot_dir, sig_shape_file = sig_shape_file, loop = True)
+        print_and_do("cp %s %s" % (plot_dir + "fit_results_%.1f.json" % options.mjj_sig, fname))
+
+        fit_res = get_options_from_json(fname)
+    return fit_res
+
+
 def get_fit_results(options = None, outdir = "", m = 3000.):
     if(len(outdir) > 0): fname = outdir + "fit_results_%.1f.json" % m
     else:
@@ -470,6 +503,8 @@ def limit_set(options):
             rel_opts.BB_seed = options.BB_seed
             rel_opts.refit = options.refit
             if(len(options.effs) >0): rel_opts.effs = options.effs
+            if('generic_sig_shape' in options.__dict__.keys()): rel_opts.generic_sig_shape = options.generic_sig_shape
+            rel_opts.sig_shape = options.__dict__.get('sig_shape', "")
             if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
             if(len(options.spbs) > 0):
                 spbs_to_run = options.spbs
@@ -505,12 +540,15 @@ def limit_set(options):
     #parse what to do 
     get_condor = do_train = do_selection = do_fit = do_merge = False
     do_train = options.step == "train"
-    get_condor = options.step == "get"
-    do_selection = options.step == "select"
+    do_clean = options.step == 'clean'
+    get_condor = "get" in options.step 
+    do_selection = "select" in options.step
     do_merge = "merge" in options.step
     do_fit = "fit" in options.step
     do_plot = options.step == "plot"
+    do_summary = options.step == "summary"
     do_roc = options.step == "roc"
+    do_output = options.step == 'output'
     do_sys_train = options.step == "sys_train"
     do_sys_merge = options.step == "sys_merge"
     do_sys_selection = options.step == "sys_select"
@@ -526,8 +564,20 @@ def limit_set(options):
         for spb in spbs_to_run:
             t_opts = spb_opts(options, spb)
             t_opts.step = "train"
+            #t_opts.condor = True
+            t_opts.max_events = 2000000
+            t_opts.val_max_events = 200000
+            if(t_opts.mbin % 10 < 3): t_opts.num_epoch = 50
+            full_run(t_opts)
+        
+    if(get_condor):
+        for spb in spbs_to_run:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "get"
+            t_opts.reload = True
             t_opts.condor = True
             full_run(t_opts)
+
 
     if(do_selection):
         if(len(options.effs) == 0):
@@ -589,6 +639,189 @@ def limit_set(options):
             #t_opts.new = True
             t_opts.condor = True
             full_run(t_opts)
+
+
+    if(do_merge):
+        for spb in options.spbs:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "merge"
+            t_opts.reload = True
+            t_opts.condor = True
+            full_run(t_opts)
+
+
+    #Clean 
+    if(do_clean):
+        for spb in options.spbs:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "clean"
+            full_run(t_opts)
+
+
+    if(do_sys_merge):
+        if(len(spbs_to_run) == 1):
+            inj_spb = spbs_to_run[0]
+            print("Using spb %i" % inj_spb)
+        else:
+            sig_effs = []
+            for spb in options.spbs:
+                sig_eff = get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0])
+                sig_effs.append(sig_eff)
+
+            inj_spb = get_optimal_spb(options, sig_effs)
+
+        sys_select_list = options.saved_params["sys_select_list"]
+
+        for sys in sys_select_list:
+            t_opts = spb_opts(options, inj_spb, sys = sys)
+            t_opts.step = "merge"
+            t_opts.eff_only = True
+            t_opts.reload = True
+            #t_opts.new = True
+            t_opts.condor = True
+            full_run(t_opts)
+
+        for seed in range(num_rand):
+            t_opts = spb_opts(options, inj_spb, sys = "rand%i" % seed)
+            t_opts.step = "merge"
+            t_opts.eff_only = True
+            t_opts.reload = True
+            t_opts.condor = True
+            full_run(t_opts)
+
+    if(do_fit):
+        for spb in spbs_to_run:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "fit"
+
+            t_opts.reload = True
+            t_opts.condor = True
+
+            #run with specific shape
+            #t_opts.fit_label = "sig_shape_"
+            #t_opts.generic_sig_shape = False
+            full_run(t_opts)
+            os.system("mv %s %s" % (t_opts.output + "fit_results_%.1f.json" % options.mjj_sig, t_opts.output + "fit_results_sig_shape_%.1f.json" % options.mjj_sig))
+            full_run(t_opts)
+
+
+
+
+    if(do_roc):
+        for spb in spbs_to_run:
+            t_opts = spb_opts(options, spb)
+            t_opts.step = "roc"
+            t_opts.reload = True
+            t_opts.condor = False
+            full_run(t_opts)
+
+    if(not os.path.exists(options.sig_file)):
+        options.sig_file = options.sig_file.replace("data", "data/LundRW")
+
+    if(do_plot):
+        if(not os.path.exists(os.path.join(options.output, "plots/"))):
+            os.system("mkdir " + os.path.join(options.output, "plots/"))
+        sig_effs = []
+        signifs = []
+        pvals = []
+        get_signal_params(options)
+
+        for spb in spbs_to_run:
+            sig_eff = float(get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0]))
+            fit_res = get_fit_results(outdir = options.output + "spb" + str(float(spb)) + "/",  m = options.mjj_sig)
+            if(fit_res is not None): 
+                signif = float(fit_res.signif)
+                pval = float(fit_res.pval)
+            else: 
+                pval = signif = 0.
+
+
+            sig_effs.append(sig_eff)
+            signifs.append(signif)
+            pvals.append(pval)
+
+        print("Sig Effs: ",  sig_effs)
+        print("Significances " , signifs)
+
+        if(not options.data):
+            #Use expected limit from b-only fit
+            fit_results = get_fit_results(options = options, m=options.mjj_sig)
+            n_evts_exc = fit_results.exp_lim_events
+        else:
+            fit_results = get_data_fit_results(options)
+            n_evts_exc = fit_results.obs_lim_events
+
+        options.saved_params['n_evts_exc_obs'] = fit_results.obs_lim_events
+        options.saved_params['n_evts_exc_exp'] = fit_results.exp_lim_events
+        options.saved_params['n_evts_exc_exp_1sig_high'] = fit_results.exp_lim_1sig_high
+        options.saved_params['n_evts_exc_exp_1sig_low'] = fit_results.exp_lim_1sig_low
+        options.saved_params['fit_bonly'] = fit_results.__dict__
+
+
+        options.saved_params['spbs'] = spbs_to_run
+        options.saved_params['signifs'] = signifs
+        options.saved_params['pvals'] = pvals
+        options.saved_params['sig_effs'] = sig_effs
+
+        sig_effs = np.array(sig_effs)
+        np.savez(f_sig_effs, sig_eff = sig_effs)
+
+        make_limit_plot(options, sig_effs, spbs_to_run)
+        options.saved_params['preselection_eff'] = options.preselection_eff
+
+
+        if(np.sum(signifs) > 0):
+            make_signif_plot(options, signifs, spbs_to_run)
+
+    if(do_output):
+        output_json(options)
+
+
+    if(do_sys_train):
+        if(len(spbs_to_run) == 1):
+            inj_spb = spbs_to_run[0]
+            print("Using spb %i" % inj_spb)
+        else:
+            sig_effs = []
+            for spb in options.spbs:
+                sig_eff = get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0])
+                sig_effs.append(sig_eff)
+
+            inj_spb = get_optimal_spb(options, sig_effs)
+
+
+        if(options.sys_train_all): sys_train_list = sys_list
+        else: 
+            t_opts = spb_opts(options, inj_spb)
+            t_opts.output += "sig_sys_plots/"
+            sys_train_var_list = draw_sys_variations(t_opts)
+            sys_train_list = []
+            for s in sys_train_var_list:
+                sys_train_list.append(s+"_up")
+                sys_train_list.append(s+"_down")
+
+
+
+        print(sys_train_list)
+
+        options.saved_params['sys_train_list'] = list(sys_train_list)
+
+
+        for sys in sys_train_list:
+            t_opts = spb_opts(options, inj_spb, sys = sys)
+            t_opts.step = "train"
+            t_opts.condor = True
+            full_run(t_opts)
+
+
+        #do rand trainings too
+        for seed in range(num_rand):
+            t_opts = spb_opts(options, inj_spb, sys = "rand%i" % seed)
+            t_opts.BB_seed = seed
+            t_opts.step = "train"
+            t_opts.condor = True
+            full_run(t_opts)
+
 
     if(do_sys_plot):
 
@@ -713,7 +946,6 @@ def limit_set(options):
         #frac_unc = 0.0001
 
 
-        #for now use expected lim from fit to BB, eventually switch to fit to data
         t_opts = spb_opts(options, inj_spb)
         t_opts.step = "fit"
         t_opts.sig_norm_unc = frac_unc
@@ -721,10 +953,13 @@ def limit_set(options):
         t_opts.condor = False
         t_opts.generic_sig_shape = False
         full_run(t_opts)
-        #fit_results = get_fit_results(options = options, m=options.mjj_sig)
-        #Use expected limit from b-only scan
-        fit_results = get_fit_results(options = options, m=options.mjj_sig)
-        n_evts_exc = fit_results.exp_lim_events
+        if(not options.data):
+            #Use expected limit from b-only fit
+            fit_results = get_fit_results(options = options, m=options.mjj_sig)
+            n_evts_exc = fit_results.exp_lim_events
+        else:
+            fit_results = get_data_fit_results(options)
+
         get_signal_params(options)
 
         injected_xsec = inj_spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff
@@ -732,185 +967,6 @@ def limit_set(options):
 
         print("Final result: Injected %.2f Excluded %.2f" % (injected_xsec, excluded_xsec))
 
-
-    if(do_merge):
-        for spb in options.spbs:
-            t_opts = spb_opts(options, spb)
-            t_opts.step = "merge"
-            t_opts.reload = True
-            t_opts.condor = True
-            full_run(t_opts)
-
-
-    #Clean 
-    if(do_clean):
-        for spb in options.spbs:
-            t_opts = spb_opts(options, spb)
-            t_opts.step = "clean"
-            full_run(t_opts)
-
-
-    if(do_sys_merge):
-        if(len(spbs_to_run) == 1):
-            inj_spb = spbs_to_run[0]
-            print("Using spb %i" % inj_spb)
-        else:
-            sig_effs = []
-            for spb in options.spbs:
-                sig_eff = get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0])
-                sig_effs.append(sig_eff)
-
-            inj_spb = get_optimal_spb(options, sig_effs)
-
-        sys_select_list = options.saved_params["sys_select_list"]
-
-        for sys in sys_select_list:
-            t_opts = spb_opts(options, inj_spb, sys = sys)
-            t_opts.step = "merge"
-            t_opts.eff_only = True
-            t_opts.reload = True
-            #t_opts.new = True
-            t_opts.condor = True
-            full_run(t_opts)
-
-        for seed in range(num_rand):
-            t_opts = spb_opts(options, inj_spb, sys = "rand%i" % seed)
-            t_opts.step = "merge"
-            t_opts.eff_only = True
-            t_opts.reload = True
-            #t_opts.new = True
-            t_opts.condor = True
-            full_run(t_opts)
-
-    if(do_fit):
-        for spb in spbs_to_run:
-            t_opts = spb_opts(options, spb)
-            t_opts.step = "fit"
-
-
-
-            t_opts.reload = True
-            t_opts.condor = True
-
-
-
-            #run with specific shape
-            #t_opts.fit_label = "sig_shape_"
-            #t_opts.generic_sig_shape = False
-            #full_run(t_opts)
-            #os.system("mv %s %s" % (t_opts.output + "fit_results_%.1f.json" % options.mjj_sig, t_opts.output + "fit_results_sig_shape_%.1f.json" % options.mjj_sig))
-
-            #run with generic shape
-            if("Wp" in options.sig_file): 
-                #max significance w/ generic shape comes from lower mass point b/c of long tail
-                #TODO More proper is to scan over nearby and take lowest pval... 
-                t_opts.mjj_sig = options.mjj_sig - 200.
-            t_opts.fit_label = ""
-            t_opts.generic_sig_shape = True
-            full_run(t_opts)
-            if("Wp" in options.sig_file): 
-                os.system("mv %s %s" % (t_opts.output + "fit_results_%.1f.json" % (float(options.mjj_sig) -200.), t_opts.output + "fit_results_%.1f.json" % float(options.mjj_sig)))
-
-
-
-
-    if(do_roc):
-        for spb in spbs_to_run:
-            t_opts = spb_opts(options, spb)
-            t_opts.step = "roc"
-            t_opts.reload = True
-            t_opts.condor = False
-            full_run(t_opts)
-
-    if(do_plot):
-        if(not os.path.exists(os.path.join(options.output, "plots/"))):
-            os.system("mkdir " + os.path.join(options.output, "plots/"))
-        sig_effs = []
-        signifs = []
-        pvals = []
-        get_signal_params(options)
-
-        for spb in spbs_to_run:
-            sig_eff = float(get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0]))
-            fit_res = get_fit_results(outdir = options.output + "spb" + str(float(spb)) + "/",  m = options.mjj_sig)
-            if(fit_res is not None): 
-                signif = float(fit_res.signif)
-                pval = float(fit_res.pval)
-            else: 
-                pval = signif = 0.
-
-
-            sig_effs.append(sig_eff)
-            signifs.append(signif)
-            pvals.append(pval)
-
-        print("Sig Effs: ",  sig_effs)
-        print("Significances " , signifs)
-
-        #Use expected limit from b-only scan
-        fit_results_bonly = get_fit_results(options = options, m=options.mjj_sig)
-        options.saved_params['n_evts_exc'] = fit_results_bonly.exp_lim_events
-        options.saved_params['fit_bonly'] = fit_results_bonly.__dict__
-
-
-        options.saved_params['spbs'] = spbs_to_run
-        options.saved_params['signifs'] = signifs
-        options.saved_params['pvals'] = pvals
-        options.saved_params['sig_effs'] = sig_effs
-
-        sig_effs = np.array(sig_effs)
-        np.savez(f_sig_effs, sig_eff = sig_effs)
-
-        make_limit_plot(options, sig_effs, spbs_to_run)
-        options.saved_params['preselection_eff'] = options.preselection_eff
-
-        if(np.sum(signifs) > 0):
-            make_signif_plot(options, signifs, spbs_to_run)
-
-    if(do_sys_train):
-        if(len(spbs_to_run) == 1):
-            inj_spb = spbs_to_run[0]
-            print("Using spb %i" % inj_spb)
-        else:
-            sig_effs = []
-            for spb in options.spbs:
-                sig_eff = get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0])
-                sig_effs.append(sig_eff)
-
-            inj_spb = get_optimal_spb(options, sig_effs)
-
-
-        if(options.sys_train_all): sys_train_list = sys_list
-        else: 
-            t_opts = spb_opts(options, inj_spb)
-            t_opts.output += "sig_sys_plots/"
-            sys_train_var_list = draw_sys_variations(t_opts)
-            sys_train_list = []
-            for s in sys_train_var_list:
-                sys_train_list.append(s+"_up")
-                sys_train_list.append(s+"_down")
-
-
-
-        print(sys_train_list)
-
-        options.saved_params['sys_train_list'] = list(sys_train_list)
-
-
-        for sys in sys_train_list:
-            t_opts = spb_opts(options, inj_spb, sys = sys)
-            t_opts.step = "train"
-            t_opts.condor = True
-            full_run(t_opts)
-
-
-        #do rand trainings too
-        for seed in range(num_rand):
-            t_opts = spb_opts(options, inj_spb, sys = "rand%i" % seed)
-            t_opts.BB_seed = seed
-            t_opts.step = "train"
-            t_opts.condor = True
-            full_run(t_opts)
 
     write_params(options.output + "saved_params.json", options.saved_params)
 
@@ -933,6 +989,9 @@ if(__name__ == "__main__"):
     parser.add_argument("--sys_train_all", default = False, action = 'store_true', help = "Perform re-training for all systematics")
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
+    parser.add_argument("--sig_shape", default = "", help='signal shape file')
+    parser.add_argument("--generic_sig_shape", default = False, action ='store_true')
+    parser.add_argument("--no_generic_sig_shape", dest = 'generic_sig_shape', action ='store_false')
     parser.set_defaults(reload=True)
     parser.set_defaults(deta=1.3)
     parser.add_argument("--condor", dest = 'condor', action = 'store_true')

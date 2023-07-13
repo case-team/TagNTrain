@@ -134,6 +134,7 @@ def load_dataset_from_options(options):
     if(val_batch_list != None):
         opts_dict = vars(copy.deepcopy(options))
         opts_dict['batch_list'] = val_batch_list
+        opts_dict['max_events'] = options.val_max_events
         val_data = DataReader(**opts_dict)
 
         #val_data = DataReader(fin = options.fin, keys = options.keys, sig_idx = options.sig_idx, sig_frac = options.sig_frac, 

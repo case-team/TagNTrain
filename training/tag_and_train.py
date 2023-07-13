@@ -18,12 +18,10 @@ def tag_and_train(options):
     print("\n")
     print(options.__dict__)
 
-
-
     if(options.use_images): network_type = "CNN"
     else: network_type = "dense"
 
-#which images to train on and which to use for labelling
+    #which images to train on and which to use for labelling
     if(options.training_j == 1):
         j_label = "j1_"
         opp_j_label = "j2_"
@@ -41,17 +39,10 @@ def tag_and_train(options):
         print("Must provide labeler name!")
         exit(1)
 
-
-
-
-
     plot_prefix = "TNT" + str(options.tnt_iter) + "_" + network_type 
 
-#start with different data not to overlap training sets
+    #start with different data not to overlap training sets
     data_start = options.data_start
-    print("TNT iter is ", options.tnt_iter)
-
-
 
     options.keep_mlow = options.keep_mhigh = -1.
 
@@ -60,7 +51,6 @@ def tag_and_train(options):
         compute_mjj_window(options)
 
         print("Mjj keep low %.0f keep high %.0f \n" % ( options.keep_mlow, options.keep_mhigh))
-
 
 
     options.keys = []
@@ -98,15 +88,11 @@ def tag_and_train(options):
     t1 = time.time()
     data, val_data = load_dataset_from_options(options)
     
-
     data2 = val_data2 = None
     if(options.randsort):
         data2 = copy.deepcopy(data)
         val_data2 = copy.deepcopy(val_data)
     do_val = val_data is not None
-
-
-
 
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
@@ -246,7 +232,10 @@ def tag_and_train(options):
 
 
         label_time_hours = (t3 - t1) / 60. / 60.
-        timeout = TimeOut(t0=time.time(), timeout=(34.0 - label_time_hours)/ options.num_models) #stop training after 30 hours to avoid job timeout
+        print("label time (hours)", label_time_hours)
+        time_per_model = (30.0 - label_time_hours)/ options.num_models
+        print("time per model %.1f" % time_per_model)
+        timeout = TimeOut(t0=time.time(), timeout=time_per_model) #stop training after 30 hours to avoid job timeout
         early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=10 + options.num_epoch/20, verbose=1, mode='min')
         checkpoint_loc = "checkpoint.h5"
         checkpoint = tf.keras.callbacks.ModelCheckpoint(checkpoint_loc, monitor = 'val_loss', save_best_only = True, save_weights_only = True)

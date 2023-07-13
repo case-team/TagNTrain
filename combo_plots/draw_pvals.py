@@ -12,7 +12,7 @@ import mplhep as hep
 def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", fout = ""):
     #pval plot
     plt.style.use(hep.style.CMS)
-    plt.figure(figsize=(12,9))
+    plt.figure(figsize=(14,10))
 
     overflow_thresh =  3e-13
     #Draw p-vals
@@ -65,11 +65,12 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", fout = ""):
     y_minor = matplotlib.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0)*0.1, numticks=10)
     ax.yaxis.set_minor_locator(y_minor)
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-    plt.xlim(-0.35*xmax, xmax * 1.08)
+    plt.xlim(-0.25*xmax, xmax * 1.08)
     #hep.cms.text(" Preliminary")
-    hep.cms.label( data = True, lumi = 138)
+    hep.cms.label( data = False)
     plt.legend(loc = 'center left', title = title, fontsize = 18)
     plt.savefig(fout , bbox_inches="tight")
+    print("Saving " + fout)
     plt.close()
 
 def inside(x, xlist):
@@ -123,18 +124,22 @@ colors = ['black', 'blue', 'green', 'purple', 'magenta', 'red', 'orange', 'gray'
 fs_Wp = [[]]*8
 fs_X = [[]]*8
 
+#XYY spbs 1.25 2.0 3.0 4.5 6.0
+#Wp spbs 3.75, 6.25, 8.75, 11.25, 13.75, 16.25
+
+
 
 #inclusive 
-fs_X[0] = [0.5, 0.5, 0.5, 0.5, 0.0655]
-fs_Wp[0] = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+fs_X[0] = [0.27316741322093174, 0.1823121286865843, 0.08858732564563399, 0.02219257708330158, 0.003797742515738056]
+fs_Wp[0] = [0.328186919746016, 0.2326755760735304, 0.1625528533558429, 0.10240051056142319, 0.06256831397566243, 0.034774872241897015]
 
 #cwola
-fs_X[1] =  [5.00000000e-01, 2.84041990e-01, 3.42473959e-01, 4.02455957e-01, 2.80399922e-04]
-fs_Wp[1] = [5.00000000e-01, 5.00000000e-01, 1.21356794e-01, 3.52915423e-02, 9.11181820e-06, 1.9426e-09] 
+fs_X[1] =  [5.00000000e-01, 0.46, 0.17, 0.2, 0.00074]
+fs_Wp[1] = [0.247, 0.081, 0.0025, 1.07e-5, 9.11181820e-06, 6.5e-8] 
 
 #TNT
-fs_X[2] = [1.43251192e-01, 2.63162995e-02, 1.66270864e-06, 1.38861910e-15, 2.88545364e-18,]
-fs_Wp[2] = [3.45744540e-01, 2.32689374e-02, 7.34220798e-05, 3.99141524e-08, 1.13942470e-10, 9.69697101e-16]
+fs_X[2] = [0.22, 0.0344, 2.5e-6, 2.45e-14, 2.88545364e-18,]
+fs_Wp[2] = [0.116, 0.013, 5.33e-6, 1.74e-5, 6.85e-08, 4.17e-11]
 
 #CATHODE vals
 fs_X[3]  = [0.424320, 0.008046, 2.43E-10, 3.96E-35, 7.34E-73]
@@ -146,8 +151,8 @@ fs_X[4] = [ 0.5, 0.024466944412907338, 1.1282044729167672e-05, 9.768557109794338
 fs_Wp[4] = [0.2504952562764966 , 0.01799966067621161 , 0.0024750722732585157 , 7.664756152381592e-07 , 2.75510044142784e-10 , 2.395397106456989e-19]
 
 #VAE-QR vals
-fs_X[5] = [0.5, 0.470, 0.220, 0.0388, 0.0053] 
-fs_Wp[5] = [0.21, 0.099, 0.095, 0.0135, 0.0151, 0.000279] 
+fs_X[5] = [0.24166, 0.1251, 0.0347, 0.008278, 0.0006178] 
+fs_Wp[5] = [0.16780, 0.0362, 0.0101, 0.00127, 0.0001135, 0.0001578] 
 
 #QUAK vals
 fs_X[6]  = [0.00017847156614762385, 4.627340705203891e-07, 9.183889271214063e-10, 1.3519075736748065e-21, 3.726752847109815e-24]
@@ -199,5 +204,4 @@ for l_idx,flist  in enumerate(fs):
             all_pvals.append(pvals)
 
 
-    print(xsecs_inj)
     make_pval_plot(xsecs_inj, all_pvals, labels, colors, title = titles[l_idx], fout = odir + fouts[l_idx])

@@ -30,6 +30,11 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
     if(len(sig_shape_file) > 0):
         dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model -l %sM%0.f" % (options.mjj_sig, sig_shape_file,  label, options.mjj_sig)
 
+    if(options.mjj_sig > 4500):
+        #choose more realistic normalization for high mass signals
+        dijet_cmd += " --sig_norm 10.0"
+
+
 
 
     run_fit = True
@@ -61,6 +66,7 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
                     fit_params = json.load(f, encoding="latin-1")
 
                 if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > err_thresh):
+                #if((fit_params['bkgfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > err_thresh):
                     run_fit = True
                     print("\nPOOR Fit quality (bkg pval %.2e, s+b pval %.2e, fit unc %.2f)!" % 
                             (fit_params['bkgfit_prob'], fit_params['sbfit_prob'], fit_params['bkgfit_frac_err']))
@@ -150,6 +156,9 @@ def avg_eff(fout_name, input_list):
 
 def full_run(options):
 
+    #if(len(options.opts) > 0):
+    #    options = get_options_from_json(options.opts)
+
     if(options.output[-1] != '/'):
         options.output += '/'
 
@@ -180,9 +189,10 @@ def full_run(options):
         if('generic_sig_shape' in options.__dict__.keys()): rel_opts.generic_sig_shape = options.generic_sig_shape
         rel_opts.keep_LSF = options.keep_LSF #quick fix
         rel_opts.redo_roc = options.redo_roc #quick fix
-        rel_opts.condor_mem = options.condor_mem #quick fix
+        rel_opts.condor_mem = options.__dict__.get("condor_mem", -1)
         rel_opts.recover = options.recover
         rel_opts.lund_weights = options.__dict__.get('lund_weights', True)
+        rel_opts.sig_shape = options.__dict__.get('sig_shape', "")
         if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
         rel_opts.output = options.output #allows renaming / moving directories
         options = rel_opts
@@ -234,7 +244,7 @@ def full_run(options):
     if(options.step == "roc" and options.condor):
         do_merge = True
 
-    get_condor = get_condor or (do_selection and options.condor)
+    #get_condor = get_condor or (do_selection and options.condor)
     do_merge = do_merge 
 
 
@@ -248,6 +258,10 @@ def full_run(options):
     kfold_options = []
 
     output = None
+
+    if(not options.condor and not(os.path.exists(options.sig_file))):
+        options.sig_file = options.sig_file.replace("data", "data/LundRW")
+
 
     for k in range(options.kfolds):
 
@@ -331,6 +345,8 @@ def full_run(options):
             selection_options.data_batch_list = k_options.holdouts
             selection_options.val_batch_list = None
             selection_options.num_models = options.lfolds
+            selection_options.max_events = -1
+            selection_options.val_max_events = -1
 
             if(not options.randsort): 
                 selection_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
@@ -405,7 +421,7 @@ def full_run(options):
                 inputs_list = [selection_opts_fname, tarname]
                 c_opts.input = inputs_list
                 if(options.condor_mem > 0):
-                    c_opts.mem = condor_mem
+                    c_opts.mem = options.condor_mem
 
 
                 doCondor(c_opts)
@@ -533,16 +549,14 @@ def full_run(options):
             fit_start = options.fit_start
         run_fit = True
 
-
-        if( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
-            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
-        else: sig_shape_file = ""
-
         if(len(options.effs) == 0):
             options.effs = [mass_bin_select_effs[options.mbin] ]
 
-
-        if(not options.generic_sig_shape and os.path.exists(options.output + "sig_shape_eff{eff}.h5".format(eff = options.effs[0]))):
+        if(len(options.sig_shape) > 0):
+            sig_shape_file = base_path + options.sig_shape
+        elif( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
+            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
+        elif(not options.generic_sig_shape and os.path.exists(options.output + "sig_shape_eff{eff}.h5".format(eff = options.effs[0]))):
             #fit the signal shape
             sig_shape_h5 = base_path + options.output + 'sig_shape_eff{eff}.h5'.format(eff = options.effs[0])
             sig_fit_cmd = "python fit_signalshapes.py -i %s -o %s -M %i --dcb-model --fitRange 0.3 >& %s" % (sig_shape_h5, 
@@ -552,6 +566,7 @@ def full_run(options):
 
             subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
             sig_shape_file = base_path + options.output + 'sig_fit_%i.root' % options.mjj_sig
+        else: sig_shape_file = ""
 
 
         final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, label = options.fit_label, loop = True)
@@ -665,6 +680,7 @@ def full_run(options):
 
 if(__name__ == "__main__"):
     parser = input_options()
+    parser.add_argument("--opts", default = "", help = "Options in json")
     parser.add_argument("--sig_norm_unc", default = -1.0, type = float, help = "parameter for fit (uncertainty on signal efficiency)")
     parser.add_argument("--ae_dir", default = "", help = "directory with all the autoencoders (auto pick the right mbin and kfold)")
     parser.add_argument("--effs", nargs="+", default = [], type = float)
@@ -676,7 +692,9 @@ if(__name__ == "__main__"):
     parser.add_argument("--condor", dest = 'condor', action = 'store_true')
     parser.add_argument("--no-condor", dest = 'condor', action = 'store_false')
     parser.add_argument("--fit_label", dest = 'fit_label', default = "")
+    parser.add_argument("--sig_shape", default = "", help='signal shape file')
     parser.add_argument("--generic_sig_shape", default = False, action ='store_true')
+    parser.add_argument("--no_generic_sig_shape", dest = 'generic_sig_shape', action ='store_false')
     parser.set_defaults(condor=False)
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
     parser.add_argument("--fit_start", default = -1.,  type = float, help = 'Lowest mjj value for dijet fit')

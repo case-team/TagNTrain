@@ -52,6 +52,8 @@ def plot_stitched_mjj(options, mbins, outfile):
     num_div = 75
     bin_size_scale = 100.
 
+    print(mbins)
+
 
     plt.style.use(hep.style.CMS)
     a1 = plt.axes([0.0, 0.18, 1.0, 0.8])
@@ -100,10 +102,6 @@ def plot_stitched_mjj(options, mbins, outfile):
 
         vals_norm = vals * (bin_size_scale / widths)
         errs_norm = np.sqrt(vals) * ( bin_size_scale/ widths)
-        #vals_norm = vals
-        #errs_norm = np.sqrt(vals) 
-
-
 
         npars = results['nPars_QCD']
         fit_params = results['bkg_fit_params']
@@ -146,15 +144,15 @@ def plot_stitched_mjj(options, mbins, outfile):
         fit_fine_down = fit_fine_nom - fit_fine_unc
 
 
-        if(mbin % 10 == 1): label_fit, label_data = "Bkg. fit", "Data"
+        if(mbin == mbins[0]): 
+            print("labeling")
+            label_fit, label_data = "Bkg. fit", "Data"
         else: label_fit, label_data = "",""
         plt.fill_between(centers_fine, fit_fine_down, fit_fine_up, color = 'red', linewidth=0, alpha = 0.4)
         plt.plot(centers_fine, fit_fine_nom, color = 'red', linewidth=3, label = label_fit) 
 
         plt.errorbar(centers, vals_norm, fmt="ko", xerr=xbins[1:]-centers, yerr=errs_norm,  elinewidth=0.5, capsize=2.0, label = label_data)
 
-        
-                        
         # ratio plot
         plt.sca(a2)
         
@@ -217,7 +215,7 @@ def plot_stitched_mjj(options, mbins, outfile):
 
 
 
-def plot_significances(input_files, out_dir, sig_masses = None):
+def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True):
 
     # build arrays of variables to plot
     if(sig_masses is None):
@@ -284,7 +282,7 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     plt.scatter(mass_list, pval_list, s = 40.0, c = colors)
     plt.scatter(mass_pval_overflow_list, pval_overflow_list, marker = "v", s = 80.0, c = colors_overflow)
     for i in range(len(corr_sigma)):
-        xdash = np.concatenate(([0], mass_list, [8000]))
+        xdash = [1400., xmax + 150.]
         plt.plot(xdash, np.full_like(xdash, corr_sigma[i]),
                  color="red", linestyle="dashed", linewidth=0.7)
         plt.text(xmax, corr_sigma[i]*1.25,
@@ -301,7 +299,7 @@ def plot_significances(input_files, out_dir, sig_masses = None):
                                            numticks=10)
     ax.yaxis.set_minor_locator(y_minor)
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-    draw_mbins(plt, ymin = 1e-7, ymax = 10)
+    if(SR_lines): draw_mbins(plt, ymin = 1e-7, ymax = 10)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "pval_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
@@ -315,7 +313,7 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel(r"Significance [$\sigma$]")
     plt.ylim(-0.2, None)
-    draw_mbins(plt)
+    if(SR_lines): draw_mbins(plt)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "signif_plot.png"), dpi=300, bbox_inches="tight")
     plt.close()
@@ -329,7 +327,7 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     plt.scatter(mass_list, nPar_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel("nPars")
-    draw_mbins(plt)
+    if(SR_lines): draw_mbins(plt)
     plt.ylim(0., np.amax(nPar_list) + 0.5)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "nPar_plot.png"), dpi=300, bbox_inches="tight")
@@ -346,7 +344,7 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     plt.ylabel("Chi2/ndof Prob.")
     #plt.ylim(1e-8, 1.1)
     #plt.yscale('log')
-    draw_mbins(plt)
+    if(SR_lines): draw_mbins(plt)
     plt.ylim(-0.1, 1.1)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "fit_prob_plot.png"), dpi=300, bbox_inches="tight")
@@ -365,7 +363,7 @@ def plot_significances(input_files, out_dir, sig_masses = None):
     plt.ylabel(r"Range of fit [GeV]")
     #plt.ylim(1e-8, 1.1)
     #plt.yscale('log')
-    draw_mbins(plt)
+    if(SR_lines): draw_mbins(plt)
     plt.ylim(1200., 7500.)
     plt.xlim(1400, xmax + 150.)
     plt.savefig(join(out_dir, "fit_start_plot.png"), dpi=300, bbox_inches="tight")

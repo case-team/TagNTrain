@@ -21,6 +21,10 @@ def dump_sig_shape(options):
     sig_mjj = sig_only_data['jet_kinematics'][:,0][sig_deta_mask]
     sig_weights = sig_only_data['sys_weights'][:,0][sig_deta_mask]
 
+
+    n_bins = 50
+    make_histogram(sig_mjj, "", ['blue'], "Mjj", num_bins = n_bins, fname = options.output.replace(".h5", ".png"))
+
     with h5py.File(options.output, "w") as f_sig:
         f_sig.create_dataset('mjj', data = sig_mjj, chunks = True, maxshape = (None))
         f_sig.create_dataset('weights', data = sig_weights, chunks = True, maxshape = (None))

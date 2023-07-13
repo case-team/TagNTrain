@@ -401,7 +401,7 @@ class DataReader:
                 if(not os.path.exists(f_name)):
                     f_name = self.fin + preface + "batch%i.h5" % i
                 self.read_batch(f_name)
-                if(self.save_mem):
+                if(self.save_mem and 'eos' not in f_name):
                     os.system("rm " + f_name)
         else:
             self.read_batch(self.fin)
