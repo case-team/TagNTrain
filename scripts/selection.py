@@ -249,13 +249,14 @@ def selection(options):
 
             #signal weights
             sig_weights = sig_only_data['sys_weights'][:,0]
-            if(options.lund_weights):
-                sig_weights *= sig_only_data['lund_weights'][:]
 
             if(len(options.sig_sys) > 0 and options.sig_sys in sys_weights_map.keys()):
                 print("Using systematic %s" % options.sig_sys)
                 weight_idx = sys_weights_map[options.sig_sys]
                 sig_weights *= sig_only_data['sys_weights'][:,weight_idx]
+
+            if(options.lund_weights):
+                sig_weights *= sig_only_data['lund_weights'][:]
 
             no_cut_weight = np.sum(sig_weights)
 
@@ -281,6 +282,33 @@ def selection(options):
             sig_eff_window = np.sum(sig_weights[sig_deta_mask][sig_cut_mask & sig_mjj_mask]) / np.sum(sig_weights[sig_deta_mask])
             sig_eff_window_nosel = np.sum(sig_weights[sig_deta_mask][sig_mjj_mask]) / np.sum(sig_weights[sig_deta_mask])
 
+            #if(options.lund_weights):
+            #    eff_toys = []
+            #    pt_toys = []
+            #    nToys = 100
+            #    eff_nom = np.average(sig_cut_mask, sig_weights[sig_deta_mask])
+            #    print('sig_eff', sig_eff, 'eff_nom', eff_nom)
+
+            #    for i in range(nToys):
+            #        stat_smeared_weights = sig_only_data['sys_weights'][:,0] * sig_only_data['lund_weights_stat_var'][:,i]
+            #        pt_smeared_weights = sig_only_data['sys_weights'][:,0] * sig_only_data['lund_weights_pt_var'][:,i]
+
+            #        eff = np.average(score_cut, weights = stat_smeared_weights)
+            #        eff1 = np.average(score_cut, weights = pt_smeared_weights)
+
+            #        eff_toys.append(eff)
+            #        pt_eff_toys.append(eff1)
+
+            #    #Compute stat and pt uncertainty based on variation in the toys
+            #    toys_mean = np.mean(eff_toys)
+            #    toys_std = np.std(eff_toys)
+            #    pt_toys_mean = np.mean(pt_eff_toys)
+            #    pt_toys_std = np.std(pt_eff_toys)
+
+            #    SF_stat_unc = (abs(toys_mean - eff_nom)  + toys_std)
+            #    SF_pt_unc = (abs(pt_toys_mean - eff_nom) + pt_toys_std)
+
+
 
 
             sys_effs = dict()
@@ -288,6 +316,8 @@ def selection(options):
                 if(sys == 'nom_weight'): continue
                 sys_idx = sys_weights_map[sys]
                 weights = sig_only_data['sys_weights'][:,0] * sig_only_data['sys_weights'][:,sys_idx]
+                if(options.lund_weights): weights *= sig_only_data['lund_weights'][:]
+
                 sys_sig_eff = np.sum(weights[sig_deta_mask][sig_cut_mask])/ np.sum(weights[sig_deta_mask])
                 sys_sig_eff_window = np.sum(weights[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights[sig_deta_mask])
                 sys_effs[sys]= (sys_sig_eff, sys_sig_eff_window)
@@ -308,8 +338,17 @@ def selection(options):
                     sig_effs_window_stat.append(np.sum(weights_stat[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights_stat[sig_deta_mask]))
                     sig_effs_window_pt.append(np.sum(weights_stat[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights_pt[sig_deta_mask]))
 
+
                 sys_effs['lund_stat'] = (sig_effs_stat, sig_effs_window_stat)
                 sys_effs['lund_pt'] = (sig_effs_pt, sig_effs_window_pt)
+
+                for sys in lund_vars_map.keys():
+                    idx = lund_vars_map[sys]
+                    weights = sig_only_data['sys_weights'][:,0] * sig_only_data['lund_weights'][:] * sig_only_data['lund_weights_sys_var'][:,idx]
+
+                    sys_sig_eff = np.sum(weights[sig_deta_mask][sig_cut_mask])/ np.sum(weights[sig_deta_mask])
+                    sys_sig_eff_window = np.sum(weights[sig_deta_mask][sig_cut_mask & sig_mjj_mask])/ np.sum(weights[sig_deta_mask])
+                    sys_effs[sys]= (sys_sig_eff, sys_sig_eff_window)
 
 
 
@@ -354,7 +393,7 @@ def selection(options):
             f.create_dataset("score_thresh", data = np.array([thresh]))
             if(sig_only_data is not None):
                 sys_list = list(sys_weights_map.keys())  
-                if(options.lund_weights): sys_list += ["lund_stat", "lund_pt"]
+                if(options.lund_weights): sys_list += list(lund_vars) + ["lund_stat", "lund_pt"]
                 for sys in sys_list:
                     if(sys == 'nom_weight'): continue
                     print(sys, sys_effs[sys])

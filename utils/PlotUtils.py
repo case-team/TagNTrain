@@ -227,7 +227,7 @@ def make_histogram(entries, labels, colors, xaxis_label="", title ="", num_bins 
         alpha = 0.2
     fig = plt.figure(figsize=fig_size)
     ns, bins, patches = plt.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, density = normalize, histtype=h_type, linewidth=3)
-    plt.xlabel(xaxis_label, fontsize =fontsize)
+    plt.xlabel(xaxis_label, fontsize =fontsize * 1.5)
     plt.tick_params(axis='x', labelsize=fontsize)
 
     if(logy): plt.yscale('log')

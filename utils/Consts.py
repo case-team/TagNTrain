@@ -1,3 +1,4 @@
+import copy 
 
 mass_bins1 = [1450., 1650., 2017., 2465., 3013., 3682., 4500., 5500., 8000.]
 mass_bins2 = [1492., 1824., 2230., 2725., 3331., 4071., 4975., 6081., 8000.]
@@ -132,17 +133,20 @@ JME_vars_map = {
         'm_JMR_up' : 10,
         'm_JMR_down' : 11
         }
-Lund_vars = {"lund_sys_up", "lund_sys_down", "lund_bquark_up", "lund_bquark_down"}
+lund_vars = {"lund_sys_up", "lund_sys_down", "lund_bquark_up", "lund_bquark_down"}
 
-Lund_vars_map = { "lund_sys_up" : 0, "lund_sys_down" : 1, "lund_bquark_up": 2, "lund_bquark_down":3}
+lund_vars_map = { "lund_sys_up" : 0, "lund_sys_down" : 1, "lund_bquark_up": 2, "lund_bquark_down":3}
 
-sys_list = sorted((set(sys_weights_map.keys()) | JME_vars | Lund_vars))
-sys_list.remove("nom_weight")
-sys_weight_list = sorted(set(sys_weights_map.keys()))
-sys_weight_list.remove("nom_weight")
+sys_base = set(filter(lambda x: 'PS' not in x, sys_weights_map.keys())) #remove parton shower uncs
+sys_base.remove('nom_weight')
+
+sys_list = sorted(sys_base | JME_vars | lund_vars)
+sys_weight_list = sys_base
 
 sys_list_clean = { sys.replace("_up", "").replace("_down", "") for sys in sys_list}
 sys_weight_list_clean = { sys.replace("_up", "").replace("_down", "") for sys in sys_weight_list}
+all_sys_list_clean = copy.copy(sys_list_clean)
+all_sys_list_clean.update({'lund_match', 'lund_pt', 'lund_stat'})
 
 JME_vars_clean = { sys.replace("_up", "").replace("_down", "") for sys in JME_vars}
 

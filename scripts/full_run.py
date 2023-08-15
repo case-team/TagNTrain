@@ -12,7 +12,7 @@ import time
 fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
 fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
-def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False):
+def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False, dcb_model = True):
     print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
     base_path = os.path.abspath(".") + "/"
     if(len(output_dir) == 0): output_dir = base_path + options.output
@@ -28,7 +28,8 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
     if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
         dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
     if(len(sig_shape_file) > 0):
-        dijet_cmd +=  " -M %.0f --sig_shape %s --dcb-model -l %sM%0.f" % (options.mjj_sig, sig_shape_file,  label, options.mjj_sig)
+        dijet_cmd +=  " -M %.0f --sig_shape %s -l %sM%0.f" % (options.mjj_sig, sig_shape_file,  label, options.mjj_sig)
+        if(dcb_model): dijet_cmd += " --dcb-model"
 
     if(options.mjj_sig > 4500):
         #choose more realistic normalization for high mass signals
@@ -105,7 +106,7 @@ def check_all_models_there(model_dir, num_models):
 
     if(len(missing_models) == num_models):
         print("Missing all models! Something wrong in training?? This is bad !!!")
-        sys.exit(1)
+        return False
     else:
         for i in missing_models:
             cpy_i = (i + 1) % num_models
@@ -119,6 +120,7 @@ def check_all_models_there(model_dir, num_models):
             cpy_cmd = "cp %s %s" % (model_dir + cpy_name, model_dir + dest_name)
             print("Copying : " + cpy_cmd)
             os.system(cpy_cmd)
+    return True
 
 
 
@@ -178,7 +180,7 @@ def full_run(options):
             rel_opts = get_options_from_pkl(options.output + "run_opts.pkl")
         else:
             print("Reload options specified but file %s doesn't exist. Exiting" % (options.output+"run_opts.pkl"))
-            sys.exit(1)
+            return
 
         rel_opts.step = options.step
         if(len(options.effs) >0): rel_opts.effs = options.effs
@@ -315,32 +317,49 @@ def full_run(options):
     if(get_condor and options.condor):
         for k,k_options in enumerate(kfold_options):
 
-                c_opts = condor_options().parse_args([])
-                c_opts.getEOS = True
+            if(len(options.effs) == 0): options.effs = [mass_bin_select_effs[options.mbin] ]
 
-                if(not options.randsort):
-                    #c_opts.name = "j1_kfold%i" % k
-                    c_opts.name = options.label + "_j1_kfold%i" % k
-                    c_opts.outdir = options.output + "j1_kfold%i/" % k
-                    if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
-                    doCondor(c_opts)
-                    #c_opts.name = "j2_kfold%i" % k
-                    c_opts.name = options.label + "_j2_kfold%i" % k
-                    c_opts.outdir = options.output + "j2_kfold%i/" % k
-                    if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
-                    doCondor(c_opts)
-                else:
-                    c_opts.name = options.label + "_jrand_kfold%i" % k
-                    c_opts.outdir = options.output + "jrand_kfold%i/" % k
-                    if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
-                    doCondor(c_opts)
+            fit_inputs = k_options.output + 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+            if(options.recover and os.path.exists(fit_inputs)):
+                print("%s exists, skipping" % (fit_inputs))
+                continue
+
+            c_opts = condor_options().parse_args([])
+            c_opts.getEOS = True
+
+            if(not options.randsort):
+                #c_opts.name = "j1_kfold%i" % k
+                c_opts.name = options.label + "_j1_kfold%i" % k
+                c_opts.outdir = options.output + "j1_kfold%i/" % k
+                if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
+                doCondor(c_opts)
+                #c_opts.name = "j2_kfold%i" % k
+                c_opts.name = options.label + "_j2_kfold%i" % k
+                c_opts.outdir = options.output + "j2_kfold%i/" % k
+                if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
+                doCondor(c_opts)
+            else:
+                c_opts.name = options.label + "_jrand_kfold%i" % k
+                c_opts.outdir = options.output + "jrand_kfold%i/" % k
+                if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
+                doCondor(c_opts)
 
                 
 
     #select events
     if(do_selection):
-        print(options.__dict__)
+        print('select')
+
+
+        if(len(options.effs) == 0): options.effs = [mass_bin_select_effs[options.mbin] ]
+
         for k,k_options in enumerate(kfold_options):
+
+            fit_inputs = k_options.output + 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+            if(options.recover and os.path.exists(fit_inputs)):
+                print("%s exists, skipping" % (fit_inputs))
+                continue
+
             selection_options = copy.deepcopy(k_options)
             selection_options.data_batch_list = k_options.holdouts
             selection_options.val_batch_list = None
@@ -350,16 +369,19 @@ def full_run(options):
 
             if(not options.randsort): 
                 selection_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
-                check_all_models_there(selection_options.labeler_name.format(j_label = "j1"), selection_options.num_models)
-                check_all_models_there(selection_options.labeler_name.format(j_label = "j2"), selection_options.num_models)
+                models_there = check_all_models_there(selection_options.labeler_name.format(j_label = "j1"), selection_options.num_models)
+                models_there = models_there and check_all_models_there(selection_options.labeler_name.format(j_label = "j2"), selection_options.num_models)
             else: 
                 selection_options.labeler_name = k_options.output + "jrand_kfold%i/" % k
-                check_all_models_there(selection_options.labeler_name, selection_options.num_models)
+                models_there = check_all_models_there(selection_options.labeler_name, selection_options.num_models)
+
+            if(not models_there): return False
 
             selection_options.output = k_options.output + "fit_inputs_kfold%i_eff{eff}.h5" % k
             selection_options.do_roc = True
 
             if((not options.condor)): #run selection locally
+                selection_options.save_mem = False
                 selection(selection_options)
 
             else: #submit to condor
@@ -429,6 +451,7 @@ def full_run(options):
     if(do_clean):
         condor_dir = options.output + "selection_condor_jobs/"
         os.system("rm %s/models.tar" % options.output)
+        os.system("rm %s/fit_inputs_kfold*.h5" % options.output)
 
         for k,k_options in enumerate(kfold_options):
 
@@ -441,10 +464,13 @@ def full_run(options):
                 output2 = options.output + "j2_kfold%i/" % k
                 os.system("rm %s/model*.h5" % output1)
                 os.system("rm %s/model*.h5" % output2)
+                os.system("rm %s/condor_jobs/*/*.stdout" % output1)
+                os.system("rm %s/condor_jobs/*/*.stdout" % output2)
 
             else:
                 output1 = options.output + "jrand_kfold%i/" % k
                 os.system("rm %s/model*.h5" % output1)
+                os.system("rm %s/condor_jobs/*/*.stdout" % output1)
 
 
     if(do_interp):
@@ -466,10 +492,16 @@ def full_run(options):
 
     if(do_merge):
 
+
         if(len(options.effs) == 0): options.effs = [mass_bin_select_effs[options.mbin] ]
+        fit_inputs = options.output + 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
 
         if(options.condor):
             for k,k_options in enumerate(kfold_options):
+
+                if(options.recover and os.path.exists(fit_inputs)):
+                    print("%s exists, skipping" % (fit_inputs))
+                    continue
 
                 c_opts = condor_options().parse_args([])
                 c_opts.getEOS = True
@@ -482,7 +514,13 @@ def full_run(options):
 
         #merge selections
         for eff in options.effs:
+
             fit_inputs_merge = options.output + "fit_inputs_eff{eff}.h5".format(eff = eff)
+
+            fit_inputs = options.output + 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+            if(options.recover and os.path.exists(fit_inputs)):
+                print("%s exists, skipping" % (fit_inputs))
+                continue
 
             #print(options.__dict__)
             if('eff_only' in options.__dict__.keys() and not options.eff_only): #merge fit inputs

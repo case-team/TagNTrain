@@ -41,22 +41,22 @@ def inclusive_fit(options):
         d_opts.mbin = d_opts.keep_mlow  = d_opts.keep_mhigh = -1
         d_opts.verbose = False
 
-        #data,_ = load_dataset_from_options(d_opts)
+        data,_ = load_dataset_from_options(d_opts)
 
 
-        #mjj = data["mjj"]
-        #label = data["label"]
+        mjj = data["mjj"]
+        label = data["label"]
 
 
-        #f_tmp = d_opts.output + ("fit_inputs_spb%s.h5" % str(spb))
+        f_tmp = d_opts.output + ("fit_inputs_spb%s.h5" % str(spb))
 
 
-        #with h5py.File(f_tmp, "w") as f:
-        #    f.create_dataset("mjj", data=mjj)
-        #    f.create_dataset("truth_label", data=label)
+        with h5py.File(f_tmp, "w") as f:
+            f.create_dataset("mjj", data=mjj)
+            f.create_dataset("truth_label", data=label)
 
 
-        #run_dijetfit(d_opts, fit_start = -1, sig_shape_file = os.path.abspath(options.sig_shape), input_file = os.path.abspath(f_tmp), output_dir = "", loop = True)
+        run_dijetfit(d_opts, fit_start = -1, sig_shape_file = os.path.abspath(options.sig_shape), input_file = os.path.abspath(f_tmp), output_dir = "", loop = True, dcb_model = False)
         
         fit_res = get_options_from_json(d_opts.output + "fit_results_%.1f.json" % options.mjj_sig)
         print("\n\n SPB %i " % spb)

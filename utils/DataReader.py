@@ -45,10 +45,12 @@ def get_avg_sys_reweight(f, sys, deta, deta_min, lund_weights = True):
     deta_var = f['jet_kinematics'][:,1]
     deta_mask = (deta_var < deta) & (deta_var > deta_min)
     nom_weight = f['sys_weights'][:,0][deta_mask]
-    if(lund_weights): nom_weight *= f['lund_weights'][:,0][deta_mask]
+    if(lund_weights): 
+        lw_rw = f['lund_weights'][deta_mask]
+        nom_weight *= lw_rw
 
     if('lund' in sys):
-        weight_idx = lund_weights_map[sys]
+        weight_idx = lund_vars_map[sys]
         sig_weights = nom_weight * f['lund_weights_sys_var'][:,weight_idx][deta_mask]
 
     else:
@@ -216,7 +218,7 @@ class DataReader:
         self.sig_only = kwargs.get('sig_only', False)
 
         if (len(self.sig_sys) > 0):
-            if(self.sig_sys not in sys_weights_map.keys() and self.sig_sys not in JME_vars and self.sig_sys not in Lund_vars):
+            if(self.sig_sys not in sys_weights_map.keys() and self.sig_sys not in JME_vars and self.sig_sys not in lund_vars):
                 print("Un recognized systematic %s! " % self.sig_sys)
                 sys.exit(1)
 
@@ -246,11 +248,12 @@ class DataReader:
         if(self.verbose): print("Creating dataset. Mass range %.0f - %.0f. Delta Eta %.1f -  %.1f" % (self.keep_mlow, self.keep_mhigh, self.deta_min, self.deta))
 
         self.sys_norm_reweight = 1.0
+        if(not os.path.exists(self.sig_file)): self.sig_file = self.sig_file.replace("data/","data/LundRW/")
         if(len(self.sig_file ) > 0 ):
             if(self.verbose): print("Loading signal %s " % self.sig_file)
             self.sig_file_h5 = h5py.File(self.sig_file, "r")
 
-            if(len(self.sig_sys) > 0 and self.sig_sys in (set(sys_weights_map.keys()) | Lund_vars)  ):
+            if(len(self.sig_sys) > 0 and self.sig_sys in (set(sys_weights_map.keys()) | lund_vars)  ):
                 #change normalization of signal
                 self.sys_norm_reweight = get_avg_sys_reweight(self.sig_file_h5, self.sig_sys, self.deta, self.deta_min, lund_weights = self.lund_weights)
                 if(self.verbose): print("Sig norm reweight is %.4f" % self.sys_norm_reweight)
@@ -389,6 +392,8 @@ class DataReader:
             self.read_batch(self.sig_file)
 
         elif(self.multi_batch):
+
+            if(self.fin[-1] != '/'): self.fin+= '/'
             for i in self.batch_list:
                 if(self.max_events > 0 and self.nEvents >= self.max_events): 
                     print("%i events read, above max (%i). Stopping loading" % (self.nEvents, self.max_events))
@@ -401,7 +406,7 @@ class DataReader:
                 if(not os.path.exists(f_name)):
                     f_name = self.fin + preface + "batch%i.h5" % i
                 self.read_batch(f_name)
-                if(self.save_mem and 'eos' not in f_name):
+                if(self.save_mem and 'eos' not in f_name and (not os.path.islink(os.path.abspath(f_name)) or 'eos' not in os.path.readlink(os.path.abspath(f_name)) )):
                     os.system("rm " + f_name)
         else:
             self.read_batch(self.fin)
@@ -653,8 +658,8 @@ class DataReader:
                         sig_weights *= self.sig_file_h5['sys_weights'][s_start:s_stop,weight_idx][sig_mask_temp]
                         num_sig_inj *= self.sys_norm_reweight
 
-                    elif(len(self.sig_sys) > 0 and self.sig_sys in Lund_vars):
-                        weight_idx = Lund_vars_map[self.sig_sys]
+                    elif(len(self.sig_sys) > 0 and self.sig_sys in lund_vars):
+                        weight_idx = lund_vars_map[self.sig_sys]
                         sig_weights *= self.sig_file_h5['lund_weights_sys_var'][s_start:s_stop,weight_idx][sig_mask_temp]
                         num_sig_inj *= self.sys_norm_reweight
 
