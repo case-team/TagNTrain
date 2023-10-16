@@ -82,14 +82,13 @@ def model_interp(options):
     #j1_model = tf.keras.models.load_model(j1_model_name)
     #j2_model = tf.keras.models.load_model(j2_model_name)
 
-    if(options.nsubj_ratios):
-        feature_names = ["jet_mass", "tau1", "tau21", "tau32", "tau43", "LSF", "DeepB", "nPFCands"]
-    else:
-        feature_names = ["jet_mass", "tau1", "tau2", "tau3", "tau4", "LSF", "DeepB", "nPFCands"]
-
-    if(not options.keep_LSF): feature_names.remove("LSF")
-    if(not options.keep_tau1): feature_names.remove("tau1")
-
+    feature_names = [("jet_mass", r" $m_{SD}$ "), 
+            ("tau21", r" $\tau_{21}$ "), 
+            ("tau32", r" $\tau_{32}$ "), 
+            ("tau43", r" $\tau_{43}$ "), 
+            ("LSF", "LSF"), 
+            ("DeepB", "DeepB Score"), 
+            ("nPF", "Num. PF Cands.")]
 
 
     Y = data['label']
@@ -105,6 +104,8 @@ def model_interp(options):
     j1_scores = j1_model.predict(j1_feats, batch_size = batch_size).reshape(-1)
     j2_scores = j2_model.predict(j2_feats, batch_size = batch_size).reshape(-1)
 
+    top_frac = 0.01
+    num_top = int(round(top_frac * j1_scores.shape[0]))
     top_j1_scores_idxs = np.argpartition(j1_scores, -num_top)[-num_top:]
     top_j2_scores_idxs = np.argpartition(j2_scores, -num_top)[-num_top:]
 
@@ -144,37 +145,17 @@ def model_interp(options):
     print("J1: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j1_scores_idxs] > 0)))
     plot_colors = ("b", "r")
     num_bins = 20
-    title = "All Jets vs. Top %i Most Signal-like" % num_top
-    for idx,feat in enumerate(feature_names):
-        plot_labels = ("Top (Avg : %.2f, Std %.2f)" %( mean_top_j1[idx], std_top_j1[idx]), 
-                       "All (Avg : %.2f, Std %.2f)"% (mean_j1_feats[idx], std_j1_feats[idx]))
-        make_outline_hist( [], ( j1_feats[top_j1_scores_idxs][:,idx], j1_feats[:,idx]), plot_labels, plot_colors, feat, title, num_bins, normalize = True, 
-                        save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
-        print(feat, plot_labels)
+    title = ""
 
-    if(not options.nsubj_ratios):
-        for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
-            plot_labels = ("Top (Avg : %.2f, Std %.2f)" %( mean_top_j1[idx], std_top_j1[idx]), 
-                           "All (Avg : %.2f, Std %.2f)"% (mean_j1_feats[idx], std_j1_feats[idx]))
-            make_outline_hist( [], ( j1_feats[top_j1_scores_idxs][:,idx+2]/j1_feats[top_j1_scores_idxs][:,idx+1], j1_feats[:,idx+2]/j1_feats[:,idx+1] ), 
-                    plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
-            print(feat, plot_labels)
+    plot_labels = ("Top 1% most anomalous", "All jets")
+    for idx,(feat,axis_title) in enumerate(feature_names):
+        make_outline_hist( [], ( j1_feats[top_j1_scores_idxs][:,idx], j1_feats[:,idx]), plot_labels, plot_colors, axis_title, title, num_bins, normalize = True, 
+                        save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
 
     print("J2: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j2_scores_idxs] > 0)))
-    for idx,feat in enumerate(feature_names):
-        plot_labels = ("Top (Avg : %.2f, Std %.2f)" %( mean_top_j2[idx], std_top_j2[idx]), 
-                       "All (Avg : %.2f, Std %.2f)"% (mean_j2_feats[idx], std_j2_feats[idx]))
-        make_outline_hist( [], ( j2_feats[top_j2_scores_idxs][:,idx],  j2_feats[:,idx] ), plot_labels, plot_colors, feat, title, num_bins, normalize = True, 
+    for idx,(feat,axis_title) in enumerate(feature_names):
+        make_outline_hist( [], ( j2_feats[top_j2_scores_idxs][:,idx],  j2_feats[:,idx] ), plot_labels, plot_colors, axis_title, title, num_bins, normalize = True, 
                         save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
-        print(feat, plot_labels)
-
-    if(not options.nsubj_ratios):
-        for idx,feat in enumerate(["tau21", "tau32", "tau43"]):
-            plot_labels = ("Top (Avg : %.2f, Std %.2f)" %(  mean_top_j2[idx], std_top_j2[idx]), 
-                           "All (Avg : %.2f, Std %.2f)"% (mean_j2_feats[idx], std_j2_feats[idx]))
-            make_outline_hist( [], (j2_feats[top_j2_scores_idxs][:,idx+2]/j2_feats[top_j2_scores_idxs][:,idx+1], j2_feats[:,idx+2]/j2_feats[:,idx+1]), 
-                    plot_labels, plot_colors, feat, title, num_bins, normalize = True, save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
-            print(feat, plot_labels)
 
 
     if(include_bkg_like):
@@ -188,10 +169,11 @@ def model_interp(options):
     j2_perm_weights = permutation_weights(j2_model, j2_inputs, j2_feats[:num_rand])
     print("Var: j1 perm weight, j2 perm weight")
     for idx, feat in enumerate(feature_names):
-        print("%s: %.3f %.3f" % (feat, j1_perm_weights[idx], j2_perm_weights[idx]))
+        print("%s: %.3f %.3f" % (feat[0], j1_perm_weights[idx], j2_perm_weights[idx]))
+    feat_labels = [feat[1] for feat in feature_names]
 
-    horizontal_bar_chart(j1_perm_weights, feature_names, fname = options.output + "j1_feature_importance.png", xaxis_label = "Permutation Score")
-    horizontal_bar_chart(j2_perm_weights, feature_names, fname = options.output + "j2_feature_importance.png", xaxis_label = "Permutation Score")
+    horizontal_bar_chart(j1_perm_weights, feat_labels, fname = options.output + "j1_feature_importance.png", xaxis_label = "Permutation Score")
+    horizontal_bar_chart(j2_perm_weights, feat_labels, fname = options.output + "j2_feature_importance.png", xaxis_label = "Permutation Score")
 
 
 

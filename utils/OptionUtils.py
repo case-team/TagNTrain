@@ -92,6 +92,8 @@ def input_options():
     parser.add_argument("--local_storage", default =False, action="store_true",  help="Store temp files locally not on gpuscratch")
     parser.add_argument("--sig_cut", type=int, default = 80,  help="What classifier percentile to use to define sig-rich region in TNT")
     parser.add_argument("--bkg_cut", type=int, default = 50,  help="What classifier percentile to use to define bkg-rich region in TNT")
+    parser.add_argument("--saved_AE_scores", default = False, action = 'store_true', help = 'use presaved AE scores')
+
 
     parser.add_argument("--eff_cut", type=float, default = 0.01,  help="What classifier percentile to use for eff_cut computation")
 

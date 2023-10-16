@@ -28,15 +28,20 @@ parser = input_options()
 options = parser.parse_args()
 
 f = h5py.File(options.fin, "r+")
-labeler = tf.keras.models.load_model(options.labeler_name)
-j1_images = f['j1_images'][:]
-j1_scores = AE_scores(labeler, j1_images)
-f.create_dataset('j1_AE_scores', data = j1_scores, compression = 'gzip')
-del j1_images
-j2_images = f['j2_images'][:]
-j2_scores = AE_scores(labeler, j2_images)
-f.create_dataset('j2_AE_scores', data = j2_scores, compression = 'gzip')
-del j2_images
-f.close()
+if('j1_AE_scores' in list(f.keys())):
+    print("Skipping")
+    f.close()
+    exit(1)
+else:
+    labeler = tf.keras.models.load_model(options.labeler_name)
+    j1_images = f['j1_images'][:]
+    j1_scores = AE_scores(labeler, j1_images)
+    f.create_dataset('j1_AE_scores', data = j1_scores, compression = 'gzip')
+    del j1_images
+    j2_images = f['j2_images'][:]
+    j2_scores = AE_scores(labeler, j2_images)
+    f.create_dataset('j2_AE_scores', data = j2_scores, compression = 'gzip')
+    del j2_images
+    f.close()
 
 

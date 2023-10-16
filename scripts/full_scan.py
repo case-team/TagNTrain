@@ -522,6 +522,7 @@ def full_scan(options):
                 fit_start = full_run(t_opts)
                 #for signal masses in same mass bin save time by reusing fit start
                 t_opts.fit_start = fit_start
+                break
 
     if(do_bias_test):
         for mbin in mass_bin_idxs:

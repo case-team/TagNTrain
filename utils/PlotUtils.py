@@ -8,6 +8,7 @@ from sklearn.metrics import roc_curve,auc
 from .Consts import *
 import scipy.stats
 import numpy as np
+import mplhep as hep
 
 fig_size = (12,9)
 
@@ -277,12 +278,15 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
         h_range = None, fontsize = 24, fname="", yaxis_label = ""):
     alpha = 1.
     n_stacks = len(stacks)
+
+    plt.style.use(hep.style.CMS)
     fig = plt.figure(figsize=fig_size)
     if(n_stacks > 0):
         plt.hist(stacks, bins=num_bins, range=h_range, color=colors[:n_stacks], alpha=0.2,label=labels[:n_stacks], density = normalize, histtype='barstacked')
     if(len(outlines) > 0):
         plt.hist(outlines, bins=num_bins, range=h_range, color=colors[n_stacks:], alpha=1.,label=labels[n_stacks:], density = normalize, histtype='step', linewidth = 2)
-    plt.xlabel(xaxis_label, fontsize =fontsize)
+    xlabel_fontsize  = fontsize *1.5 if "_" in xaxis_label else fontsize
+    plt.xlabel(xaxis_label, fontsize =xlabel_fontsize)
     plt.tick_params(axis='x', labelsize=fontsize)
     plt.tick_params(axis='y', labelsize=fontsize)
     if(logy): plt.yscale('log')
@@ -292,6 +296,7 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
     _, high = plt.gca().get_ylim()
     plt.ylim (0., high * 1.2)
     plt.legend(loc='upper center', fontsize = fontsize * 0.8)
+    hep.cms.label( data = False)
     if(save): 
         print("saving fig %s" %fname)
         plt.savefig(fname)
@@ -537,6 +542,8 @@ def make_scatter_plot(x, y, color, axis_names, fname= ""  ):
         plt.savefig(fname)
 
 def horizontal_bar_chart(vals, labels, fname = "", xaxis_label = ""):
+
+    plt.style.use(hep.style.CMS)
     fig, ax = plt.subplots()
 
     order = np.flip(vals.argsort())
@@ -548,6 +555,9 @@ def horizontal_bar_chart(vals, labels, fname = "", xaxis_label = ""):
     ax.set_yticklabels(labels[order])
     ax.invert_yaxis()
     ax.set_xlabel(xaxis_label)
+
+    hep.cms.label( data = False)
+    fig.tight_layout()
 
     if(fname != ""):
         print("saving %s" % fname)

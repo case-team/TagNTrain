@@ -17,7 +17,7 @@ if(do_XToYYp):
 
     xsec = 20
     output_name = 'XToYYp_sic_comparison.png'
-    label = r"$X \rightarrow YY' (Y/Y' \rightarrow qq)$"
+    label = r"X $\to$ YY' (Y/Y' $\to$ qq)"
 
     f_list = [
             "sic/TNT/cwola_X3000_Y80_Yprime170_limit_june20_spb5.0_avg_tagging_effs.npz",
@@ -31,7 +31,7 @@ if(do_XToYYp):
 else:
     xsec = 60
     output_name = 'Wprime_sic_comparison.png'
-    label = r"$W' \rightarrow B't (B' \rightarrow bZ)$"
+    label = r"W' $\to$ B't (B' $\to$ bZ)"
     f_list = [
             "sic/TNT/cwola_Wp3000_Bp400_limit_june20_spb10.0_avg_tagging_effs.npz",
             "sic/TNT/TNT_Wp3000_Bp400_limit_june20_spb10.0_avg_tagging_effs.npz",
@@ -85,7 +85,7 @@ plt.tick_params(axis='y', labelsize=fs_leg)
 #plt.grid(axis = 'y', linestyle='--', linewidth = 0.5)
 plt.text(0.002, 9, label, fontsize = fs_label)
 plt.legend(loc="best", fontsize= fs_leg)
-hep.cms.text("Work in Progress")
+hep.cms.label( data = False)
 plt.savefig(output_name)
 print("Saving file to %s " % (output_name))
 

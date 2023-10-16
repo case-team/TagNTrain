@@ -12,7 +12,7 @@ import time
 fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
 fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
-def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False, dcb_model = True):
+def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False, dcb_model = True, sig_norm = -1):
     print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
     base_path = os.path.abspath(".") + "/"
     if(len(output_dir) == 0): output_dir = base_path + options.output
@@ -27,13 +27,18 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
     dijet_cmd = "python dijetfit.py -i %s -p %s --rebin --ftest_thresh %.2f --err_thresh %.2f" % (input_file, output_dir, ftest_thresh, err_thresh)
     if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
         dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
+
     if(len(sig_shape_file) > 0):
         dijet_cmd +=  " -M %.0f --sig_shape %s -l %sM%0.f" % (options.mjj_sig, sig_shape_file,  label, options.mjj_sig)
         if(dcb_model): dijet_cmd += " --dcb-model"
 
-    if(options.mjj_sig > 4500):
-        #choose more realistic normalization for high mass signals
-        dijet_cmd += " --sig_norm 10.0"
+
+    #choose more realistic normalization for high mass signals
+    if(options.mjj_sig > 4500 and sig_norm < 0):
+        sig_norm = 10
+    sig_norm = 1000 if sig_norm < 0 else sig_norm
+
+    dijet_cmd += " --sig_norm %i" % sig_norm
 
 
 
@@ -134,20 +139,21 @@ def avg_eff(fout_name, input_list):
             if("eff" not in key): continue
 
             if(key in all_effs.keys()):
-                all_effs[key].append(f[key][0])
+                all_effs[key].append(f[key][:])
             else:
-                all_effs[key] = [f[key][0]]
+                all_effs[key] = [f[key][:]]
 
     avg_effs = dict()
 
     fout = h5py.File(fout_name, "a")
     for key,val in all_effs.items():
-        avg_eff = np.mean(val)
+        a = np.array(val)
+        avg_eff = np.mean(a, axis = 0)
         #print(key, avg_eff)
         if(key not in fout.keys()):
             fout.create_dataset(key, data=np.array([avg_eff]) )
         else:
-            fout[key][0] = avg_eff
+            fout[key][:] = avg_eff
 
 
 
@@ -188,10 +194,12 @@ def full_run(options):
         if('fit_start' in options.__dict__.keys() and options.fit_start > 0): rel_opts.fit_start = options.fit_start
         rel_opts.condor = options.condor
         if('fit_label' in options.__dict__.keys()): rel_opts.fit_label = options.fit_label
+        else: rel_opts.fit_label = ""
         if('generic_sig_shape' in options.__dict__.keys()): rel_opts.generic_sig_shape = options.generic_sig_shape
         rel_opts.keep_LSF = options.keep_LSF #quick fix
         rel_opts.redo_roc = options.redo_roc #quick fix
         rel_opts.condor_mem = options.__dict__.get("condor_mem", -1)
+        if('saved_AE_scores' in options.__dict__.keys() and options.saved_AE_scores): rel_opts.saved_AE_scores = True
         rel_opts.recover = options.recover
         rel_opts.lund_weights = options.__dict__.get('lund_weights', True)
         rel_opts.sig_shape = options.__dict__.get('sig_shape', "")
@@ -246,7 +254,7 @@ def full_run(options):
     if(options.step == "roc" and options.condor):
         do_merge = True
 
-    #get_condor = get_condor or (do_selection and options.condor)
+    get_condor = get_condor or (do_selection and options.condor)
     do_merge = do_merge 
 
 
@@ -285,6 +293,7 @@ def full_run(options):
     #Do trainings
     if(do_train):
         for k,k_options in enumerate(kfold_options):
+            k_options.saved_AE_scores = True
 
             if(not options.randsort):
                 k_options.label = options.label + "_j1_kfold%i" % k
@@ -303,7 +312,9 @@ def full_run(options):
                 if(len(options.ae_dir) > 0):
                     if(options.mbin < 0):
                         print("Must supply mbin with ae_dir !")
-                        exit(1)
+                        ae_mbin = 13
+                        k_options.labeler_name = options.ae_dir + "jrand_AE_kfold%i_mbin%i.h5" % (k, ae_mbin)
+                        #exit(1)
                     else:
                         ae_mbin = k_options.mbin
                         if(ae_mbin == 6 or ae_mbin == 16 and not options.data): ae_mbin -= 1
@@ -452,6 +463,8 @@ def full_run(options):
         condor_dir = options.output + "selection_condor_jobs/"
         os.system("rm %s/models.tar" % options.output)
         os.system("rm %s/fit_inputs_kfold*.h5" % options.output)
+        #for systematic, ok to remove all fit inputs
+        #if(len(options.sig_sys) > 0): os.system("rm %s/fit_inputs*.h5" % options.output)
 
         for k,k_options in enumerate(kfold_options):
 
@@ -592,18 +605,18 @@ def full_run(options):
 
         if(len(options.sig_shape) > 0):
             sig_shape_file = base_path + options.sig_shape
-        elif( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
-            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
         elif(not options.generic_sig_shape and os.path.exists(options.output + "sig_shape_eff{eff}.h5".format(eff = options.effs[0]))):
             #fit the signal shape
             sig_shape_h5 = base_path + options.output + 'sig_shape_eff{eff}.h5'.format(eff = options.effs[0])
-            sig_fit_cmd = "python fit_signalshapes.py -i %s -o %s -M %i --dcb-model --fitRange 0.3 >& %s" % (sig_shape_h5, 
+            sig_fit_cmd = "python fit_signalshapes.py -i %s -o %s -M %i --dcb-model --fitRange 1.0 >& %s" % (sig_shape_h5, 
                                    base_path + options.output, options.mjj_sig, base_path + options.output + "sig_fit_log.txt")
             print(sig_fit_cmd)
             full_sig_fit_cmd = fit_cmd_setup + sig_fit_cmd + "; "  + fit_cmd_after
 
             subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
             sig_shape_file = base_path + options.output + 'sig_fit_%i.root' % options.mjj_sig
+        elif( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
+            sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
         else: sig_shape_file = ""
 
 

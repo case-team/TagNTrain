@@ -55,6 +55,8 @@ def tag_and_train(options):
 
     options.keys = []
     l_key2 = ""
+    if("saved_AE_scores" not in options.__dict__.keys()):
+        options.saved_AE_scores = False
     if(options.use_images):
         options.keys = ['mjj', 'j1_images', 'j2_images']
         if(not options.no_ptrw): options.keys.append('jet_kinematics')
@@ -66,10 +68,10 @@ def tag_and_train(options):
         if(not options.no_ptrw): options.keys.append('jet_kinematics')
         x_key = j_label +  'features'
         if('auto' in options.labeler_name or 'AE' in options.labeler_name):
-            options.keys.append(opp_j_label + "images")
+            if(not options.saved_AE_scores): options.keys.append(opp_j_label + "images")
             l_key = opp_j_label + 'images'
             if(options.randsort):
-                options.keys.append(j_label + "images")
+                if(not options.saved_AE_scores): options.keys.append(j_label + "images")
                 l_key2 = j_label + "images"
                 x_key2 = opp_j_label +  'features'
         else:
@@ -78,6 +80,8 @@ def tag_and_train(options):
             if(options.randsort): 
                 l_key2 = j_label +  'features'
                 x_key2 = opp_j_label +  'features'
+
+    if(options.saved_AE_scores): options.keys += ["j1_AE_scores", "j2_AE_scores"]
 
     print("Keys: ", options.keys)
     import time

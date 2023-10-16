@@ -204,6 +204,8 @@ class DataReader:
 
         self.keep_tau1  = kwargs.get('keep_tau1', False)
 
+        self.saved_AE_scores = kwargs.get('saved_AE_scores', False)
+
 
 
         self.sig_idx = kwargs.get('sig_idx', 1)
@@ -253,10 +255,12 @@ class DataReader:
             if(self.verbose): print("Loading signal %s " % self.sig_file)
             self.sig_file_h5 = h5py.File(self.sig_file, "r")
 
-            if(len(self.sig_sys) > 0 and self.sig_sys in (set(sys_weights_map.keys()) | lund_vars)  ):
-                #change normalization of signal
+
+            if(len(self.sig_sys) > 0 and self.sig_sys in set(sys_weights_map.keys())  ):
+                #change normalization of signal for systematics, 
+                #Dont do for Lund sys because they are shape only
                 self.sys_norm_reweight = get_avg_sys_reweight(self.sig_file_h5, self.sig_sys, self.deta, self.deta_min, lund_weights = self.lund_weights)
-                if(self.verbose): print("Sig norm reweight is %.4f" % self.sys_norm_reweight)
+                print("Sys %s : Sig norm reweight is %.4f" % (self.sig_sys, self.sys_norm_reweight))
 
         self.sep_signal = len(self.sig_file) > 0 and not self.sig_only
 
@@ -674,9 +678,9 @@ class DataReader:
 
                 #num_sig_inj = int(round(num_sig_inj))
 
-                if( abs(num_sig_inj - np.round(num_sig_inj)) > 0.01):
+                if( abs(num_sig_inj - np.round(num_sig_inj)) > 1./self.num_total_batches):
                     fraction = num_sig_inj - np.floor(num_sig_inj)
-                    num_batches_extra_sig = int(round(fraction * self.num_total_batches))
+                    num_batches_extra_sig = max(1, int(round(fraction * self.num_total_batches)))
                     spacing = np.floor(self.num_total_batches / num_batches_extra_sig)
                     batches_extra_sig = [(i * spacing)%self.num_total_batches for i in range(num_batches_extra_sig)]
                     if(self.batchIdx in batches_extra_sig):
@@ -1081,10 +1085,15 @@ class DataReader:
         #print(list(self.f_storage.keys()))
         #print("key", key)
         
+        if(self.saved_AE_scores):
+            jlabel = 'j1_' if ('j1' in key) else 'j2_'
+            return self.__getitem__(jlabel + 'AE_scores') 
         n_objs = self.f_storage[key].shape[0]
         n_chunks = int(np.ceil(n_objs / chunk_size))
         results = np.array([])
         mask_ = self.mask
+
+
 
         for i in range(n_chunks):
             imgs = self.f_storage[key][chunk_size*i:(i+1)*chunk_size]

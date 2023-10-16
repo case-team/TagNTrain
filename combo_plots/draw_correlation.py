@@ -77,6 +77,7 @@ def distance_corr(var_1, var_2, normedweight = None, power=1):
 
 def make_corr_plot(x, y, color, axis_names, title, fname= "", y_range = (0., 1.2), x_range = (0., 1.2)  ):
 
+    plt.style.use(hep.style.CMS)
     fig, ax = plt.subplots()
     alpha = 0.5
     size = 10.0
@@ -85,20 +86,25 @@ def make_corr_plot(x, y, color, axis_names, title, fname= "", y_range = (0., 1.2
     lin_corr = np.corrcoef(x,y)[0,1]
     dist_corr = distance_corr(x,y)
     print(lin_corr, dist_corr)
-    text_str = r'$\rho $ = %.3f, Disco %.3f' % (lin_corr, dist_corr)
-    plt.title(title, fontsize = 22)
-    plt.annotate(text_str, xy = (0.25, 0.92),  xycoords = 'axes fraction', fontsize=14,
-            bbox = dict(boxstyle='round', fc = 'w'))
+    text_str = 'Linear Correlation = %.3f' % lin_corr
+    text_str2 = 'Disco Correlation = %.3f' % dist_corr
 
-    ax.set_xlabel(axis_names[0], fontsize=14)
-    ax.set_ylabel(axis_names[1], fontsize=14)
-    plt.tick_params(axis='y', labelsize=12)
-    plt.tick_params(axis='x', labelsize=12)
+    plt.annotate(title, xy = (0.03, 0.92),  xycoords = 'axes fraction', fontsize=18)
+
+    plt.annotate(text_str, xy = (0.03, 0.85),  xycoords = 'axes fraction', fontsize=16)
+    plt.annotate(text_str2, xy = (0.03, 0.82),  xycoords = 'axes fraction', fontsize=16)
+
+
+    hep.cms.label( data = False)
+    ax.set_xlabel(axis_names[0], fontsize=24)
+    ax.set_ylabel(axis_names[1], fontsize=24)
+    plt.tick_params(axis='y', labelsize=20)
+    plt.tick_params(axis='x', labelsize=20)
     plt.ylim(y_range)
     plt.xlim(x_range)
     if(fname != ""):
         print("saving %s" % fname)
-        plt.savefig(fname)
+        plt.savefig(fname, bbox_inches = "tight")
 
 
 #restrict to range 0 to 1
@@ -142,11 +148,12 @@ def make_comparison(f1_name, f2_name, label1, label2, title, fout):
     scores1 = normalize(scores1, gaus)
     scores2 = normalize(scores2, gaus)
 
-    ax1_label = "%s Score" % label1
-    ax2_label = "%s Score" % label2
+    ax1_label = "Normalized %s Score" % label1
+    ax2_label = "Normalized %s Score" % label2
 
     if(gaus):
-        y_range = x_range = (-3., 3.)
+        y_range = (-3., 5.)
+        x_range = (-3., 3.)
     else:
         x_range = (0., 1.)
         y_range(0., 1.2)
@@ -165,7 +172,7 @@ vae_files =  ["VAE_XYY.h5", "VAE_Wp.h5", "VAE_bkg.h5"]
 d_out = "correlation/gaus/"
 
 
-labels = ['XToYY', 'WpToBpt', 'QCD']
+labels = [r"X$\to$YY' (Y/Y'$\to$qq) Signal", r"W'$\to$B't (B'$\to$bZ) Signal", 'QCD Background']
 
 
 #for i1 in range(4):
@@ -179,19 +186,19 @@ for i,label  in enumerate(labels):
     print(i)
     #if(i==0): continue
     #if(i==1): continue
-    title = label + " Score Correlation"
-    make_comparison(d + TNT_files[i], d + cwola_files[i], "TNT", "CWoLa Hunting", title, d_out + "%s_TNT_cwola_corr.png" % (label))
-    make_comparison(d + TNT_files[i], d + cathode_files[i], "TNT", "CATHODE", title, d_out + "%s_TNT_cathode_corr.png" % (label))
-    make_comparison(d + TNT_files[i], d + quak_files[i], "TNT", "QUAK", title, d_out + "%s_TNT_quak_corr.png" % (label))
-    make_comparison(d + TNT_files[i], d + vae_files[i], "TNT", "VAE", title, d_out + "%s_TNT_vae_corr.png" % (label))
+    title = label
+    make_comparison(d + TNT_files[i], d + cwola_files[i], "TNT", "CWoLa Hunting", title, d_out + "%s_TNT_cwola_corr.png" % (label[0]))
+    make_comparison(d + TNT_files[i], d + cathode_files[i], "TNT", "CATHODE", title, d_out + "%s_TNT_cathode_corr.png" % (label[0]))
+    make_comparison(d + TNT_files[i], d + quak_files[i], "TNT", "QUAK", title, d_out + "%s_TNT_quak_corr.png" % (label[0]))
+    make_comparison(d + TNT_files[i], d + vae_files[i], "TNT", "VAE", title, d_out + "%s_TNT_vae_corr.png" % (label[0]))
 
-    make_comparison(d + cwola_files[i], d + cathode_files[i], "CWoLa Hunting", "CATHODE", title, d_out + "%s_cwola_cathode_corr.png" % (label))
-    make_comparison(d + cwola_files[i], d + quak_files[i], "CWoLa Hunting", "QUAK", title, d_out + "%s_cwola_quak_corr.png" % (label))
-    make_comparison(d + cwola_files[i], d + vae_files[i], "CWoLa Hunting", "VAE", title, d_out + "%s_cwola_vae_corr.png" % (label))
+    make_comparison(d + cwola_files[i], d + cathode_files[i], "CWoLa Hunting", "CATHODE", title, d_out + "%s_cwola_cathode_corr.png" % (label[0]))
+    make_comparison(d + cwola_files[i], d + quak_files[i], "CWoLa Hunting", "QUAK", title, d_out + "%s_cwola_quak_corr.png" % (label[0]))
+    make_comparison(d + cwola_files[i], d + vae_files[i], "CWoLa Hunting", "VAE", title, d_out + "%s_cwola_vae_corr.png" % (label[0]))
 
 
-    make_comparison(d + quak_files[i], d + cathode_files[i], "QUAK", "CATHODE", title, d_out + "%s_quak_cathode_corr.png" % (label))
-    make_comparison(d + quak_files[i], d + vae_files[i], "QUAK", "VAE", title, d_out + "%s_quak_vae_corr.png" % (label))
+    make_comparison(d + quak_files[i], d + cathode_files[i], "QUAK", "CATHODE", title, d_out + "%s_quak_cathode_corr.png" % (label[0]))
+    make_comparison(d + quak_files[i], d + vae_files[i], "QUAK", "VAE", title, d_out + "%s_quak_vae_corr.png" % (label[0]))
 
-    make_comparison(d + vae_files[i], d + cathode_files[i], "VAE", "CATHODE", title, d_out + "%s_vae_cathode_corr.png" % (label))
+    make_comparison(d + vae_files[i], d + cathode_files[i], "VAE", "CATHODE", title, d_out + "%s_vae_cathode_corr.png" % (label[0]))
 
