@@ -25,6 +25,7 @@ if(len(options.sig_file) > 0):
 
 Y = data['label'].reshape(-1)
 bkg_evts = Y < 0.1
+sig_evts = Y > 0.1
 mjj = data['mjj']
 
 event_num = data['event_info'][:,0]
@@ -40,9 +41,9 @@ j2_tau32 = data['j2_features'][:,2]
 
 print(data['j1_features'][0])
 
-tau21_cut_thresh = 0.4
+tau21_cut_thresh = 0.5
 tau32_cut_thresh = 0.7
-msd_thresh = 125
+msd_thresh = 50
 
 msd_mask = (j1_msd > msd_thresh ) & (j2_msd > msd_thresh)
 
@@ -53,8 +54,14 @@ overall_eff = np.mean(mask & bkg_evts)
 mjj_window =  (mjj > options.mjj_low ) & (mjj < options.mjj_high) & bkg_evts
 mjj_window_eff = mjj[mjj_window & mask].shape[0] / mjj[mjj_window].shape[0]
 
+
+sig_eff = np.mean(mask & sig_evts) / np.mean(sig_evts)
+improvement = sig_eff / mjj_window_eff**(0.5)
+
 print("Overall eff %.3f" % overall_eff)
 print("Mjj window eff %.3f" % mjj_window_eff)
+print("Sig eff %.3f" % sig_eff)
+print("Improvement %.3f" % improvement)
 
 with h5py.File(options.output, "w") as f_sig:
     f_sig.create_dataset('mjj', data = mjj[mask])

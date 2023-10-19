@@ -59,7 +59,10 @@ def plot_stitched_mjj(options, mbins, outfile):
     a1 = plt.axes([0.0, 0.18, 1.0, 0.8])
     a2 = plt. axes([0.0,0.0, 1.0, 0.16], sharex=a1)
     plt.sca(a1)
-    hep.cms.label(llabel = " Preliminary", lumi = 138)
+    #hep.cms.label(llabel = " Preliminary", lumi = 138)
+
+    hep.cms.text("Preliminary")
+    hep.cms.lumitext("138 fb$^{-1}$ (13 TeV)")
 
     for mbin in mbins:
         plt.sca(a1)
@@ -148,10 +151,10 @@ def plot_stitched_mjj(options, mbins, outfile):
             print("labeling")
             label_fit, label_data = "Bkg. fit", "Data"
         else: label_fit, label_data = "",""
-        plt.fill_between(centers_fine, fit_fine_down, fit_fine_up, color = 'red', linewidth=0, alpha = 0.4)
+        plt.fill_between(centers_fine, fit_fine_down, fit_fine_up, color = 'red', linewidth=0, alpha = 0.5)
         plt.plot(centers_fine, fit_fine_nom, color = 'red', linewidth=3, label = label_fit) 
 
-        plt.errorbar(centers, vals_norm, fmt="ko", xerr=xbins[1:]-centers, yerr=errs_norm,  elinewidth=0.5, capsize=2.0, label = label_data)
+        plt.errorbar(centers, vals_norm, fmt="ko", xerr=xbins[1:]-centers, yerr=errs_norm,  elinewidth=0.5, capsize=1.5, label = label_data)
 
         # ratio plot
         plt.sca(a2)
@@ -173,32 +176,36 @@ def plot_stitched_mjj(options, mbins, outfile):
     plt.ylabel("Events / 100 GeV", fontsize = 36)
     plt.yscale("log")
     ymin,ymax = a1.get_ylim()
+    plt.ylim(None, 1e5)
 
     handles, labels = plt.gca().get_legend_handles_labels()
     #reorder data to be first in legend
     order = [1,0]
 
     #add legend to plot
-    plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc = "upper right", fontsize = 'x-large')
+    legend = plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order], loc = "upper right", fontsize = 'x-large',
+            facecolor="white", framealpha=1, frameon=True,)
+    legend.get_frame().set_linewidth(0)
 
-    method_label = "Tag N' Train : " if options.do_TNT else "CWoLa Hunting : "
+    method_label = "Tag N' Train: " if options.do_TNT else "CWoLa Hunting: "
     sr_label = "A Signal Regions" if mbins[0] < 10 else "B Signal Regions"
-    plt.text(0.04, 0.9, method_label + sr_label, transform = a1.transAxes, fontsize = 24)
+    plt.text(0.05, 0.9, method_label + sr_label, transform = a1.transAxes)
 
 
 
     #plt.legend(loc="upper right")
 
-    ymax *= 5
+    #ymax *= 5
     print(ymin, ymax)
     for i in range(len(mass_bins)-1):
-        l_ymax = ymax / ((i+1)**(2))
-        print(mass_bins[i+1], l_ymax)
-        plt.plot([mass_bins[i+1], mass_bins[i+1]], [ymin, l_ymax ], color="green", linestyle="dashed", lw=1.0)
+        #l_ymax = ymax / ((i+1)**(2))
+        #print(mass_bins[i+1], l_ymax)
+        plt.plot([mass_bins[i+1], mass_bins[i+1]], [0, 0.7*ymax ], color="green", linestyle="dashed", lw=1.0)
 
     plt.sca(a2)
     plt.xlabel(r"$m_{jj}$ (GeV)", fontsize = 36)
-    plt.ylabel(r"$\frac{\mathrm{Data-Fit}}{\mathrm{Unc.}}$", fontsize = 30, loc = 'center')
+    plt.ylabel(r"$\frac{\mathrm{Data-Fit}}{\mathrm{Unc.}}$", fontsize=30)
+
     plt.ylim(min_ratio, max_ratio)
     tick_spacing = 2.0
     a2.yaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
@@ -279,6 +286,7 @@ def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True)
     a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
     plt.sca(a1)
     hep.cms.label(llabel = " Preliminary", lumi = 138)
+
     plt.scatter(mass_list, pval_list, s = 40.0, c = colors)
     plt.scatter(mass_pval_overflow_list, pval_overflow_list, marker = "v", s = 80.0, c = colors_overflow)
     for i in range(len(corr_sigma)):
@@ -621,8 +629,8 @@ def full_scan(options):
         print(list(zip(sig_masses, signifs)))
         plot_significances(file_list, options.output + "plots/", sig_masses = sig_masses)
 
-        plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin < 10] , options.output + "plots/mjj_stitched_binsA.png")
-        plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin > 10] , options.output + "plots/mjj_stitched_binsB.png")
+        plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin < 10] , options.output + "plots/mjj_stitched_binsA.pdf")
+        plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin > 10] , options.output + "plots/mjj_stitched_binsB.pdf")
         
 
 
