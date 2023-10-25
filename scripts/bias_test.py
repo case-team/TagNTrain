@@ -183,7 +183,21 @@ def bias_test(options):
         sig_effs = []
         excesses = []
         excess_uncs = []
-        #get_signal_params(options)
+        obs_lims = []
+        exp_lims = []
+
+        meas_sig_xsecs = []
+        err_sig_xsecs = []
+        obs_lim_xsecs = []
+        exp_lim_xsecs = []
+
+        preselection_eff,_,_ = get_preselection_params(options.sig_file, options.hadronic_only, 3000)
+        lumi = 26.81
+        def convert_to_xsec(nevts, sig_eff):
+            return nevts / (sig_eff * preselection_eff * lumi)
+
+        true_sig_xsec = convert_to_xsec(options.sig_per_batch * options.numBatches, 1.0)
+        print('true injected xsec %.1f' % true_sig_xsec)
 
         for seed in seeds:
         #for seed in range(10):
@@ -194,6 +208,8 @@ def bias_test(options):
             if(fit_res is not None): 
                 obs_excess_events = float(fit_res.obs_excess_events)
                 obs_excess_events_unc = float(fit_res.obs_excess_events_unc)
+                obs_lim_events = fit_res.obs_lim_events
+                exp_lim_events = fit_res.exp_lim_events
             else: 
                 print("FAILED to get fit results for seed %i" % seed)
                 obs_excess_events = -9999.
@@ -202,6 +218,20 @@ def bias_test(options):
             sig_effs.append(sig_eff)
             excesses.append(obs_excess_events)
             excess_uncs.append(obs_excess_events_unc)
+            obs_lims.append(obs_lim_events)
+            exp_lims.append(exp_lim_events)
+
+            meas_sig_xsec = convert_to_xsec(obs_excess_events, sig_eff)
+            err_sig_xsec = (obs_excess_events_unc /obs_excess_events) * meas_sig_xsec
+            obs_lim_xsec = convert_to_xsec(obs_lim_events, sig_eff)
+            exp_lim_xsec = convert_to_xsec(exp_lim_events, sig_eff)
+
+            meas_sig_xsecs.append(meas_sig_xsec)
+            err_sig_xsecs.append(err_sig_xsec)
+            obs_lim_xsecs.append(obs_lim_xsecs)
+            exp_lim_xsecs.append(exp_lim_xsecs)
+
+
 
 
         mean_sig_eff = np.mean(sig_effs)
@@ -251,32 +281,78 @@ def bias_test(options):
 
         fig = plt.figure(figsize=fig_size)
 
-        #pulls
+        def plot_pulls(pulls, xlabel, fout):
+            fig = plt.figure(figsize=fig_size)
+            ns, bins, patches = plt.hist(pulls, bins=num_bins, color='gray', label="Toys", histtype='bar')
+
+            plt.xlabel(xlabel, fontsize =fontsize)
+            plt.tick_params(axis='x', labelsize=fontsize)
+            plt.ylabel("nToys", fontsize =fontsize)
+            plt.tick_params(axis='y', labelsize=fontsize)
+
+            mean_pull = np.mean(pulls)
+            std_pull = np.std(pulls)
+            err_mean_pull =  std_pull /np.sqrt(len(pulls))
+            err_std_pull =  std_pull /np.sqrt(2*len(pulls)-2)
+            txt = "Mean = %.1f +/- %.1f" % (mean_pull, err_mean_pull)
+            txt2 = "Std Dev = %.2f +/- %.2f" % (std_pull, err_std_pull)
+
+            plt.text(0.3, 0.9, txt, transform = fig.axes[0].transAxes, fontsize = 18)
+            plt.text(0.3, 0.85, txt2, transform = fig.axes[0].transAxes, fontsize = 18)
+
+            plt.ylim((0, 1.7* np.amax(ns)))
+            plt.legend(loc='upper left', fontsize = 16)
+
+            print("Creating " + fout)
+            plt.savefig(fout)
+
+
+        #signal yield pulls
         eps = 1e-6
-        pulls = ( np.array(excesses) - expected_excess)/(np.array(excess_uncs ) + eps)
-        pulls = pulls[np.abs(pulls) < 10]
+        pulls_sig_yield = ( np.array(excesses) - expected_excess)/(np.array(excess_uncs ) + eps)
+        pulls_sig_yield = pulls_sig_yield[np.abs(pulls_sig_yield) < 10]
+        fout = os.path.join(options.output, "plots/injection_pulls.png")
+        plot_pulls(pulls_sig_yield, "Pull of Signal Yield", fout)
 
-        ns, bins, patches = plt.hist(pulls, bins=num_bins, color='gray', label="Toys", histtype='bar')
 
-        plt.xlabel("Pull of Signal Yield", fontsize =fontsize)
-        plt.tick_params(axis='x', labelsize=fontsize)
-        plt.ylabel("nToys", fontsize =fontsize)
-        plt.tick_params(axis='y', labelsize=fontsize)
+        #xsec pulls v1
+        fig = plt.figure(figsize=fig_size)
+        eps = 1e-6
+        pull_sig_xsec = [(meas_sig_xsecs[i] - true_sig_xsec) / (err_sig_xsecs[i] + eps) for i in range(len(meas_sig_xsecs)) if err_sig_xsecs[i] > eps] 
+        print(meas_sig_xsecs[:5], err_sig_xsecs[:5], pull_sig_xsec[:5])
 
-        mean_pull = np.mean(pulls)
-        err_mean_pull = np.std(pulls)/np.sqrt(len(pulls))
+        fout = os.path.join(options.output, "plots/injection_pulls_xsec.png")
+        plot_pulls(pull_sig_xsec, "Pull of Signal Cross Section", fout)
 
-        plt.plot([mean_pull]*2, [0, np.amax(ns)*line_extra], linestyle = "-", color = "skyblue", linewidth = 3, label = "Mean Toy Pull (%.1f +/- %.1f)" % (mean_pull, err_mean_pull))
-        plt.plot([mean_pull + err_mean_pull]*2, [0, np.amax(ns)*line_extra], linestyle = "--", color = "skyblue", linewidth = 3, label = "+/- 1-sigma Error on Mean Toy Pull")
-        plt.plot([mean_pull - err_mean_pull]*2, [0, np.amax(ns)*line_extra], linestyle = "--", color = "skyblue", linewidth = 3,)
+        #xsec pulls v2
+        xsec_pulls_sampled = []
+        xsec_sampled = []
+        nToys = len(sig_effs)
+        sig_effs =np.array(sig_effs)
+        #sig_effs = sig_effs[(sig_effs > eps)  & (sig_effs < 1.0)]
 
-        plt.ylim((0, 1.7* np.amax(ns)))
-        plt.legend(loc='upper left', fontsize = 16)
+        rng = np.random
+        rng.seed(123)
+        for i in range(nToys):
+            other_idxs = np.delete(np.arange(0,nToys), i)
+            selected = rng.choice(other_idxs, 5, replace = False)
 
-        fname = os.path.join(options.output, "plots/injection_pulls.png")
-        print("Creating " + fname)
-        plt.savefig(fname)
+            sig_eff_mean = np.mean(sig_effs[selected])
+            sig_eff_std = np.std(sig_effs[selected])
 
+            meas_sig_xsec_sampled = convert_to_xsec(excesses[i], sig_eff_mean)
+            err_sig_eff = (sig_eff_std / sig_eff_mean)
+            err_tot = meas_sig_xsec_sampled * (err_sig_eff**2 + (err_sig_xsecs[i]/meas_sig_xsecs[i])**2) ** (0.5)
+
+            xsec_sampled.append(meas_sig_xsec_sampled)
+            xsec_pulls_sampled.append((meas_sig_xsec_sampled  - true_sig_xsec) / err_tot)
+
+
+
+        fout = os.path.join(options.output, "plots/injection_pulls_xsec_sampled.png")
+        plot_pulls(xsec_pulls_sampled, "Pull of Signal Cross Section", fout)
+        fout = os.path.join(options.output, "plots/injection_xsec_sampled.png")
+        plot_pulls(xsec_sampled, "Observed Signal Cross Section", fout)
 
 
 
