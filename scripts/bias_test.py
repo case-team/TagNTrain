@@ -279,9 +279,8 @@ def bias_test(options):
         print("Creating " + fname)
         plt.savefig(fname)
 
-        fig = plt.figure(figsize=fig_size)
 
-        def plot_pulls(pulls, xlabel, fout):
+        def plot_hist(pulls, xlabel, fout = "", text = True):
             fig = plt.figure(figsize=fig_size)
             ns, bins, patches = plt.hist(pulls, bins=num_bins, color='gray', label="Toys", histtype='bar')
 
@@ -290,21 +289,26 @@ def bias_test(options):
             plt.ylabel("nToys", fontsize =fontsize)
             plt.tick_params(axis='y', labelsize=fontsize)
 
-            mean_pull = np.mean(pulls)
-            std_pull = np.std(pulls)
-            err_mean_pull =  std_pull /np.sqrt(len(pulls))
-            err_std_pull =  std_pull /np.sqrt(2*len(pulls)-2)
-            txt = "Mean = %.1f +/- %.1f" % (mean_pull, err_mean_pull)
-            txt2 = "Std Dev = %.2f +/- %.2f" % (std_pull, err_std_pull)
 
-            plt.text(0.3, 0.9, txt, transform = fig.axes[0].transAxes, fontsize = 18)
-            plt.text(0.3, 0.85, txt2, transform = fig.axes[0].transAxes, fontsize = 18)
+            if(text):
+
+                mean_pull = np.mean(pulls)
+                std_pull = np.std(pulls)
+                err_mean_pull =  std_pull /np.sqrt(len(pulls))
+                err_std_pull =  std_pull /np.sqrt(2*len(pulls)-2)
+                txt = "Mean = %.1f +/- %.1f" % (mean_pull, err_mean_pull)
+                txt2 = "Std Dev = %.2f +/- %.2f" % (std_pull, err_std_pull)
+
+                plt.text(0.3, 0.9, txt, transform = fig.axes[0].transAxes, fontsize = 18)
+                plt.text(0.3, 0.85, txt2, transform = fig.axes[0].transAxes, fontsize = 18)
 
             plt.ylim((0, 1.7* np.amax(ns)))
             plt.legend(loc='upper left', fontsize = 16)
 
-            print("Creating " + fout)
-            plt.savefig(fout)
+            if(fout != ""):
+                print("Creating " + fout)
+                plt.savefig(fout)
+            return fig
 
 
         #signal yield pulls
@@ -312,7 +316,7 @@ def bias_test(options):
         pulls_sig_yield = ( np.array(excesses) - expected_excess)/(np.array(excess_uncs ) + eps)
         pulls_sig_yield = pulls_sig_yield[np.abs(pulls_sig_yield) < 10]
         fout = os.path.join(options.output, "plots/injection_pulls.png")
-        plot_pulls(pulls_sig_yield, "Pull of Signal Yield", fout)
+        plot_hist(pulls_sig_yield, "Pull of Signal Yield", fout)
 
 
         #xsec pulls v1
@@ -322,11 +326,12 @@ def bias_test(options):
         print(meas_sig_xsecs[:5], err_sig_xsecs[:5], pull_sig_xsec[:5])
 
         fout = os.path.join(options.output, "plots/injection_pulls_xsec.png")
-        plot_pulls(pull_sig_xsec, "Pull of Signal Cross Section", fout)
+        plot_hist(pull_sig_xsec, "Pull of Signal Cross Section", fout)
 
         #xsec pulls v2
         xsec_pulls_sampled = []
         xsec_sampled = []
+        xsec_obs_lims = []
         nToys = len(sig_effs)
         sig_effs =np.array(sig_effs)
         #sig_effs = sig_effs[(sig_effs > eps)  & (sig_effs < 1.0)]
@@ -347,12 +352,23 @@ def bias_test(options):
             xsec_sampled.append(meas_sig_xsec_sampled)
             xsec_pulls_sampled.append((meas_sig_xsec_sampled  - true_sig_xsec) / err_tot)
 
+            xsec_obs_lims.append(convert_to_xsec(obs_lims[i], sig_eff_mean))
+
 
 
         fout = os.path.join(options.output, "plots/injection_pulls_xsec_sampled.png")
-        plot_pulls(xsec_pulls_sampled, "Pull of Signal Cross Section", fout)
+        plot_hist(xsec_pulls_sampled, "Pull of Signal Cross Section", fout)
         fout = os.path.join(options.output, "plots/injection_xsec_sampled.png")
-        plot_pulls(xsec_sampled, "Observed Signal Cross Section", fout)
+        plot_hist(xsec_sampled, "Observed Signal Cross Section", fout)
+
+        fout = os.path.join(options.output, "plots/xsec_lims.png")
+        fig = plot_hist(xsec_obs_lims, "95%% Upper Limit on Signal Cross Section", fout = "", text = False)
+        plt.vlines([true_sig_xsec], 0, 10, color = 'blue', linestyle = 'dashed')
+
+        xsec_obs_lims = np.array(xsec_obs_lims)
+        coverage = 100. * np.mean(xsec_obs_lims > true_sig_xsec)
+        plt.text(0.3, 0.9, "Coverage = %.1f %%" % coverage, transform = fig.axes[0].transAxes, fontsize = 18)
+        plt.savefig(fout)
 
 
 
