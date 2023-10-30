@@ -128,6 +128,7 @@ def bias_test(options):
             print("Selecting with eff %.03f based on mbin %i" % (eff_point, options.mbin))
 
         for seed in seeds:
+            if(seed < 45): continue
             t_opts = seed_opts(options, seed)
             t_opts.step = "select"
             t_opts.reload = True
@@ -181,6 +182,7 @@ def bias_test(options):
             os.system("mkdir " + os.path.join(options.output, "plots/"))
 
         sig_effs = []
+        sig_effs_inj = []
         excesses = []
         excess_uncs = []
         obs_lims = []
@@ -199,10 +201,16 @@ def bias_test(options):
         true_sig_xsec = convert_to_xsec(options.sig_per_batch * options.numBatches, 1.0)
         print('true injected xsec %.1f' % true_sig_xsec)
 
+        other_injection = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_spb3_may21/"
+        inj_spb = 3
+
         for seed in seeds:
         #for seed in range(10):
             t_opts = seed_opts(options, seed)
             sig_eff = float(get_sig_eff(t_opts.output, eff = options.effs[0]))
+
+            alt_injection = other_injection + ("_%i/" % seed)
+            sig_eff_inj = float(get_sig_eff(alt_injection, eff = options.effs[0]))
 
             fit_res = get_fit_results(outdir = t_opts.output,  m = options.mjj_sig)
             if(fit_res is not None): 
@@ -216,6 +224,7 @@ def bias_test(options):
 
 
             sig_effs.append(sig_eff)
+            sig_effs_inj.append(sig_eff_inj)
             excesses.append(obs_excess_events)
             excess_uncs.append(obs_excess_events_unc)
             obs_lims.append(obs_lim_events)
@@ -332,15 +341,24 @@ def bias_test(options):
         xsec_pulls_sampled = []
         xsec_sampled = []
         xsec_obs_lims = []
+        xsec_obs_lims_inj = []
         nToys = len(sig_effs)
         sig_effs =np.array(sig_effs)
+        sig_effs_inj = np.array(sig_effs_inj)
         #sig_effs = sig_effs[(sig_effs > eps)  & (sig_effs < 1.0)]
+
+        #injection cross section used in limit setting (cross section you 'think' you injected)
+        xsec_inj = convert_to_xsec((inj_spb - options.sig_per_batch) * options.numBatches, 1.0)
+        print("Lim set inj xsec %.2f" % xsec_inj)
 
         rng = np.random
         rng.seed(123)
         for i in range(nToys):
-            other_idxs = np.delete(np.arange(0,nToys), i)
+            #other_idxs = np.delete(np.arange(0,nToys), i)
+            other_idxs = np.arange(0,nToys)
             selected = rng.choice(other_idxs, 5, replace = False)
+
+            sig_eff_inj =  np.mean(sig_effs_inj[selected])
 
             sig_eff_mean = np.mean(sig_effs[selected])
             sig_eff_std = np.std(sig_effs[selected])
@@ -352,21 +370,39 @@ def bias_test(options):
             xsec_sampled.append(meas_sig_xsec_sampled)
             xsec_pulls_sampled.append((meas_sig_xsec_sampled  - true_sig_xsec) / err_tot)
 
-            xsec_obs_lims.append(convert_to_xsec(obs_lims[i], sig_eff_mean))
+            xsec_obs_lims.append(convert_to_xsec(obs_lims[i], sig_effs[i]))
+
+            xsec_lim_inj = convert_to_xsec(obs_lims[i], sig_eff_inj)
+            #xsec_lim_inj = max(xsec_inj, xsec_lim_inj)
+            xsec_obs_lims_inj.append(xsec_lim_inj)
 
 
 
         fout = os.path.join(options.output, "plots/injection_pulls_xsec_sampled.png")
-        plot_hist(xsec_pulls_sampled, "Pull of Signal Cross Section", fout)
+        plot_hist(xsec_pulls_sampled, "Pull of Signal Cross Section", fout = "")
+        plt.xlim(-3,3)
+        plt.savefig(fout)
+
         fout = os.path.join(options.output, "plots/injection_xsec_sampled.png")
-        plot_hist(xsec_sampled, "Observed Signal Cross Section", fout)
+        plot_hist(xsec_sampled, "Observed Signal Cross Section", fout = "")
+        plt.vlines([true_sig_xsec], 0, 15, color = 'blue', linestyle = 'dashed')
+        plt.savefig(fout)
 
         fout = os.path.join(options.output, "plots/xsec_lims.png")
-        fig = plot_hist(xsec_obs_lims, "95%% Upper Limit on Signal Cross Section", fout = "", text = False)
+        fig = plot_hist(xsec_obs_lims, "95% Upper Limit on Signal Cross Section", fout = "", text = False)
         plt.vlines([true_sig_xsec], 0, 10, color = 'blue', linestyle = 'dashed')
 
         xsec_obs_lims = np.array(xsec_obs_lims)
         coverage = 100. * np.mean(xsec_obs_lims > true_sig_xsec)
+        plt.text(0.3, 0.9, "Coverage = %.1f %%" % coverage, transform = fig.axes[0].transAxes, fontsize = 18)
+        plt.savefig(fout)
+
+        fout = os.path.join(options.output, "plots/xsec_lims_inj.png")
+        fig = plot_hist(xsec_obs_lims_inj, "95% Upper Limit on Signal Cross Section", fout = "", text = False)
+        plt.vlines([true_sig_xsec], 0, 10, color = 'blue', linestyle = 'dashed')
+
+        xsec_obs_lims_inj = np.array(xsec_obs_lims_inj)
+        coverage = 100. * np.mean(xsec_obs_lims_inj > true_sig_xsec)
         plt.text(0.3, 0.9, "Coverage = %.1f %%" % coverage, transform = fig.axes[0].transAxes, fontsize = 18)
         plt.savefig(fout)
 

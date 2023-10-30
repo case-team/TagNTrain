@@ -12,7 +12,7 @@ import time
 fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
 fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
 
-def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False, dcb_model = True, sig_norm = -1):
+def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False, dcb_model = True, sig_norm = -1, no_sig = False):
     print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
     base_path = os.path.abspath(".") + "/"
     if(len(output_dir) == 0): output_dir = base_path + options.output
@@ -22,9 +22,14 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
 
 
 
+
     ftest_thresh = 0.1
     err_thresh = 0.15
     dijet_cmd = "python dijetfit.py -i %s -p %s --rebin --ftest_thresh %.2f --err_thresh %.2f" % (input_file, output_dir, ftest_thresh, err_thresh)
+    if(no_sig):
+        label += "_nosig"
+        dijet_cmd += " --no_sig "
+
     if('sig_norm_unc' in options.__dict__.keys() and options.sig_norm_unc > 0.):
         dijet_cmd += " --sig_norm_unc %.3f " % options.sig_norm_unc
 
@@ -203,6 +208,7 @@ def full_run(options):
         rel_opts.recover = options.recover
         rel_opts.lund_weights = options.__dict__.get('lund_weights', True)
         rel_opts.sig_shape = options.__dict__.get('sig_shape', "")
+        rel_opts.no_sig_in_fit = options.__dict__.get('no_sig_in_fit', False)
         if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
         rel_opts.output = options.output #allows renaming / moving directories
         options = rel_opts
@@ -620,7 +626,7 @@ def full_run(options):
         else: sig_shape_file = ""
 
 
-        final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, label = options.fit_label, loop = True)
+        final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, label = options.fit_label, loop = True, no_sig = options.no_sig_in_fit)
         output = final_fit_start
 
 
@@ -746,6 +752,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--sig_shape", default = "", help='signal shape file')
     parser.add_argument("--generic_sig_shape", default = False, action ='store_true')
     parser.add_argument("--no_generic_sig_shape", dest = 'generic_sig_shape', action ='store_false')
+    parser.add_argument("--no_sig_in_fit",default = False, action = 'store_true')
     parser.set_defaults(condor=False)
     parser.add_argument("--step", default = "train",  help = 'Which step to perform (train, get, select, fit, roc, all)')
     parser.add_argument("--fit_start", default = -1.,  type = float, help = 'Lowest mjj value for dijet fit')
