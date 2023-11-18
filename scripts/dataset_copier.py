@@ -11,6 +11,7 @@ parser.add_argument("-o", "--outdir", default='', help="output for analyzer. Thi
 parser.add_argument("--batchStart", default = -1,  type = int, help = "Starting batch")
 parser.add_argument("--batchStop", default = 40,  type = int, help = "Stop batch")
 parser.add_argument("--sig_file", default = "", help = "Name of signal file")
+parser.add_argument("--sig2_file", default = "", help = "Name of second signal file")
 parser.add_argument("--sig_file_out", default = "", help = "Where to put signal file")
 options = parser.parse_args()
 
@@ -35,9 +36,13 @@ for f in file_list:
     else:
         print("Skipping %s" % f)
 
+#sig_file_base = eos_base + "/store/user/oamram/case/sig_files/"
+sig_file_base = eos_base + "/store/user/oamram/case/sig_files/LundRW/"
+
 if(len(options.sig_file) > 0 and len(options.sig_file_out) > 0):
-    #sig_file_base = eos_base + "/store/user/oamram/case/sig_files/"
-    sig_file_base = eos_base + "/store/user/oamram/case/sig_files/LundRW/"
     print("Copying sig file %s %s"  % (sig_file_base + options.sig_file, options.sig_file_out))
     os.system("xrdcp %s %s" % (sig_file_base + options.sig_file, options.sig_file_out))
 
+if(len(options.sig2_file) > 0 and len(options.sig_file_out) > 0):
+    print("Copying sig2 file %s %s"  % (sig_file_base + options.sig2_file, options.sig_file_out))
+    os.system("xrdcp %s %s" % (sig_file_base + options.sig2_file, options.sig_file_out))

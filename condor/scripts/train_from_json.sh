@@ -8,7 +8,7 @@ mkdir data
 source /cvmfs/cms-lpc.opensciencegrid.org/sl7/gpu/Setup.sh
 source /cvmfs/cms-lpc.opensciencegrid.org/sl7/gpu/anaconda3/bin/activate mlenv0
 set -x
-python scripts/dataset_copier.py -i /store/user/oamram/case/BBs/BB_NAME/ -o data/BB --sig_file_out data/ SIGFILE
+python scripts/dataset_copier.py -i /store/user/oamram/case/BBs/BB_NAME/ -o data/BB --sig_file_out data/ SIGFILE SIG2FILE
 mkdir temp
 cd temp
 

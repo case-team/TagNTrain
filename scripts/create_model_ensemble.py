@@ -96,6 +96,12 @@ def create_model_ensemble(options):
         else:
             os.system("sed -i 's/SIGFILE//g' %s" % (train_script))
 
+        if('sig2_file' in options.__dict__.keys() and  len(options.sig2_file) > 0):
+            sig_fn = options.sig2_file.split("/")[-1]
+            os.system("sed -i 's/SIG2FILE/%s/g' %s" % ("--sig2_file " + sig_fn, train_script))
+        else:
+            os.system("sed -i 's/SIG2FILE//g' %s" % (train_script))
+
         if(options.do_TNT and (options.mbin == 1 or options.mbin == 2 or options.mbin == 11 or options.mbin == 12)):
             c_opts.mem = 6000
 
