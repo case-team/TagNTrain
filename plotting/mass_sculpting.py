@@ -8,6 +8,7 @@ from optparse import OptionGroup
 
 parser = input_options()
 parser.add_argument("--use_SB", default=False, action = 'store_true',  help="Define efficiency in SB's")
+parser.add_argument("--no_quantile", default=False, action = 'store_true',  help="No quantiles for score comb")
 options = parser.parse_args()
 
 
@@ -25,7 +26,7 @@ options = parser.parse_args()
 num_data = options.num_data
 data_start = options.data_start
 
-threshholds = [99.5, 99., 96., 90., 75., 0.0]
+threshholds = [99.9, 99.5, 99., 96., 90., 75., 0.0]
 n_pts = len(threshholds)
 color_threshholds = [100./n_pts * i for i in range(n_pts)]
 
@@ -68,10 +69,14 @@ print("Using model %s" % options.labeler_name)
 if(options.model_type <= 2 or options.model_type == 5): #classifier on each jet
 
     j1_score, j2_score = get_jet_scores("", options.labeler_name, options.model_type, j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, num_models = options.num_models)
-    j1_QT = QuantileTransformer(copy = True)
-    j1_qs = j1_QT.fit_transform(j1_score.reshape(-1,1)).reshape(-1)
-    j2_QT = QuantileTransformer(copy = True)
-    j2_qs = j2_QT.fit_transform(j2_score.reshape(-1,1)).reshape(-1)
+    if(options.no_quantile):
+        j1_qs = j1_score
+        j2_qs = j2_score
+    else:
+        j1_QT = QuantileTransformer(copy = True)
+        j1_qs = j1_QT.fit_transform(j1_score.reshape(-1,1)).reshape(-1)
+        j2_QT = QuantileTransformer(copy = True)
+        j2_qs = j2_QT.fit_transform(j2_score.reshape(-1,1)).reshape(-1)
 
     jj_scores = j1_qs * j2_qs
 else:

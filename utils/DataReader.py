@@ -183,6 +183,8 @@ class DataReader:
     DR_count = 0
 
     def __init__(self, iterable = (), **kwargs):
+        print(kwargs)
+        print(kwargs.get('sig_file', ''))
 
         self.ready = False
         #second  arg is default argument
@@ -210,10 +212,14 @@ class DataReader:
 
         self.sig_idx = kwargs.get('sig_idx', 1)
         self.sig_file = kwargs.get('sig_file', '')
+        print('self', self.sig_file)
+
+        self.sig2_file = kwargs.get('sig2_file', '')
         self.sig_weights = kwargs.get('sig_weights', False)
         self.lund_weights = kwargs.get('lund_weights', True)
         self.sig_frac = kwargs.get('sig_frac', -1.)
         self.sig_per_batch = kwargs.get('sig_per_batch', -1.0)
+        self.sig2_per_batch = kwargs.get('sig2_per_batch', -1.0)
         self.spb_before_selection = kwargs.get('spb_before_selection', False)
 
         self.sig_sys = kwargs.get('sig_sys', '')
@@ -248,9 +254,13 @@ class DataReader:
 
 
         if(self.verbose): print("Creating dataset. Mass range %.0f - %.0f. Delta Eta %.1f -  %.1f" % (self.keep_mlow, self.keep_mhigh, self.deta_min, self.deta))
+        self.sep_signal = len(self.sig_file) > 0 and not self.sig_only
 
         self.sys_norm_reweight = 1.0
+
         if(not os.path.exists(self.sig_file)): self.sig_file = self.sig_file.replace("data/","data/LundRW/")
+        if(not os.path.exists(self.sig2_file)): self.sig2_file = self.sig2_file.replace("data/","data/LundRW/")
+
         if(len(self.sig_file ) > 0 ):
             if(self.verbose): print("Loading signal %s " % self.sig_file)
             self.sig_file_h5 = h5py.File(self.sig_file, "r")
@@ -262,9 +272,9 @@ class DataReader:
                 self.sys_norm_reweight = get_avg_sys_reweight(self.sig_file_h5, self.sig_sys, self.deta, self.deta_min, lund_weights = self.lund_weights)
                 print("Sys %s : Sig norm reweight is %.4f" % (self.sig_sys, self.sys_norm_reweight))
 
-        self.sep_signal = len(self.sig_file) > 0 and not self.sig_only
-
-
+        if(len(self.sig2_file) > 0 ):
+            if(self.verbose): print("Loading second signal %s " % self.sig2_file)
+            self.sig2_file_h5 = h5py.File(self.sig2_file, "r")
 
 
         keys = kwargs.get('keys', None)
@@ -375,24 +385,34 @@ class DataReader:
             self.num_total_batches = 40
         else:
             self.num_total_batches = 80
-        self.sig_marker = 0
-        self.sig_chunk_size  = 1
+        self.sig1_marker = 0
+        self.sig2_marker = 0
+        self.sig1_chunk_size  = 1
+        self.sig2_chunk_size  = 1
         self.batchIdx = -1
 
         if(len(self.sig_file) > 0):
             self.nsig_in_file = self.sig_file_h5['event_info'].shape[0]
 
-            #self.sig_chunk_size = int(self.nsig_in_file / (2. * len(self.batch_list)))
-            self.sig_chunk_size = int(self.nsig_in_file / self.num_total_batches)
+            self.sig1_chunk_size = int(self.nsig_in_file / self.num_total_batches)
             
-            if(self.sig_chunk_size <= self.sig_per_batch):
+            if(self.sig1_chunk_size <= self.sig_per_batch):
                 print("WARNING: Not enough signal to split across 40 batches, splitting only across this sample, could cause repeats in later runs!")
-                self.sig_chunk_size = int(self.nsig_in_file / (len(self.batch_list)))
+                self.sig1_chunk_size = int(self.nsig_in_file / (len(self.batch_list)))
+
+        if(len(self.sig2_file) > 0):
+            self.nsig2_in_file = self.sig2_file_h5['event_info'].shape[0]
+
+            self.sig2_chunk_size = int(self.nsig_in_file / self.num_total_batches)
+            
+            if(self.sig2_chunk_size <= self.sig2_per_batch):
+                print("WARNING: Not enough signal to split across 40 batches, splitting only across this sample, could cause repeats in later runs!")
+                self.sig2_chunk_size = int(self.nsig2_in_file / (len(self.batch_list)))
 
 
         if(self.sig_only):
-            self.data_start = np.amin(self.batch_list) * self.sig_chunk_size
-            self.data_stop = self.data_start + self.sig_chunk_size * len(self.batch_list)
+            self.data_start = np.amin(self.batch_list) * self.sig1_chunk_size
+            self.data_stop = self.data_start + self.sig1_chunk_size * len(self.batch_list)
             self.read_batch(self.sig_file)
 
         elif(self.multi_batch):
@@ -403,7 +423,8 @@ class DataReader:
                     print("%i events read, above max (%i). Stopping loading" % (self.nEvents, self.max_events))
                     break
                 self.batchIdx = i
-                self.sig_marker = self.sig_chunk_size * i
+                self.sig1_marker = self.sig1_chunk_size * i
+                self.sig2_marker = self.sig2_chunk_size * i
                 if(self.data): preface = 'data_'
                 else: preface = 'BB_'
                 f_name = self.fin + preface + "images_batch%i.h5" % i 
@@ -574,7 +595,7 @@ class DataReader:
 
 
             #save labels 
-            t_labels = labels[mask]
+            self.t_labels = labels[mask]
 
 
             #save data in other keys
@@ -588,28 +609,50 @@ class DataReader:
                 swapping_idxs = self.rng.choice(a=[True,False], size = f['jet_kinematics'][cstart:cstop][mask].shape[0])
 
 
-            num_sig_inj = 0
-            #load separate signal data
-            if(self.sep_signal and self.sig_per_batch > 0):
-                sig_mask_temp = np.ones(self.sig_chunk_size, dtype = bool)
-                s_start = self.sig_marker
-                s_stop = self.sig_marker + self.sig_chunk_size
+            self.num_sig1_inj = 0
+            self.num_sig2_inj = 0
 
-                if(s_stop > self.nsig_in_file):
+            #load separate signal data
+            s1_start = self.sig1_marker
+            s1_stop = self.sig1_marker + self.sig1_chunk_size
+            s2_start = self.sig2_marker
+            s2_stop = self.sig2_marker + self.sig2_chunk_size
+
+            def add_signal(idx):
+                if(idx == 1):
+                    s_start = s1_start
+                    s_stop =  s1_stop
+                    sig_chunk_size = self.sig1_chunk_size
+                    nsig_in_file = self.nsig_in_file
+                    sig_file_h5 = self.sig_file_h5
+                    num_sig_inj = self.sig_per_batch
+                else:
+                    s_start = s1_start
+                    s_stop =  s1_stop
+                    sig_chunk_size = self.sig2_chunk_size
+                    nsig_in_file = self.nsig2_in_file
+                    sig_file_h5 = self.sig2_file_h5
+                    num_sig_inj = self.sig2_per_batch
+
+
+                if(s_stop > nsig_in_file):
                     print("Not enough signal events in file (more than %i), exiting" % self.nsig_in_file)
                     exit(1)
+
+                sig_mask_temp = np.ones(sig_chunk_size, dtype = bool)
+
                 if(self.hadronic_only):
-                    is_lep = self.sig_file_h5['event_info'][s_start:s_stop:,4] # stored as a float
+                    is_lep = sig_file_h5['event_info'][s_start:s_stop:,4] # stored as a float
                     sig_mask_temp = sig_mask_temp & (is_lep < 0.1)
                     if(self.verbose): print("Hadronic only mask has mean %.3f " % np.mean(is_lep < 0.1))
 
                 #local copy to allow JME modifications
-                sig_jet_kinematics = np.copy(self.sig_file_h5["jet_kinematics"][s_start:s_stop])
+                sig_jet_kinematics = np.copy(sig_file_h5["jet_kinematics"][s_start:s_stop])
                 if(len(self.sig_sys) > 0 and self.sig_sys in JME_vars):
                     #Apply JME variation
                     m_idx = JME_vars_map["m_" + self.sig_sys]
-                    j1_m_corr = self.sig_file_h5["jet1_JME_vars"][s_start:s_stop, m_idx]
-                    j2_m_corr = self.sig_file_h5["jet2_JME_vars"][s_start:s_stop, m_idx]
+                    j1_m_corr = sig_file_h5["jet1_JME_vars"][s_start:s_stop, m_idx]
+                    j2_m_corr = sig_file_h5["jet2_JME_vars"][s_start:s_stop, m_idx]
 
 
                     sig_jet_kinematics [:, 5] = j1_m_corr
@@ -617,8 +660,8 @@ class DataReader:
 
                     if('JE' in self.sig_sys): #also correct pt (JES and JER)
                         pt_idx = JME_vars_map["pt_" + self.sig_sys]
-                        j1_pt_corr = self.sig_file_h5["jet1_JME_vars"][s_start:s_stop, pt_idx]
-                        j2_pt_corr = self.sig_file_h5["jet2_JME_vars"][s_start:s_stop, pt_idx]
+                        j1_pt_corr = sig_file_h5["jet1_JME_vars"][s_start:s_stop, pt_idx]
+                        j2_pt_corr = sig_file_h5["jet2_JME_vars"][s_start:s_stop, pt_idx]
 
                         sig_jet_kinematics [:, 2] = j1_pt_corr
                         sig_jet_kinematics [:, 6] = j2_pt_corr
@@ -646,25 +689,24 @@ class DataReader:
                     if(self.hadronic_only):
                         sig_deta_eff = np.mean(deta_mask[is_lep < 0.1]) #compute deta eff for hadronic only
 
-                idx_list = np.arange(0, self.sig_chunk_size)
-                num_sig_inj = self.sig_per_batch
+                idx_list = np.arange(0, sig_chunk_size)
                 if(self.replace_ttbar):
-                    ttbar_norm_change = self.sig_file_h5['top_ptrw_avg'][0]
+                    ttbar_norm_change = sig_file_h5['top_ptrw_avg'][0]
                     num_sig_inj = num_ttbar * ttbar_norm_change
                     self.spb_before_selection = True
 
                 if(self.sig_weights): #do weighted random sampling of signal events
-                    sig_weights = self.sig_file_h5['sys_weights'][s_start:s_stop, 0][sig_mask_temp]
-                    if(self.lund_weights): sig_weights *= self.sig_file_h5['lund_weights'][s_start:s_stop][sig_mask_temp]
+                    sig_weights = sig_file_h5['sys_weights'][s_start:s_stop, 0][sig_mask_temp]
+                    if(self.lund_weights): sig_weights *= sig_file_h5['lund_weights'][s_start:s_stop][sig_mask_temp]
 
                     if(len(self.sig_sys) > 0 and self.sig_sys in sys_weights_map.keys()):
                         weight_idx = sys_weights_map[self.sig_sys]
-                        sig_weights *= self.sig_file_h5['sys_weights'][s_start:s_stop,weight_idx][sig_mask_temp]
+                        sig_weights *= sig_file_h5['sys_weights'][s_start:s_stop,weight_idx][sig_mask_temp]
                         num_sig_inj *= self.sys_norm_reweight
 
                     elif(len(self.sig_sys) > 0 and self.sig_sys in lund_vars):
                         weight_idx = lund_vars_map[self.sig_sys]
-                        sig_weights *= self.sig_file_h5['lund_weights_sys_var'][s_start:s_stop,weight_idx][sig_mask_temp]
+                        sig_weights *= sig_file_h5['lund_weights_sys_var'][s_start:s_stop,weight_idx][sig_mask_temp]
                         num_sig_inj *= self.sys_norm_reweight
 
                     #used for the random sampling
@@ -702,8 +744,10 @@ class DataReader:
 
                 if(self.sig_weights): sig_idxs = self.rng.choice(idx_list[sig_mask_temp], num_sig_inj, replace = False, p = probs)
                 else: sig_idxs = idx_list[sig_mask_temp][:num_sig_inj]
-                sig_final_mask = np.zeros(self.sig_chunk_size, dtype = bool)
+                sig_final_mask = np.zeros(sig_chunk_size, dtype = bool)
                 sig_final_mask[sig_idxs] = True
+
+
 
                 if(self.ptsort):
                     j1_pt_sig = sig_jet_kinematics[sig_final_mask, 2]
@@ -713,23 +757,33 @@ class DataReader:
                 elif(self.randsort):
                     swapping_idxs = np.append(swapping_idxs, self.rng.choice(a=[True,False], size = num_sig_inj), axis=0)
 
+                if(idx==1): self.sig1_final_mask = sig_final_mask
+                else: self.sig2_final_mask = sig_final_mask
 
-            #combine labels
-            if(self.sep_signal and num_sig_inj > 0): 
+                if(idx==1): self.sig1_jet_kinematics = sig_jet_kinematics
+                else: self.sig2_jet_kinematics = sig_jet_kinematics
+
+                if(idx==1): self.num_sig1_inj = num_sig_inj
+                else: self.num_sig2_inj = num_sig_inj
+
                 extra_labels = np.expand_dims(np.ones(num_sig_inj, dtype=np.int8),axis=-1)
-                if(self.replace_ttbar): np.expand_dims(np.array([-2]*num_sig_inj, dtype = np.int8), axis = -1)
-                t_labels = np.append(t_labels, extra_labels, axis=0)
-            #print("# sig events: ", np.sum(t_labels == 1))
-            self.nEvents += t_labels.shape[0]
+                self.t_labels = np.append(self.t_labels, extra_labels, axis=0)
 
+
+            if(self.sep_signal and self.sig_per_batch > 0): add_signal(1) #sig_file 1
+            if(self.sep_signal and self.sig2_per_batch > 0): add_signal(2) #sig_file 2
 
             #Shuffle before saving
-            if(self.sep_signal and num_sig_inj > 0):
+            t_labels = self.t_labels
+
+            if(self.sep_signal and self.sig_per_batch > 0):
                 shuffle_order = np.random.permutation(t_labels.shape[0])
                 if(swapping_idxs.shape[0] > 0):
                     swapping_idxs = swapping_idxs[shuffle_order]
             else:
                 shuffle_order = np.arange(t_labels.shape[0])
+
+            self.nEvents += t_labels.shape[0]
 
             #save labels
             t_labels = t_labels[shuffle_order]
@@ -740,12 +794,20 @@ class DataReader:
 
 
             for ikey,key in enumerate(self.keys):
-
                 data = self.get_key(f,cstart, cstop, mask, key)
 
-                if(self.sep_signal and num_sig_inj > 0): 
-                    if(key == 'jet_kinematics'): sig_data = sig_jet_kinematics[sig_final_mask]
-                    else: sig_data = self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, key)
+                if(self.sep_signal and self.num_sig1_inj > 0): 
+                    if(key == 'jet_kinematics'): 
+                        sig_data = self.sig1_jet_kinematics[self.sig1_final_mask]
+                        if(self.num_sig2_inj > 0):
+                            sig2_data = self.sig2_jet_kinematics[self.sig2_final_mask]
+                            sig_data = np.append(sig_data, sig2_data, axis = 0)
+                    else: 
+                        sig_data = self.get_key(self.sig_file_h5, s1_start, s1_stop, self.sig1_final_mask, key)
+                        if(self.num_sig2_inj > 0):
+                            sig2_data = self.get_key(self.sig2_file_h5, s2_start, s2_stop, self.sig2_final_mask, key)
+                            sig_data = np.append(sig_data, sig2_data, axis = 0)
+
                     data = np.append(data, sig_data, axis= 0)
                     data = data[shuffle_order]
 
@@ -753,7 +815,14 @@ class DataReader:
                     if('j1' in key): opp_key = 'j2' + key[2:]
                     else: opp_key = 'j1' + key[2:]
                     opp_data = self.get_key(f,cstart, cstop, mask, opp_key)
-                    if(self.sep_signal and num_sig_inj > 0): opp_data = np.append(opp_data, self.get_key(self.sig_file_h5, s_start, s_stop, sig_final_mask, opp_key), axis=0)
+                    if(self.sep_signal and self.num_sig1_inj > 0): 
+                        opp_sig_data = self.get_key(sig_file_h5, s1_start, s1_stop, self.sig1_final_mask, opp_key)
+
+                        if(self.num_sig2_inj > 0): 
+                            opp_sig2_data = self.get_key(sig_file_h5, s2_start, s2_stop, self.sig2_final_mask, opp_key)
+                            opp_sig_data = np.append(opp_sig_data, opp_sig2_data, axis=0)
+
+                        opp_data = np.append(opp_data, opp_sig_data, axis=0)
                     data[swapping_idxs] = opp_data[shuffle_order][swapping_idxs]
 
 

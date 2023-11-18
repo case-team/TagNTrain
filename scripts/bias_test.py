@@ -65,6 +65,7 @@ def bias_test(options):
             rel_opts.seed = options.seed
             rel_opts.BB_seed = options.BB_seed
             rel_opts.refit = options.refit
+            rel_opts.plot_label = options.plot_label
             if(len(options.effs) >0): rel_opts.effs = options.effs
             if(options.sig_per_batch >= 0): rel_opts.sig_per_batch = options.sig_per_batch
 
@@ -128,7 +129,6 @@ def bias_test(options):
             print("Selecting with eff %.03f based on mbin %i" % (eff_point, options.mbin))
 
         for seed in seeds:
-            if(seed < 45): continue
             t_opts = seed_opts(options, seed)
             t_opts.step = "select"
             t_opts.reload = True
@@ -148,6 +148,7 @@ def bias_test(options):
 
     if(do_fit):
         for seed in seeds:
+            if(seed <= 44): continue
             t_opts = seed_opts(options, seed)
             t_opts.step = "fit"
 
@@ -203,9 +204,12 @@ def bias_test(options):
 
         other_injection = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_spb3_may21/"
         inj_spb = 3
+        #other_injection = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_3TeV_spb2_oct25/"
+        #inj_spb = 2
 
         for seed in seeds:
         #for seed in range(10):
+            if(seed == 44): continue
             t_opts = seed_opts(options, seed)
             sig_eff = float(get_sig_eff(t_opts.output, eff = options.effs[0]))
 
@@ -373,7 +377,7 @@ def bias_test(options):
             xsec_obs_lims.append(convert_to_xsec(obs_lims[i], sig_effs[i]))
 
             xsec_lim_inj = convert_to_xsec(obs_lims[i], sig_eff_inj)
-            #xsec_lim_inj = max(xsec_inj, xsec_lim_inj)
+            xsec_lim_inj = max(xsec_inj, xsec_lim_inj)
             xsec_obs_lims_inj.append(xsec_lim_inj)
 
 
@@ -404,7 +408,13 @@ def bias_test(options):
         xsec_obs_lims_inj = np.array(xsec_obs_lims_inj)
         coverage = 100. * np.mean(xsec_obs_lims_inj > true_sig_xsec)
         plt.text(0.3, 0.9, "Coverage = %.1f %%" % coverage, transform = fig.axes[0].transAxes, fontsize = 18)
+        plt.text(0.3, 0.85, options.plot_label, transform = fig.axes[0].transAxes, fontsize = 18)
         plt.savefig(fout)
+
+        print("Avg data sig eff %.3f" % np.mean(sig_effs))
+        print("Avg data inj sig eff %.3f" % np.mean(sig_effs_inj))
+        print("Avg taggerData lim %.3f" % np.mean(xsec_obs_lims))
+        print("Avg anomaly lim %.3f" % np.mean(xsec_obs_lims_inj))
 
 
 
@@ -418,6 +428,7 @@ if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--sig_norm_unc", default = -1.0, type = float, help = "parameter for fit (uncertainty on signal efficiency)")
     parser.add_argument("--ae_dir", default = "", help = "directory with all the autoencoders (auto pick the right mbin and kfold)")
+    parser.add_argument("--plot_label", default = "", help = "directory with all the autoencoders (auto pick the right mbin and kfold)")
     parser.add_argument("--spbs", nargs="+", default = [], type = float)
     parser.add_argument("--effs", nargs="+", default = [], type = float)
     parser.add_argument("--kfolds", default = 5, type = int)

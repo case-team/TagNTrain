@@ -9,7 +9,7 @@ from utils.TrainingUtils import *
 import mplhep as hep
 
 
-def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", fout = ""):
+def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], leg_order = [], exclude_idxs = [], fout = ""):
     #pval plot
     plt.style.use(hep.style.CMS)
     plt.figure(figsize=(15,10))
@@ -34,7 +34,11 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", fout = ""):
 
     #Draw p-vals
     overflow_thresh =  3e-13
-    for i in range(len(pval_lists)):
+    filled_gap = False
+    entries = []
+    leg_labels = []
+    for i in leg_order:
+        if(i in exclude_idxs): continue
         overflow_xs = []
         overflow_vals = []
         regular_xs = []
@@ -50,11 +54,20 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", fout = ""):
 
         #print("reg", regular_xs, regular_vals)
         #print("over", overflow_xs, overflow_vals)
-        plt.plot(regular_xs, regular_vals,  '-o',  markersize = 10.0, c = colors[i], label = labels[i],)
-        plt.plot(overflow_xs, overflow_vals, '-v',  marker = "v", markersize = 15.0, c= colors[i])
+        entry, = plt.plot(regular_xs, regular_vals,  markersize = 15 if markers[i]=='x' else 10.0, c = colors[i], label = labels[i], marker=markers[i], linestyle = linestyles[i])
+        plt.plot(overflow_xs, overflow_vals, '-v',  marker = "v", markersize = 15.0, c= colors[i], linestyle = linestyles[i])
         if(len(overflow_xs) > 0):
             #line connecting two sets of points
-            plt.plot([regular_xs[-1], overflow_xs[0]], [regular_vals[-1], overflow_vals[0]], "-", color = colors[i])
+            plt.plot([regular_xs[-1], overflow_xs[0]], [regular_vals[-1], overflow_vals[0]], "-", color = colors[i], linestyle = linestyles[i])
+
+        #add a gap before reference models in legend
+        if(linestyles[i] == 'dashed' and not filled_gap):
+            entries.append(matplotlib.lines.Line2D([],[],linestyle=''))
+            leg_labels.append("")
+            filled_gap = True
+        entries.append(entry)
+        leg_labels.append(labels[i])
+
 
 
 
@@ -72,7 +85,7 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", fout = ""):
     plt.xlim(-0.25*xmax, xmax * 1.08)
     #hep.cms.text(" Preliminary")
     hep.cms.label( data = False)
-    plt.legend(loc = 'center left', title = title, fontsize = 18)
+    plt.legend(entries, leg_labels, loc = 'center left', title = title, fontsize = 18)
     plt.savefig(fout , bbox_inches="tight")
     print("Saving " + fout)
     plt.close()
@@ -126,8 +139,17 @@ colors = ['black', '#F739F2', '#702963', '#228B22', '#0271BB', '#E2001A', '#FCB4
 # gray
 '#949494', 'sienna','tan' ]
 
-#fs_Wp = [[], "cwola_Wp3000_params.json", "TNT_Wp3000_params.json", [], [], [], [] ]
-#fs_X = [[], "cwola_X3000_params.json", "TNT_X3000_params.json", [], [], [], [] ] 
+markers = ['o', 's', 'P', 'p', '*', 'X', 'D', 'd', 'x', 'h']
+linestyles = ['solid',] * 10
+
+linestyles[0] = 'dashed'
+linestyles[7] = 'dashed'
+linestyles[8] = 'dashed'
+linestyles[9] = 'dashed'
+
+#remove CATHODE-b
+excludes = [5] 
+leg_order = [1,2,3,4,5,6,7,8,9,0]
 
 fs_Wp = [[]]*10
 fs_X = [[]]*10
@@ -189,7 +211,7 @@ no_taus = False
 #fs_Wp[8] = [0.024, 2.98e-6, 2.37e-9, 9.836e-11, 1.48e-11, 7.07e-17]
 
 fs = [fs_Wp, fs_X]
-fouts = ["Wp_pvals.png", "XYYp_pvals.png"]
+fouts = ["Wp_pvals.pdf", "XYYp_pvals.pdf"]
 
 
 for l_idx,flist  in enumerate(fs):
@@ -226,4 +248,4 @@ for l_idx,flist  in enumerate(fs):
             all_pvals.append(pvals)
 
 
-    make_pval_plot(xsecs_inj, all_pvals, labels, colors, title = titles[l_idx], fout = odir + fouts[l_idx])
+    make_pval_plot(xsecs_inj, all_pvals, labels, colors, title = titles[l_idx], markers = markers, fout = odir + fouts[l_idx], exclude_idxs = excludes, leg_order = leg_order)

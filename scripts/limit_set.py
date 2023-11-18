@@ -306,6 +306,34 @@ def output_json(options):
 
     print("\n")
 
+def make_sig_eff_plot(options, sig_effs, spbs):
+
+    injected_xsecs = np.array([( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs])
+
+    pointsize = 100
+    fig_size = (12,9)
+    fout = options.output + "plots/" + options.label + "_sig_eff_plot.png"
+    plt.figure(figsize=fig_size)
+
+    plt.scatter( injected_xsecs, sig_effs, color = "blue", s = pointsize)
+    plt.ylim([0, None])
+    plt.xlim([-0.2, None])
+
+    plt.tick_params(axis='y', labelsize=18)
+    plt.tick_params(axis='x', labelsize=18)
+    plt.xlabel("Cross section (fb)", fontsize=30)
+    plt.ylabel("Signal Efficiency", fontsize=30)
+
+
+    #text_str = 'TNT : X -> YY, 3 TeV'
+    text_str = "TNT : W' -> B't, 3 TeV"
+
+    plt.annotate(text_str, xy = (0.03, 0.9),  xycoords = 'axes fraction', fontsize=24)
+
+    plt.savefig(fout, bbox_inches = 'tight')
+
+
+
 
 def make_limit_plot(options, sig_effs, spbs):
     fout = options.output + "plots/" + options.label + "_limit_plot.png"
@@ -802,6 +830,8 @@ def limit_set(options):
 
         make_limit_plot(options, sig_effs, spbs_to_run)
         options.saved_params['preselection_eff'] = options.preselection_eff
+
+        make_sig_eff_plot(options, sig_effs, spbs_to_run)
 
 
         if(np.sum(signifs) > 0):

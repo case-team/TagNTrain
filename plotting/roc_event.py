@@ -15,7 +15,7 @@ options.keep_mlow = options.mjj_low
 options.keep_mhigh = options.mjj_high
 
 options.no_minor_bkgs = True
-options.hadronic_only = True
+options.hadronic_only = False
 options.deta = 1.3
 
 
@@ -24,35 +24,15 @@ sic_max = 10
 #model_dir = "../models/batch_size_test/"
 #model_dir = "../models/AEs/"
 
-model_dir = "../runs/TNT_X3000_Y170_Yp170_feb16/spb3.0/"
-plot_dir = "../runs/TNT_X3000_Y170_Yp170_feb16/spb3.0/"
+model_dir = ""
+plot_dir = "../plots/supervised_XYY_test/"
 
 #model_dir = "../runs/TNT_XYY_model1_test_mar6/"
 #plot_dir = "../runs/TNT_XYY_model1_test_mar6/"
 
 f_models = [
-        #'jrand_autoencoder_m3000.h5',
-        #'AEs_CR_may16/jrand_AE_kfold0_mbin13.h5',
-#'{j_label}_wp_3tev_test.h5',
-#'{j_label}_wp_3tev_smallnet_test.h5',
-#'{j_label}_wp_3tev_supervised_test.h5',
-#'{j_label}_wp_3tev_supervised_smallnet_test.h5',
-#'jrand_wp_3tev_test2.h5',
-#'jrand_wp_smallnet_3tev_test2.h5',
-#'jrand_wp_3tev_smallnet_test.h5',
-#'{j_label}_supervised_Wp.h5',
-#'{j_label}_supervised_Wp_cliptau1.h5',
-#'{j_label}_supervised_Wp_notau1.h5',
-#'{j_label}_supervised_XYY.h5',
-#'{j_label}_supervised_notau1_XYY.h5',
-#'{j_label}_baseline.h5',
-#'{j_label}_batch2k.h5',
-#'{j_label}_batch8k.h5',
-'jrand_kfold0/',
-'jrand_kfold1/',
-'jrand_kfold2/',
-'jrand_kfold3/',
-'jrand_kfold4/',
+'../runs/limits/TNT_XToYYprimeTo4Q_MX3000_MY400_MYprime400/spb10.0/jrand_kfold0/',
+'../models/supervised/{j_label}_XToYYprimeTo4Q_MX3000_MY400_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5',
 
 ]
 
@@ -65,11 +45,8 @@ labels = [
         #'supervised',
         #'supervised clip tau1',
         #'supervised no tau1',
-        'kfold 0',
-        'kfold 1',
-        'kfold 2',
-        'kfold 3',
-        'kfold 4',
+        'TNT',
+        'Supervised',
         ]
 
 
@@ -78,9 +55,10 @@ labels = [
 #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
 model_type = [2,2,2,2,2,2]
 #model_type = [2,2,2,2,2,2]
-num_models = [4,4,4,4,4,4]
-#rand_sort = [False, False, False, False, False, False]
-rand_sort = [True]*6
+num_models = [4,1,4,4,4,4]
+rand_sort = [False, False, False, False, False, False]
+quantile = [True, False]
+#rand_sort = [True]*6
 
 #f_models = ["autoencoder_m3500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]
 #f_models = ["autoencoder_m3500.h5",  "mar15_deta/dense_deta_sig025_TNT1_s%i.h5", "mar15_deta/cwola_hunting_dense_deta_sig025_s%i.h5"]
@@ -167,10 +145,15 @@ for idx,f in enumerate(f_models):
             j1_score, j2_score = get_jet_scores(model_dir, f, model_type[idx], j1_images, j2_images, j1_dense_inputs_, j2_dense_inputs_, num_models = num_models [idx])
         Y = Y.reshape(-1)
 
-        j1_QT = QuantileTransformer(copy = True)
-        j1_qs = j1_QT.fit_transform(j1_score.reshape(-1,1)).reshape(-1)
-        j2_QT = QuantileTransformer(copy = True)
-        j2_qs = j2_QT.fit_transform(j2_score.reshape(-1,1)).reshape(-1)
+        if(quantile[idx]):
+            j1_QT = QuantileTransformer(copy = True)
+            j1_qs = j1_QT.fit_transform(j1_score.reshape(-1,1)).reshape(-1)
+            j2_QT = QuantileTransformer(copy = True)
+            j2_qs = j2_QT.fit_transform(j2_score.reshape(-1,1)).reshape(-1)
+        else:
+            j1_qs = j1_score
+            j2_qs = j2_score
+
 
         #j1_qs = quantile_transform(j1_score.reshape(-1,1)).reshape(-1)
         #j2_qs = quantile_transform(j2_score.reshape(-1,1)).reshape(-1)

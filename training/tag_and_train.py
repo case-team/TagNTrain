@@ -35,9 +35,6 @@ def tag_and_train(options):
         print("Training jet not 1 or 2! Exiting")
         exit(1)
 
-    if(options.labeler_name == ""):
-        print("Must provide labeler name!")
-        exit(1)
 
     plot_prefix = "TNT" + str(options.tnt_iter) + "_" + network_type 
 
@@ -57,6 +54,10 @@ def tag_and_train(options):
     l_key2 = ""
     if("saved_AE_scores" not in options.__dict__.keys()):
         options.saved_AE_scores = False
+
+    if(options.labeler_name == "" and not options.saved_AE_scores):
+        print("Must provide labeler name!")
+        exit(1)
     if(options.use_images):
         options.keys = ['mjj', 'j1_images', 'j2_images']
         if(not options.no_ptrw): options.keys.append('jet_kinematics')
@@ -107,8 +108,11 @@ def tag_and_train(options):
 #pt_rw_plot = plot_dir + j_label + plot_prefix + "pt_rw_dists.png"
 
 
-    print("\n Loading labeling model from %s \n" % options.labeler_name)
-    labeler = tf.keras.models.load_model(options.labeler_name)
+    if(not options.saved_AE_scores):
+        print("\n Loading labeling model from %s \n" % options.labeler_name)
+        labeler = tf.keras.models.load_model(options.labeler_name)
+    else:
+        labeler = None
 
     labeler_scores = data.labeler_scores(labeler,  l_key)
     t3 = time.time()
@@ -127,6 +131,7 @@ def tag_and_train(options):
     filter_frac = data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high, 
             bkg_cut_type = options.TNT_bkg_cut)
     print_signal_fractions(data['label'], data['Y_TNT'])
+    print('Total number of signal events is %i' % np.sum(data['label'] > 0.5))
 
     if(options.randsort):
         labeler_scores2 = data2.labeler_scores(labeler, l_key2)

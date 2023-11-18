@@ -209,6 +209,7 @@ def full_run(options):
         rel_opts.lund_weights = options.__dict__.get('lund_weights', True)
         rel_opts.sig_shape = options.__dict__.get('sig_shape', "")
         rel_opts.no_sig_in_fit = options.__dict__.get('no_sig_in_fit', False)
+        rel_opts.sig_norm = options.__dict__.get('sig_norm', -1)
         if(abs(options.mjj_sig - 2500.) > 1.):  rel_opts.mjj_sig  = options.mjj_sig #quick fix
         rel_opts.output = options.output #allows renaming / moving directories
         options = rel_opts
@@ -626,7 +627,8 @@ def full_run(options):
         else: sig_shape_file = ""
 
 
-        final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, label = options.fit_label, loop = True, no_sig = options.no_sig_in_fit)
+        final_fit_start = run_dijetfit(options, fit_start = fit_start, sig_shape_file = sig_shape_file, label = options.fit_label, loop = True, 
+                no_sig = options.no_sig_in_fit, sig_norm = options.sig_norm)
         output = final_fit_start
 
 
@@ -738,6 +740,7 @@ def full_run(options):
 if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--opts", default = "", help = "Options in json")
+    parser.add_argument("--sig_norm", default = -1, type = int,   help = 'Signal normalization for fit')
     parser.add_argument("--sig_norm_unc", default = -1.0, type = float, help = "parameter for fit (uncertainty on signal efficiency)")
     parser.add_argument("--ae_dir", default = "", help = "directory with all the autoencoders (auto pick the right mbin and kfold)")
     parser.add_argument("--effs", nargs="+", default = [], type = float)
