@@ -396,14 +396,15 @@ class DataReader:
 
             self.sig1_chunk_size = int(self.nsig_in_file / self.num_total_batches)
             
+            print('sig1', self.nsig_in_file, self.sig1_chunk_size)
             if(self.sig1_chunk_size <= self.sig_per_batch):
                 print("WARNING: Not enough signal to split across 40 batches, splitting only across this sample, could cause repeats in later runs!")
                 self.sig1_chunk_size = int(self.nsig_in_file / (len(self.batch_list)))
 
         if(len(self.sig2_file) > 0):
             self.nsig2_in_file = self.sig2_file_h5['event_info'].shape[0]
-
-            self.sig2_chunk_size = int(self.nsig_in_file / self.num_total_batches)
+            self.sig2_chunk_size = int(self.nsig2_in_file / self.num_total_batches)
+            print('sig2', self.nsig2_in_file, self.sig2_chunk_size)
             
             if(self.sig2_chunk_size <= self.sig2_per_batch):
                 print("WARNING: Not enough signal to split across 40 batches, splitting only across this sample, could cause repeats in later runs!")
@@ -600,13 +601,13 @@ class DataReader:
 
             #save data in other keys
             data = None
-            swapping_idxs = np.array([])
+            self.swapping_idxs = np.array([])
             if(self.ptsort):
                 j1_pt = f['jet_kinematics'][cstart:cstop][mask,2]
                 j2_pt = f['jet_kinematics'][cstart:cstop][mask,6]
-                swapping_idxs = j2_pt > j1_pt
+                self.swapping_idxs = j2_pt > j1_pt
             elif(self.randsort):
-                swapping_idxs = self.rng.choice(a=[True,False], size = f['jet_kinematics'][cstart:cstop][mask].shape[0])
+                self.swapping_idxs = self.rng.choice(a=[True,False], size = f['jet_kinematics'][cstart:cstop][mask].shape[0])
 
 
             self.num_sig1_inj = 0
@@ -627,8 +628,8 @@ class DataReader:
                     sig_file_h5 = self.sig_file_h5
                     num_sig_inj = self.sig_per_batch
                 else:
-                    s_start = s1_start
-                    s_stop =  s1_stop
+                    s_start = s2_start
+                    s_stop =  s2_stop
                     sig_chunk_size = self.sig2_chunk_size
                     nsig_in_file = self.nsig2_in_file
                     sig_file_h5 = self.sig2_file_h5
@@ -636,7 +637,7 @@ class DataReader:
 
 
                 if(s_stop > nsig_in_file):
-                    print("Not enough signal events in file (more than %i), exiting" % self.nsig_in_file)
+                    print("Not enough signal events in file (chunk end is %i, file size is %i), exiting" % (s_stop, nsig_in_file))
                     exit(1)
 
                 sig_mask_temp = np.ones(sig_chunk_size, dtype = bool)
@@ -752,10 +753,10 @@ class DataReader:
                 if(self.ptsort):
                     j1_pt_sig = sig_jet_kinematics[sig_final_mask, 2]
                     j2_pt_sig = sig_jet_kinematics[sig_final_mask, 6]
-                    swapping_idxs = np.append(swapping_idxs, j2_pt_sig > j1_pt_sig, axis=0)
+                    self.swapping_idxs = np.append(self.swapping_idxs, j2_pt_sig > j1_pt_sig, axis=0)
 
                 elif(self.randsort):
-                    swapping_idxs = np.append(swapping_idxs, self.rng.choice(a=[True,False], size = num_sig_inj), axis=0)
+                    self.swapping_idxs = np.append(self.swapping_idxs, self.rng.choice(a=[True,False], size = num_sig_inj), axis=0)
 
                 if(idx==1): self.sig1_final_mask = sig_final_mask
                 else: self.sig2_final_mask = sig_final_mask
@@ -778,8 +779,8 @@ class DataReader:
 
             if(self.sep_signal and self.sig_per_batch > 0):
                 shuffle_order = np.random.permutation(t_labels.shape[0])
-                if(swapping_idxs.shape[0] > 0):
-                    swapping_idxs = swapping_idxs[shuffle_order]
+                if(self.swapping_idxs.shape[0] > 0):
+                    self.swapping_idxs = self.swapping_idxs[shuffle_order]
             else:
                 shuffle_order = np.arange(t_labels.shape[0])
 
@@ -811,19 +812,19 @@ class DataReader:
                     data = np.append(data, sig_data, axis= 0)
                     data = data[shuffle_order]
 
-                if(('j1' in key or 'j2' in key) and swapping_idxs.shape[0] != 0):
+                if(('j1' in key or 'j2' in key) and self.swapping_idxs.shape[0] != 0):
                     if('j1' in key): opp_key = 'j2' + key[2:]
                     else: opp_key = 'j1' + key[2:]
                     opp_data = self.get_key(f,cstart, cstop, mask, opp_key)
                     if(self.sep_signal and self.num_sig1_inj > 0): 
-                        opp_sig_data = self.get_key(sig_file_h5, s1_start, s1_stop, self.sig1_final_mask, opp_key)
+                        opp_sig_data = self.get_key(self.sig_file_h5, s1_start, s1_stop, self.sig1_final_mask, opp_key)
 
                         if(self.num_sig2_inj > 0): 
-                            opp_sig2_data = self.get_key(sig_file_h5, s2_start, s2_stop, self.sig2_final_mask, opp_key)
+                            opp_sig2_data = self.get_key(self.sig2_file_h5, s2_start, s2_stop, self.sig2_final_mask, opp_key)
                             opp_sig_data = np.append(opp_sig_data, opp_sig2_data, axis=0)
 
                         opp_data = np.append(opp_data, opp_sig_data, axis=0)
-                    data[swapping_idxs] = opp_data[shuffle_order][swapping_idxs]
+                    data[self.swapping_idxs] = opp_data[shuffle_order][self.swapping_idxs]
 
 
 
@@ -839,13 +840,13 @@ class DataReader:
                     append_h5(self.f_storage, key, tdata)
 
 
-            if(swapping_idxs.shape[0] != 0):
+            if(self.swapping_idxs.shape[0] != 0):
                 self.swapped_js = True
                 if(self.first_write):
-                    c_shape = expandable_shape(swapping_idxs.shape)
-                    self.f_storage.create_dataset("swapped_js", data =swapping_idxs, chunks = True, maxshape = c_shape)
+                    c_shape = expandable_shape(self.swapping_idxs.shape)
+                    self.f_storage.create_dataset("swapped_js", data =self.swapping_idxs, chunks = True, maxshape = c_shape)
                 else:
-                    append_h5(self.f_storage, "swapped_js", swapping_idxs)
+                    append_h5(self.f_storage, "swapped_js", self.swapping_idxs)
 
             self.first_write = False
 

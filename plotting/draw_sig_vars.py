@@ -51,8 +51,8 @@ def draw_sig_vars(options):
 
 
 
-    feature_names = ["jet mass", r'$\tau_1$', r"$\tau_{21}$", r"$\tau_{32}$", r"$\tau_{43}$", "LSF3", "DeepB", "nPFCands"]
-    flabels = ["jetmass","tau1", "tau21", "tau32", "tau43", "LSF3", "DeepB", "nPFCands"]
+    feature_names = ["jet mass", r"$\tau_{21}$", r"$\tau_{32}$", r"$\tau_{43}$", "LSF3", "DeepB", "nPFCands"]
+    flabels = ["jetmass", "tau21", "tau32", "tau43", "LSF3", "DeepB", "nPFCands"]
 
     #clip outliers
     cutoff = 1.

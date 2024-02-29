@@ -4,13 +4,20 @@ import sys
 from limit_set import *
 
 
-def seed_opts(options, seed, sys = ""):
+def seed_opts(options, seed, sys = "", flip = False):
 
     t_opts = copy.deepcopy(options)
     t_opts.saved_params = None
     t_opts.BB_seed = seed
 
     label_str = '_%i' % seed
+    if(flip):
+        label_str += "_flip"
+        t_opts.sig_file = options.sig2_file
+        t_opts.sig_per_batch = options.sig2_per_batch
+
+        t_opts.sig2_file = options.sig_file
+        t_opts.sig2_per_batch = options.sig_per_batch
 
     t_opts.output = options.output + label_str  + "/"
     t_opts.label = options.label + "_" + label_str
@@ -24,7 +31,7 @@ def get_sig_eff(outdir, eff = 1.0, sys = ""):
     eff_key = 'sig_eff' #no mjj window (for shape based limit)
     if(len(sys) > 0): eff_key += "_" + sys
     if(not os.path.exists(fname)):
-        print("Can't find fit inputs " + fname)
+        #print("Can't find fit inputs " + fname)
         return 0.
 
     with h5py.File(fname, "r") as f:
@@ -92,9 +99,10 @@ def bias_test(options):
     get_condor = do_train = do_selection = do_fit = do_merge = False
     do_train = options.step == "train"
     get_condor = options.step == "get"
-    do_selection = options.step == "select"
+    do_selection = 'select' in options.step
     do_merge = "merge" in options.step
     do_fit = "fit" in options.step
+    do_eff = 'eff' in options.step
     do_plot = options.step == "plot"
     do_roc = options.step == "roc"
     do_sys_train = options.step == "sys_train"
@@ -103,7 +111,8 @@ def bias_test(options):
     do_sys_plot = options.step == "sys_plot"
     do_clean = options.step == "clean"
 
-    get_condor = get_condor or do_selection
+    flip_signals = 'flip' in options.step
+
     f_sig_effs = options.output + "sig_effs.npz"
 
     #Do trainings
@@ -121,6 +130,11 @@ def bias_test(options):
             t_opts.step = "clean"
             full_run(t_opts)
 
+    if(get_condor):
+        for seed in seeds:
+            t_opts = seed_opts(options, seed)
+            t_opts.step = "get"
+            full_run(t_opts)
 
     if(do_selection):
         if(len(options.effs) == 0):
@@ -128,18 +142,36 @@ def bias_test(options):
             options.effs = [eff_point]
             print("Selecting with eff %.03f based on mbin %i" % (eff_point, options.mbin))
 
-        for seed in seeds:
-            t_opts = seed_opts(options, seed)
-            t_opts.step = "select"
-            t_opts.reload = True
-            #t_opts.condor = options.condor
-            t_opts.condor = True
-            full_run(t_opts)
+        if(flip_signals):
+            for seed in seeds:
+
+                copy_opts = copy.deepcopy(options)
+                copy_opts.output = options.output + "_%i_flip/" % seed
+                copy_opts.orig_dir = options.output + "_%i/" % seed
+                copy_taggers(copy_opts)
+
+                t_opts = seed_opts(options, seed, flip = True)
+
+                t_opts.step = "select"
+                t_opts.reload = False
+
+                #t_opts.condor = options.condor
+                t_opts.condor = True
+                full_run(t_opts)
+
+        else:
+            for seed in seeds:
+                t_opts = seed_opts(options, seed)
+                t_opts.step = "select"
+                t_opts.reload = True
+                #t_opts.condor = options.condor
+                t_opts.condor = True
+                full_run(t_opts)
 
 
     if(do_merge):
         for seed in seeds:
-            t_opts = seed_opts(options, seed)
+            t_opts = seed_opts(options, seed, flip = flip_signals)
             t_opts.step = "merge"
             t_opts.reload = True
             t_opts.condor = True
@@ -148,7 +180,6 @@ def bias_test(options):
 
     if(do_fit):
         for seed in seeds:
-            if(seed <= 44): continue
             t_opts = seed_opts(options, seed)
             t_opts.step = "fit"
 
@@ -175,6 +206,18 @@ def bias_test(options):
                 os.system("mv %s %s" % (t_opts.output + "fit_results_%.1f.json" % (float(options.mjj_sig) -200.), t_opts.output + "fit_results_%.1f.json" % float(options.mjj_sig)))
 
 
+    if(do_eff):
+        sig_effs = []
+        for seed in seeds:
+            t_opts = seed_opts(options, seed, flip = flip_signals)
+            eff = float(get_sig_eff(t_opts.output, eff = options.effs[0]))
+            if(eff > 1e-6): sig_effs.append(eff)
+
+        print("Effs", str(sig_effs))
+        err_mean = np.std(sig_effs) / np.sqrt(len(sig_effs)-1)
+        print("Mean Eff. %.3f +/- %.3f " % (np.mean(sig_effs), err_mean))
+        print("Std Dev. Eff. %.3f" % np.std(sig_effs))
+
 
 
 
@@ -193,6 +236,7 @@ def bias_test(options):
         err_sig_xsecs = []
         obs_lim_xsecs = []
         exp_lim_xsecs = []
+        signifs = []
 
         preselection_eff,_,_ = get_preselection_params(options.sig_file, options.hadronic_only, 3000)
         lumi = 26.81
@@ -202,99 +246,62 @@ def bias_test(options):
         true_sig_xsec = convert_to_xsec(options.sig_per_batch * options.numBatches, 1.0)
         print('true injected xsec %.1f' % true_sig_xsec)
 
-        other_injection = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_spb3_may21/"
-        inj_spb = 3
-        #other_injection = "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_3TeV_spb2_oct25/"
-        #inj_spb = 2
+        injections = [
+            "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_3TeV_spb01_oct25/",
+            "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_3TeV_spb1_oct25/",
+            "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_3TeV_spb2_oct25/",
+            "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_spb3_may21/",
+            "/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_3TeV_spb4_oct25/",
+            #"/uscms_data/d3/oamram/CASE_analysis/src/CASE/TagNTrain/runs/TNT_bias_test_XYY_3TeV_spb5_oct25/",
+            ]
+
+        #injection_spbs = [0.1, 1,2,3,4,5]
+        injection_spbs = [0.1, 1,2,3,4]
+
+        sig_effs = [ [] for i in range(len(injections))]
+
 
         for seed in seeds:
-        #for seed in range(10):
-            if(seed == 44): continue
+            for i,inj_dir in enumerate(injections):
+                loc = inj_dir + ("_%i/" % seed)
+                eff = float(get_sig_eff(loc, eff = options.effs[0]))
+                if(eff > 1e-6): sig_effs[i].append(eff)
+
             t_opts = seed_opts(options, seed)
-            sig_eff = float(get_sig_eff(t_opts.output, eff = options.effs[0]))
-
-            alt_injection = other_injection + ("_%i/" % seed)
-            sig_eff_inj = float(get_sig_eff(alt_injection, eff = options.effs[0]))
-
             fit_res = get_fit_results(outdir = t_opts.output,  m = options.mjj_sig)
             if(fit_res is not None): 
                 obs_excess_events = float(fit_res.obs_excess_events)
                 obs_excess_events_unc = float(fit_res.obs_excess_events_unc)
                 obs_lim_events = fit_res.obs_lim_events
                 exp_lim_events = fit_res.exp_lim_events
+
+                signif = float(fit_res.signif) if 'asimov_signif' not in fit_res.__dict__.keys() else float(fit_res.asimov_signif)
+
+                excesses.append(obs_excess_events)
+                excess_uncs.append(obs_excess_events_unc)
+                obs_lims.append(obs_lim_events)
+                exp_lims.append(exp_lim_events)
+                signifs.append(signif)
             else: 
                 print("FAILED to get fit results for seed %i" % seed)
-                obs_excess_events = -9999.
-
-
-            sig_effs.append(sig_eff)
-            sig_effs_inj.append(sig_eff_inj)
-            excesses.append(obs_excess_events)
-            excess_uncs.append(obs_excess_events_unc)
-            obs_lims.append(obs_lim_events)
-            exp_lims.append(exp_lim_events)
-
-            meas_sig_xsec = convert_to_xsec(obs_excess_events, sig_eff)
-            err_sig_xsec = (obs_excess_events_unc /obs_excess_events) * meas_sig_xsec
-            obs_lim_xsec = convert_to_xsec(obs_lim_events, sig_eff)
-            exp_lim_xsec = convert_to_xsec(exp_lim_events, sig_eff)
-
-            meas_sig_xsecs.append(meas_sig_xsec)
-            err_sig_xsecs.append(err_sig_xsec)
-            obs_lim_xsecs.append(obs_lim_xsecs)
-            exp_lim_xsecs.append(exp_lim_xsecs)
 
 
 
+        
+        sig_eff_avgs = [np.mean(sig_effs[i]) for i in range(len(sig_effs))]
+        avg_signif = np.mean(signifs)
+        print("Average efficiencies: " + str(sig_eff_avgs))
+        print("Average significance " + str(avg_signif))
 
-        mean_sig_eff = np.mean(sig_effs)
-        std_sig_eff = np.std(sig_effs)
-        expected_excess = options.numBatches * options.sig_per_batch * np.array(sig_effs)
-        mean_expected_excess = np.mean(expected_excess)
-        expected_variation = np.std(expected_excess)
+        my_idx = injection_spbs.index(options.sig_per_batch)
+        local_sig_effs = sig_effs[my_idx]
 
-        mean_excess = np.mean(excesses)
-        err_mean_excess = np.std(excesses)/np.sqrt(len(excesses))
-
-
-        print("Mean sig eff %.3f, std %.3f, expected excess %.1f +/- %.1f" % (mean_sig_eff, std_sig_eff, mean_expected_excess, expected_variation))
-        print(excesses[:10])
-        print("Results (mean, std): ", np.mean(excesses), np.std(excesses))
-
-        fig = plt.figure(figsize=fig_size)
-        num_bins = 20
-        fontsize = 20
-
-        ns, bins, patches = plt.hist(excesses, bins=num_bins, color='b', label="Toy Signal Yields", histtype='bar')
-
-        plt.xlabel("Signal Yield", fontsize =fontsize)
-        plt.tick_params(axis='x', labelsize=fontsize)
-        plt.ylabel("nToys", fontsize =fontsize)
-        plt.tick_params(axis='y', labelsize=fontsize)
-
-        line_extra = 1.25
-
-        plt.plot([mean_expected_excess]*2, [0, np.amax(ns)*line_extra], linestyle = "-", color = "black", linewidth = 3, label = "Mean Expected Yield (%.1f Events)" % mean_expected_excess)
-        plt.plot([mean_expected_excess + expected_variation]*2, [0, np.amax(ns)*line_extra], linestyle = "--", color = "black", linewidth = 3, label = "+/- 1 Std Expected Yield")
-        plt.plot([mean_expected_excess - expected_variation]*2, [0, np.amax(ns)*line_extra], linestyle = "--", color = "black", linewidth = 3,)
-
-        plt.plot([mean_excess]*2, [0, np.amax(ns)*line_extra], linestyle = "-", color = "skyblue", linewidth = 3, label = "Mean Toy Yield (%.1f Events)" % mean_excess)
-        plt.plot([mean_excess + err_mean_excess]*2, [0, np.amax(ns)*line_extra], linestyle = "--", color = "skyblue", linewidth = 3, label = "+/- 1-sigma Error on Mean Toy Yield")
-        plt.plot([mean_excess - err_mean_excess]*2, [0, np.amax(ns)*line_extra], linestyle = "--", color = "skyblue", linewidth = 3,)
-
-        plt.ylim((0, 1.7* np.amax(ns)))
-
-        handles, labels = plt.gca().get_legend_handles_labels()
-        order = [4,2,3,0,1]
-
-        plt.legend( [handles[idx] for idx in order],[labels[idx] for idx in order], loc='upper left', fontsize = 16)
-        fname = os.path.join(options.output, "plots/injection_yields.png")
-        print("Creating " + fname)
-        plt.savefig(fname)
 
 
         def plot_hist(pulls, xlabel, fout = "", text = True):
             fig = plt.figure(figsize=fig_size)
+            num_bins = 20
+            fontsize = 24
             ns, bins, patches = plt.hist(pulls, bins=num_bins, color='gray', label="Toys", histtype='bar')
 
             plt.xlabel(xlabel, fontsize =fontsize)
@@ -316,7 +323,6 @@ def bias_test(options):
                 plt.text(0.3, 0.85, txt2, transform = fig.axes[0].transAxes, fontsize = 18)
 
             plt.ylim((0, 1.7* np.amax(ns)))
-            plt.legend(loc='upper left', fontsize = 16)
 
             if(fout != ""):
                 print("Creating " + fout)
@@ -324,97 +330,51 @@ def bias_test(options):
             return fig
 
 
-        #signal yield pulls
-        eps = 1e-6
-        pulls_sig_yield = ( np.array(excesses) - expected_excess)/(np.array(excess_uncs ) + eps)
-        pulls_sig_yield = pulls_sig_yield[np.abs(pulls_sig_yield) < 10]
-        fout = os.path.join(options.output, "plots/injection_pulls.png")
-        plot_hist(pulls_sig_yield, "Pull of Signal Yield", fout)
-
-
-        #xsec pulls v1
-        fig = plt.figure(figsize=fig_size)
-        eps = 1e-6
-        pull_sig_xsec = [(meas_sig_xsecs[i] - true_sig_xsec) / (err_sig_xsecs[i] + eps) for i in range(len(meas_sig_xsecs)) if err_sig_xsecs[i] > eps] 
-        print(meas_sig_xsecs[:5], err_sig_xsecs[:5], pull_sig_xsec[:5])
-
-        fout = os.path.join(options.output, "plots/injection_pulls_xsec.png")
-        plot_hist(pull_sig_xsec, "Pull of Signal Cross Section", fout)
-
-        #xsec pulls v2
-        xsec_pulls_sampled = []
-        xsec_sampled = []
-        xsec_obs_lims = []
-        xsec_obs_lims_inj = []
-        nToys = len(sig_effs)
-        sig_effs =np.array(sig_effs)
-        sig_effs_inj = np.array(sig_effs_inj)
-        #sig_effs = sig_effs[(sig_effs > eps)  & (sig_effs < 1.0)]
-
         #injection cross section used in limit setting (cross section you 'think' you injected)
-        xsec_inj = convert_to_xsec((inj_spb - options.sig_per_batch) * options.numBatches, 1.0)
-        print("Lim set inj xsec %.2f" % xsec_inj)
+        spb_injs = [(spb - options.sig_per_batch) for spb in injection_spbs if spb >= options.sig_per_batch]
+        effs_filtered = sig_eff_avgs[-len(spb_injs):]
 
-        rng = np.random
-        rng.seed(123)
-        for i in range(nToys):
-            #other_idxs = np.delete(np.arange(0,nToys), i)
-            other_idxs = np.arange(0,nToys)
-            selected = rng.choice(other_idxs, 5, replace = False)
+        #assume eff becomes flat at very high xsec
+        effs_filtered.append(effs_filtered[-1])
+        spb_injs.append(100)
 
-            sig_eff_inj =  np.mean(sig_effs_inj[selected])
+        xsec_injs = [convert_to_xsec( spb_injs[i] * options.numBatches, 1.0) for i in range(len(spb_injs))]
 
-            sig_eff_mean = np.mean(sig_effs[selected])
-            sig_eff_std = np.std(sig_effs[selected])
-
-            meas_sig_xsec_sampled = convert_to_xsec(excesses[i], sig_eff_mean)
-            err_sig_eff = (sig_eff_std / sig_eff_mean)
-            err_tot = meas_sig_xsec_sampled * (err_sig_eff**2 + (err_sig_xsecs[i]/meas_sig_xsecs[i])**2) ** (0.5)
-
-            xsec_sampled.append(meas_sig_xsec_sampled)
-            xsec_pulls_sampled.append((meas_sig_xsec_sampled  - true_sig_xsec) / err_tot)
-
-            xsec_obs_lims.append(convert_to_xsec(obs_lims[i], sig_effs[i]))
-
-            xsec_lim_inj = convert_to_xsec(obs_lims[i], sig_eff_inj)
-            xsec_lim_inj = max(xsec_inj, xsec_lim_inj)
-            xsec_obs_lims_inj.append(xsec_lim_inj)
+        print(effs_filtered)
+        print(xsec_injs)
+        yields = [xsec_injs[i] * lumi *  effs_filtered[i] * preselection_eff for i in range(len(xsec_injs))]
+        print(yields)
+        print(obs_lims[:5])
 
 
+        xsec_obs_lims = np.interp(obs_lims, yields, xsec_injs)
+        xsec_exp_lims = np.interp(exp_lims, yields, xsec_injs)
+        print(xsec_obs_lims[:10])
+        print(xsec_exp_lims[:10])
+        print(np.mean(xsec_obs_lims))
 
-        fout = os.path.join(options.output, "plots/injection_pulls_xsec_sampled.png")
-        plot_hist(xsec_pulls_sampled, "Pull of Signal Cross Section", fout = "")
-        plt.xlim(-3,3)
-        plt.savefig(fout)
-
-        fout = os.path.join(options.output, "plots/injection_xsec_sampled.png")
-        plot_hist(xsec_sampled, "Observed Signal Cross Section", fout = "")
-        plt.vlines([true_sig_xsec], 0, 15, color = 'blue', linestyle = 'dashed')
-        plt.savefig(fout)
 
         fout = os.path.join(options.output, "plots/xsec_lims.png")
         fig = plot_hist(xsec_obs_lims, "95% Upper Limit on Signal Cross Section", fout = "", text = False)
         plt.vlines([true_sig_xsec], 0, 10, color = 'blue', linestyle = 'dashed')
 
-        xsec_obs_lims = np.array(xsec_obs_lims)
         coverage = 100. * np.mean(xsec_obs_lims > true_sig_xsec)
-        plt.text(0.3, 0.9, "Coverage = %.1f %%" % coverage, transform = fig.axes[0].transAxes, fontsize = 18)
+        cov_str = "Coverage = %.1f %%" % coverage
+        print(cov_str)
+        inj_str = "True cross section in 'data' = %.1f fb, %.1f$\sigma$ avg. excess " % (true_sig_xsec, avg_signif)
+        plt.text(0.5, 0.9, inj_str, transform = fig.axes[0].transAxes, horizontalalignment = 'center', fontsize = 20)
+        plt.text(0.5, 0.8, cov_str, transform = fig.axes[0].transAxes, horizontalalignment = 'center', fontsize = 24)
         plt.savefig(fout)
 
-        fout = os.path.join(options.output, "plots/xsec_lims_inj.png")
-        fig = plot_hist(xsec_obs_lims_inj, "95% Upper Limit on Signal Cross Section", fout = "", text = False)
-        plt.vlines([true_sig_xsec], 0, 10, color = 'blue', linestyle = 'dashed')
 
-        xsec_obs_lims_inj = np.array(xsec_obs_lims_inj)
-        coverage = 100. * np.mean(xsec_obs_lims_inj > true_sig_xsec)
-        plt.text(0.3, 0.9, "Coverage = %.1f %%" % coverage, transform = fig.axes[0].transAxes, fontsize = 18)
-        plt.text(0.3, 0.85, options.plot_label, transform = fig.axes[0].transAxes, fontsize = 18)
-        plt.savefig(fout)
-
-        print("Avg data sig eff %.3f" % np.mean(sig_effs))
-        print("Avg data inj sig eff %.3f" % np.mean(sig_effs_inj))
-        print("Avg taggerData lim %.3f" % np.mean(xsec_obs_lims))
-        print("Avg anomaly lim %.3f" % np.mean(xsec_obs_lims_inj))
+        fout_map = options.output + "sig_eff_map.h5"
+        f = h5py.File(fout_map, "w")
+        f.create_dataset("injected_xsecs", data = xsec_injs[:-1])
+        f.create_dataset("effs", data = effs_filtered[:-1])
+        norm_factor = lumi * preselection_eff
+        f.create_dataset("norm_factor", data = [norm_factor])
+        print("\nOutputing sig eff map")
+        print("Norm factor %.3f" % norm_factor)
 
 
 

@@ -29,7 +29,7 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], 
         #if(i >= 4): xdash = [xsecs[-1]*0.4, xsecs[-1]]
         y = np.full_like(xdash, corr_sigma[i])
         plt.plot(xdash, y, color="black", linestyle="dashed", linewidth=0.7)
-        plt.text(xmax*1.02, corr_sigma[i]*0.95, r"{} $\sigma$".format(i+1), fontsize=14, color="black")
+        plt.text(xmax*1.02, corr_sigma[i]*0.95, r"{} $\sigma$".format(i+1), fontsize=20, color="black")
 
 
     #Draw p-vals
@@ -38,7 +38,9 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], 
     entries = []
     leg_labels = []
     for i in leg_order:
-        if(i in exclude_idxs): continue
+        if(i in exclude_idxs): 
+            print("Excluding %s" % labels[i])
+            continue
         overflow_xs = []
         overflow_vals = []
         regular_xs = []
@@ -72,8 +74,8 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], 
 
 
     #plt.text(0.05, 0.9, title, fontsize = 18, transform = plt.gca().transAxes)
-    plt.xlabel(r"Cross Section (fb)")
-    plt.ylabel("p-value")
+    plt.xlabel(r"Cross Section (fb)", fontsize = 26)
+    plt.ylabel("p-value", fontsize = 26)
     plt.yscale("log")
     plt.ylim(overflow_thresh, 1)
     #plt.vlines(xsecs[0] * 0.85, overflow_thresh, 1, colors = 'black')
@@ -82,10 +84,11 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], 
     y_minor = matplotlib.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0)*0.1, numticks=10)
     ax.yaxis.set_minor_locator(y_minor)
     ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+    ax.tick_params(axis='both', which = 'major', labelsize = 24)
     plt.xlim(-0.25*xmax, xmax * 1.08)
     #hep.cms.text(" Preliminary")
     hep.cms.label( data = False)
-    plt.legend(entries, leg_labels, loc = 'center left', title = title, fontsize = 18)
+    plt.legend(entries, leg_labels, loc = 'center left', title = title, fontsize = 22)
     plt.savefig(fout , bbox_inches="tight")
     print("Saving " + fout)
     plt.close()
@@ -128,16 +131,16 @@ def check_xsec(xsec, signal = "Wp"):
 
 
 plt_labels = ["Wp", "XYY"]
-titles = [r"$W' \rightarrow B't (B' \rightarrow bZ)$", r"$X \rightarrow YY' (Y/Y' \rightarrow qq)$"]
+titles = [r"$W' \rightarrow B't  \rightarrow bZt$", r"$X \rightarrow YY' \rightarrow 4q$"]
 odir = "pvals/"
 
 
-labels = ['Inclusive', 'VAE-QR',  'CWoLa Hunting', 'TNT', 'CATHODE', 'CATHODE-b',  'QUAK: General', 
-'QUAK: Model Specific', r'$\tau_{21} < 0.4$ & $m_\mathrm{SD} > 50$ GeV', r'$\tau_{32} < 0.65$ & $m_\mathrm{SD} > 50$ GeV']
-#                   pink       purple   dark green     blue      red       orange
-colors = ['black', '#F739F2', '#702963', '#228B22', '#0271BB', '#E2001A', '#FCB40C', 
-# gray
-'#949494', 'sienna','tan' ]
+labels = ['Inclusive', 'VAE-QR',  'CWoLa Hunting', 'TNT', 'CATHODE', 'CATHODE-b',  'QUAK', 
+'QUAK: Model Specific', 
+r'2-prong $(\tau_{21}, m_\mathrm{SD})$', r'3-prong $(\tau_{32}, m_\mathrm{SD})$']
+
+#                   pink       purple   dark green     blue      red       orange     #gray
+colors = ['black', '#F739F2', '#702963', '#228B22', '#0271BB', '#E2001A', '#FCB40C', '#949494', 'sienna','tan' ]
 
 markers = ['o', 's', 'P', 'p', '*', 'X', 'D', 'd', 'x', 'h']
 linestyles = ['solid',] * 10
@@ -148,7 +151,8 @@ linestyles[8] = 'dashed'
 linestyles[9] = 'dashed'
 
 #remove CATHODE-b
-excludes = [5] 
+#excludes = [5,7] 
+excludes = [] 
 leg_order = [1,2,3,4,5,6,7,8,9,0]
 
 fs_Wp = [[]]*10
@@ -174,7 +178,8 @@ fs_Wp[2] = [0.247, 0.081, 0.0025, 1.07e-5, 9.11181820e-06, 6.5e-8]
 
 #TNT
 fs_X[3] = [0.22, 0.0344, 2.5e-6, 2.45e-14, 2.88545364e-18,]
-fs_Wp[3] = [0.116, 0.013, 5.33e-6, 1.74e-5, 6.85e-08, 4.17e-11]
+#fs_Wp[3] = [0.116, 0.013, 5.33e-6, 1.74e-5, 6.85e-08, 4.17e-11]
+fs_Wp[3] = [0.116, 0.013, 5.33e-6, 1.74e-7, 4.2e-8, 1e-11]
 
 #CATHODE vals
 fs_X[4]  = [0.227733785468067, 1.3553238704222537e-05, 1.3350653915722432e-11, 1e-20, 1e-20]
@@ -211,7 +216,7 @@ no_taus = False
 #fs_Wp[8] = [0.024, 2.98e-6, 2.37e-9, 9.836e-11, 1.48e-11, 7.07e-17]
 
 fs = [fs_Wp, fs_X]
-fouts = ["Wp_pvals.pdf", "XYYp_pvals.pdf"]
+fouts = ["Wp_pvals.png", "XYYp_pvals.png"]
 
 
 for l_idx,flist  in enumerate(fs):

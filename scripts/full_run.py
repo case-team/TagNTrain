@@ -20,6 +20,11 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
         fit_inputs = 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
         input_file = base_path + options.output + fit_inputs
 
+    
+    if(not os.path.exists(input_file)):
+        print("Can't find fit input file %s, exiting" % input_file)
+        return
+
 
 
 
@@ -162,6 +167,58 @@ def avg_eff(fout_name, input_list):
 
 
 
+def mjj_eff_plot(options):
+    base_path = os.path.abspath(".") + "/"
+    fit_inputs = options.output + 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+    inc_inputs = base_path + "../data/fit_inputs_DATA_nosel.h5" if options.data else base_path + "../data/fit_inputs_nosel.h5"
+
+    with h5py.File(fit_inputs) as f:
+        label = f['truth_label'][()]
+        mjj = f['mjj'][()][label < 0.5] #bkg only
+
+    with h5py.File(inc_inputs) as f:
+        mjj_inc = f['mjj'][()]
+    
+    num_bins = 30
+
+    make_multi_ratio_histogram([mjj_inc, mjj], ['All', 'Selected'], ['black', 'blue'], 'Mjj', "", num_bins, save = True,
+            fname = options.output + 'plots/' + "mjj_eff.png", ratio_range = [0., 0.05], logy = True, h_range = [1600, 7000])
+
+
+
+def selected_feats_plot(options):
+    fit_inputs = options.output + 'fit_inputs_eff{eff}.h5'.format(eff = options.effs[0])
+
+    with h5py.File(fit_inputs) as f:
+        if('j1_feats' not in list(f.keys())):
+            print("No selected features saved, skipping plots")
+            return
+
+        j1_feats = f['j1_feats'][()] 
+        j2_feats = f['j2_feats'][()] 
+        label = f['truth_label'][()]
+        mjj = f['mjj'][()] #bkg only
+
+    compute_mjj_window(options)
+    mask  = (mjj > options.mjj_low) & (mjj > options.mjj_high) & (label < 0.5)
+
+    nbins = 20
+    feature_names = ["jet mass", r"$\tau_{21}$", r"$\tau_{32}$", r"$\tau_{43}$", "LSF3", "DeepB", "nPFCands"]
+    flabels = ["jetmass", "tau21", "tau32", "tau43", "LSF3", "DeepB", "nPFCands"]
+
+    for i in range(len(feature_names)):
+        feat_name = feature_names[i]
+
+        feat1 = j1_feats[mask][:,i]
+        feat2 = j2_feats[mask][:,i]
+
+        make_histogram([feat1], ['Selected'], 'black', feat_name, "J1", nbins, fname = options.output + 'plots/' + "j1_" + flabels[i] + ".png")
+        make_histogram([feat2], ['Selected'], 'black', feat_name, "J2", nbins, fname = options.output + 'plots/' + "j2_" + flabels[i] + ".png")
+
+    return
+
+
+
 
 
 
@@ -240,10 +297,6 @@ def full_run(options):
         print("Number of batches per kfold(%i) must be multiple of number of lfolds (%i)" % (batches_per_kfold, options.lfolds))
         sys.exit(1)
 
-    if(options.step not in ["train", "get", "select", "merge", "fit", "roc", "bias", "interp", "clean", "all"]):
-        print("Invalid option %s" % options.step)
-        sys.exit(1)
-
     #parse what to do 
     get_condor = do_train = do_merge = do_selection = do_fit = False
     do_train = options.step == "train"
@@ -254,6 +307,7 @@ def full_run(options):
     do_roc = options.step == "roc"
     do_interp = options.step == "interp"
     do_bias_test = options.step == "bias"
+    do_plot = 'plot' in options.step
     do_clean = options.step == "clean"
 
     if(options.step == "all"):
@@ -435,6 +489,13 @@ def full_run(options):
                     os.system("sed -i 's/SIGFILE/%s/g' %s" % ("--sig_file " + sig_fn, select_script))
                 else:
                     os.system("sed -i 's/SIGFILE//g' %s" % (select_script))
+
+                if('sig2_file' in options.__dict__.keys() and  len(options.sig2_file) > 0):
+                    sig_fn = options.sig2_file.split("/")[-1]
+                    os.system("sed -i 's/SIG2FILE/%s/g' %s" % ("--sig2_file " + sig_fn, select_script))
+                else:
+                    os.system("sed -i 's/SIG2FILE//g' %s" % (select_script))
+
                 f_select_script = open(select_script, "a")
 
                 for eff in options.effs:
@@ -460,7 +521,7 @@ def full_run(options):
 
                 inputs_list = [selection_opts_fname, tarname]
                 c_opts.input = inputs_list
-                if(options.condor_mem > 0):
+                if('condor_mem' in options.__dict__.keys() and options.condor_mem > 0): 
                     c_opts.mem = options.condor_mem
 
 
@@ -470,6 +531,9 @@ def full_run(options):
         condor_dir = options.output + "selection_condor_jobs/"
         os.system("rm %s/models.tar" % options.output)
         os.system("rm %s/fit_inputs_kfold*.h5" % options.output)
+        os.system("rm %s/higgsCombine*.root" % options.output)
+        os.system("rm %s/fitDiagnostics*.root" % options.output)
+        os.system("rm %s/workspace*.root" % options.output)
         #for systematic, ok to remove all fit inputs
         #if(len(options.sig_sys) > 0): os.system("rm %s/fit_inputs*.h5" % options.output)
 
@@ -675,6 +739,11 @@ def full_run(options):
 
     stop_time = time.time()
     print("Total time taken was %s" % ( stop_time - start_time))
+
+    if(do_plot):
+        os.system("mkdir %s/plots" % options.output)
+        mjj_eff_plot(options)
+        selected_feats_plot(options)
 
 
     #merge different selections

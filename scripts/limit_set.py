@@ -1,5 +1,6 @@
 from full_run import *
 from plotting.draw_sys_variations import *
+from copy_taggers import *
 import sys
 
 dedicated_searches = {
@@ -51,7 +52,7 @@ def get_optimal_spb(options):
         sig_eff = get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0])
         sig_effs.append(sig_eff)
 
-    observed = True
+    observed = False
     if(observed):
         n_evts_exc = options.saved_params['n_evts_exc_obs']
         n_evts_exc_nosel = options.saved_params['n_evts_exc_nosel']
@@ -118,6 +119,7 @@ def get_fit_nosel_params(options):
     else: sig_file = options.sig_file
 
     if(options.refit or not os.path.exists(fit_file)):
+        options.refit = False
         print("Running fit with no selection \n")
         f_sig = h5py.File(sig_file, "r")
         mjj = f_sig['jet_kinematics'][:,0]
@@ -188,6 +190,40 @@ def get_signal_params(options):
         sys.exit(1)
 
 
+def find_expected_signifs(options, asimov_signifs, spbs):
+
+    injected_xsecs = [( spb*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff) for spb in spbs]
+
+    signifs_new = []
+    xsecs_new = []
+    for i in range(len(asimov_signifs)):
+        if(asimov_signifs[i] >= 0.1):
+            signifs_new.append(asimov_signifs[i])
+            xsecs_new.append(injected_xsecs[i])
+
+    injected_xsecs = xsecs_new
+    asimov_signifs = signifs_new
+
+
+    if(np.amax(asimov_signifs) < 4.5):
+        print("No injection yielded more than 4.5-sigma! No attempting to compute crossing")
+        return
+
+    if(np.amax(asimov_signifs) < 5):
+        asimov_signifs.append(asimov_signifs[-1] * 1.15)
+        injected_xsecs.append(injected_xsecs[-1] * 1.15)
+
+    asimov_signifs = np.array(asimov_signifs)
+    three_sigma_expected = np.interp(3, asimov_signifs, injected_xsecs)
+    five_sigma_expected = np.interp(5, asimov_signifs, injected_xsecs)
+
+    print("expected 3-sigma / 5-sigma xsecs:  %.2f  / %.2f" % (three_sigma_expected, five_sigma_expected))
+    options.saved_params['xsec_expected_3sigma_excess'] = three_sigma_expected
+    options.saved_params['xsec_expected_5sigma_excess'] = five_sigma_expected
+
+
+
+
 
 def make_signif_plot(options, signifs, spbs):
     fout = options.output + "plots/" + options.label + "_signif_plot.png"
@@ -209,13 +245,8 @@ def make_signif_plot(options, signifs, spbs):
 
     xs = np.array(injected_xsecs)
     ys = signifs
-    #print('window_eff', options.mjj_window_nosel_eff)
-    #nosel_limit = n_evts_exc_nosel / (options.preselection_eff * options.mjj_window_nosel_eff * options.lumi * options.hadronic_only_eff)
     nosel_limit = n_evts_exc_nosel / (options.preselection_eff *  options.lumi * options.hadronic_only_eff)
     print(nosel_limit, n_evts_exc_nosel, options.preselection_eff, options.lumi, options.hadronic_only_eff)
-
-
-
 
     fig_size = (12,9)
     plt.figure(figsize=fig_size)
@@ -226,23 +257,12 @@ def make_signif_plot(options, signifs, spbs):
     x_stop = max(np.max(xs), nosel_limit)
     y_stop = max(np.max(ys), 6.)
 
-    #print('stops', x_stop, y_stop)
-    #print(xs, nosel_limit) 
-    #print(ys)
-
     yline = np.arange(0,y_stop,y_stop/10)
     if(nosel_limit >0):
         label = "Inclusive Limit (%.1f fb)" % nosel_limit
         plt.plot([nosel_limit]*10, yline, linestyle = "--", color = "green", linewidth = linewidth, label = label)
 
-    #if(options.dedicated_lim > 0):
-        #plt.plot([options.dedicated_lim] * 10, yline, linestyle = "--", color = "cyan", linewidth = 2, label = options.dedicated_label)
-
-
     plt.scatter(xs, ys, c ='b' , s=pointsize, label = "Injections")
-
-
-
             
     plt.ylim([0., y_stop * 1.2])
     plt.xlim([0., x_stop * 1.2])
@@ -304,7 +324,29 @@ def output_json(options):
         print("Writing inclusive limits to %s" % outfile_inc)
         write_params(outfile_inc, results_sys)
 
+    if('taggerMC_xsec_exc_obs' in options.saved_params.keys()):
+        outfile_taggerMC = outfile + '.taggerMC'
+
+        results_sys = dict()
+        results_sys['obs'] = options.saved_params['taggerMC_xsec_exc_obs'] 
+        results_sys['exp'] = options.saved_params['taggerMC_xsec_exc_exp']
+        results_sys['exp+1'] = options.saved_params['taggerMC_xsec_exc_exp_1sig_high'] 
+        results_sys['exp-1'] = options.saved_params['taggerMC_xsec_exc_exp_1sig_low'] 
+        print("Writing taggerMC limits to %s" % outfile_taggerMC)
+        write_params(outfile_taggerMC, results_sys)
+
+    if('xsec_expected_5sigma_excess' in options.saved_params.keys()):
+        outfile_signif = outfile + '.signifs'
+        results_sys = dict()
+        results_sys['five_sigma'] = options.saved_params['xsec_expected_5sigma_excess'] 
+        results_sys['three_sigma'] = options.saved_params['xsec_expected_3sigma_excess'] 
+
+        print("Writing expected significances to %s" % outfile_signif)
+        write_params(outfile_signif, results_sys)
+
+
     print("\n")
+
 
 def make_sig_eff_plot(options, sig_effs, spbs):
 
@@ -315,22 +357,33 @@ def make_sig_eff_plot(options, sig_effs, spbs):
     fout = options.output + "plots/" + options.label + "_sig_eff_plot.png"
     plt.figure(figsize=fig_size)
 
-    plt.scatter( injected_xsecs, sig_effs, color = "blue", s = pointsize)
+    yerrs = 0.05 * sig_effs
+
+
+    plt.errorbar( injected_xsecs, sig_effs, yerr=yerrs, markerfacecolor = "blue", markeredgecolor = 'blue', fmt = 'ko' )
     plt.ylim([0, None])
     plt.xlim([-0.2, None])
 
     plt.tick_params(axis='y', labelsize=18)
     plt.tick_params(axis='x', labelsize=18)
-    plt.xlabel("Cross section (fb)", fontsize=30)
+    plt.xlabel("Injected cross section (fb)", fontsize=30)
     plt.ylabel("Signal Efficiency", fontsize=30)
 
 
     #text_str = 'TNT : X -> YY, 3 TeV'
-    text_str = "TNT : W' -> B't, 3 TeV"
+    #text_str = "TNT : W' -> B't, 3 TeV"
+    #plt.annotate(text_str, xy = (0.03, 0.9),  xycoords = 'axes fraction', fontsize=24)
 
-    plt.annotate(text_str, xy = (0.03, 0.9),  xycoords = 'axes fraction', fontsize=24)
+    norm_factor = options.lumi * options.preselection_eff * options.hadronic_only_eff
 
     plt.savefig(fout, bbox_inches = 'tight')
+    fout_map = options.output + "sig_eff_map.h5"
+    f = h5py.File(fout_map, "w")
+    f.create_dataset("injected_xsecs", data = injected_xsecs)
+    f.create_dataset("effs", data = sig_effs)
+    f.create_dataset("norm_factor", data = [norm_factor])
+    print("\nOutputing sig eff map")
+    print("Norm factor %.3f" % norm_factor)
 
 
 
@@ -576,6 +629,8 @@ def get_fit_results(options = None, outdir = "", m = 3000.):
             fname = cwola_base + ("mbin%i/" % options.mbin) + "fit_results_%.1f.json" % m
 
     if(not os.path.exists(fname)):
+        fname = outdir + "fit_results_sig_shape_%.1f.json" % m
+    if(not os.path.exists(fname)):
         print("Can't find fit inputs " + fname)
         return None
 
@@ -659,17 +714,25 @@ def limit_set(options):
 
 
     #parse what to do 
-    get_condor = do_train = do_selection = do_fit = do_merge = False
-    do_train =  "train" in options.step and 'sys' not in options.step
+    do_output = do_clean = get_condor = do_train = do_selection = do_fit = do_merge = False
+    if('taggerMC' in options.step):
+        do_taggerMC_selection = "select" in options.step and 'sys' not in options.step
+        do_taggerMC_merge = "merge" in options.step
+        do_taggerMC_fit = "fit" in options.step 
+        do_taggerMC_output = "output" in options.step 
+    else:
+        do_taggerMC_selection = do_taggerMC_merge = do_taggerMC_fit = False
+        do_train =  "train" in options.step and 'sys' not in options.step
+        get_condor = "get" in options.step  and 'sys' not in options.step
+        do_selection = "select" in options.step and 'sys' not in options.step
+        do_merge = "merge" in options.step and 'sys' not in options.step
+        do_fit = "fit" in options.step
+        do_output = options.step == 'output'
+
     do_clean = options.step == 'clean'
-    get_condor = "get" in options.step  and 'sys' not in options.step
-    do_selection = "select" in options.step and 'sys' not in options.step
-    do_merge = "merge" in options.step and 'sys' not in options.step
-    do_fit = "fit" in options.step
     do_plot = options.step == "plot"
     do_summary = options.step == "summary"
     do_roc = options.step == "roc"
-    do_output = options.step == 'output'
     do_sys_train = "sys_train" in options.step
     do_sys_merge = options.step == "sys_merge"
     do_sys_selection = options.step == "sys_select"
@@ -684,8 +747,9 @@ def limit_set(options):
         options.effs = [eff_point]
 
     if('opt' in options.step):
-        optimal_spb = get_optimal_spb(options)
-        spbs_to_run = list(filter(lambda s : s >= optimal_spb, options.spbs))
+        optimal_spb = options.saved_params['best_exp_spb']
+        spbs_to_run = [optimal_spb]
+        #spbs_to_run = list(filter(lambda s : s >= optimal_spb, options.spbs))
 
     print(options.spbs)
     print("To run", spbs_to_run)
@@ -724,6 +788,7 @@ def limit_set(options):
             t_opts.condor = options.condor
             #t_opts.condor = True
             full_run(t_opts)
+
 
 
 
@@ -785,6 +850,7 @@ def limit_set(options):
             os.system("mkdir " + os.path.join(options.output, "plots/"))
         sig_effs = []
         signifs = []
+        asimov_signifs = []
         pvals = []
         get_signal_params(options)
 
@@ -793,25 +859,27 @@ def limit_set(options):
             fit_res = get_fit_results(outdir = options.output + "spb" + str(float(spb)) + "/",  m = options.mjj_sig)
             if(fit_res is not None): 
                 signif = float(fit_res.signif)
+                if('asimov_signif' in fit_res.__dict__.keys()): asimov_signif = float(fit_res.asimov_signif)
+                else:asimov_signif = 0.
                 pval = float(fit_res.pval)
             else: 
-                pval = signif = 0.
+                pval = signif = asimov_signif = 0.
 
 
             sig_effs.append(sig_eff)
             signifs.append(signif)
+            asimov_signifs.append(asimov_signif)
             pvals.append(pval)
 
         print("Sig Effs: ",  sig_effs)
         print("Significances " , signifs)
+        print("Asimov Significances " , asimov_signifs)
 
         if(not options.data):
             #Use expected limit from b-only fit
             fit_results = get_fit_results(options = options, m=options.mjj_sig)
-            n_evts_exc = fit_results.exp_lim_events
         else:
             fit_results = get_data_fit_results(options)
-            n_evts_exc = fit_results.obs_lim_events
 
         options.saved_params['n_evts_exc_obs'] = fit_results.obs_lim_events
         options.saved_params['n_evts_exc_exp'] = fit_results.exp_lim_events
@@ -836,6 +904,8 @@ def limit_set(options):
 
         if(np.sum(signifs) > 0):
             make_signif_plot(options, signifs, spbs_to_run)
+        if(np.sum(asimov_signifs) > 0):
+            find_expected_signifs(options, asimov_signifs, spbs_to_run)
 
     if(do_output):
         output_json(options)
@@ -1121,31 +1191,16 @@ def limit_set(options):
 
         up_tot = up_tot ** 0.5
         down_tot = down_tot ** 0.5
+        frac_unc = (up_tot + down_tot) / (2. * sig_eff_nom)
 
         print(" \n Eff final %.3f + %.3f - %.3f \n" % (sig_eff_nom, up_tot, down_tot))
         options.saved_params['sig_eff_nom'] = float(sig_eff_nom)
         options.saved_params['sig_eff_up_unc'] = float(up_tot)
         options.saved_params['sig_eff_up_down'] = float(down_tot)
 
+        options.saved_params['sig_eff_frac_unc'] = float(frac_unc)
 
-        frac_unc = (up_tot + down_tot) / (2. * sig_eff_nom)
-        #frac_unc = 0.0001
 
-        #t_opts = spb_opts(options, inj_spb)
-        #t_opts.step = "fit"
-        #t_opts.fit_label = 'sys_final'
-        #t_opts.sig_norm_unc = frac_unc
-        #t_opts.reload = False
-        #t_opts.condor = False
-        #t_opts.generic_sig_shape = False
-
-        #new_fit_loc = options.output + "data_fit_results_sys.json"
-        #if(os.path.exists(new_fit_loc)):
-        #    print("Prior fit found, not rerunning sig norm unc fit")
-        #else:
-        #    full_run(t_opts)
-        #    fit_file = t_opts.output + 'fit_results_%.1f.json' % options.mjj_sig
-        #    os.system("cp %s %s"  % (fit_file, new_fit_loc))
 
         if(not options.data):
             #Use expected limit from b-only fit
@@ -1194,6 +1249,78 @@ def limit_set(options):
         options.saved_params['xsec_exc_exp_sys'] = exp_excluded_xsec
         options.saved_params['xsec_exc_exp_1sig_high_sys'] = exp_excluded_xsec_1sig_high
         options.saved_params['xsec_exc_exp_1sig_low_sys'] = exp_excluded_xsec_1sig_low
+
+    if(do_taggerMC_selection):
+
+        spb = options.saved_params['best_exp_spb']
+        copy_opts = copy.deepcopy(options)
+        copy_opts.output = options.output + "taggerMC_spb%.1f/" %spb
+        copy_opts.orig_dir = options.output + "spb%.1f/" % spb
+        copy_taggers(copy_opts)
+
+        s_opts = spb_opts(options, spb)
+        s_opts.output = options.output + 'taggerMC_spb%.1f/' % spb
+        s_opts.label += "_taggerMC"
+        s_opts.step = 'select'
+        s_opts.sig_per_batch = 0
+        s_opts.new = True
+        full_run(s_opts)
+
+
+    if(do_taggerMC_merge):
+
+        spb = options.saved_params['best_exp_spb']
+
+        s_opts = spb_opts(options, spb)
+        s_opts.output = options.output + 'taggerMC_spb%.1f/' % spb
+        s_opts.label += "_taggerMC"
+        s_opts.step = 'merge'
+        s_opts.sig_per_batch = 0
+        full_run(s_opts)
+
+    if(do_taggerMC_fit):
+        spb = options.saved_params['best_exp_spb']
+
+        s_opts = spb_opts(options, spb)
+        s_opts.output = options.output + 'taggerMC_spb%.1f/' % spb
+        s_opts.label += "_taggerMC"
+        s_opts.new = True
+
+        s_opts.sig_norm_unc = options.saved_params['sig_eff_frac_unc']
+
+        fname = s_opts.output + "fit_results_%.1f.json" % options.mjj_sig
+
+        if(os.path.exists(fname) and not options.refit):
+            pass
+
+        else:
+            base_path = os.path.abspath(".") + "/"
+            sig_shape_file = base_path + options.output + "sig_nosel_fit/sig_fit_%i.root" % options.mjj_sig
+            run_dijetfit(s_opts, output_dir = base_path + s_opts.output, sig_shape_file = sig_shape_file, sig_norm = options.sig_norm, loop = True)
+
+        fit_res = get_options_from_json(fname)
+
+        get_signal_params(options)
+
+        #sig_eff = options.saved_params['sig_eff_nom']
+
+        #get eff of exp tagger
+        sig_effs = []
+        for spb in options.spbs:
+            sig_eff = get_sig_eff(options.output + "spb" + str(float(spb)) + "/", eff = options.effs[0])
+            sig_effs.append(sig_eff)
+
+        sig_eff = sig_effs[options.spbs.index(options.saved_params['best_exp_spb'])]
+
+        options.saved_params['taggerMC_xsec_exc_obs'] = convert_to_xsec(options, fit_res.obs_lim_events, sig_eff)
+        options.saved_params['taggerMC_xsec_exc_exp'] = convert_to_xsec(options, fit_res.exp_lim_events, sig_eff)
+        options.saved_params['taggerMC_xsec_exc_exp_1sig_high'] = convert_to_xsec(options, fit_res.exp_lim_1sig_high, sig_eff)
+        options.saved_params['taggerMC_xsec_exc_exp_1sig_low'] = convert_to_xsec(options, fit_res.exp_lim_1sig_low, sig_eff)
+
+        print("TaggerMC Exp. (Obs.) : %.2f (%.2f)"  % (options.saved_params['taggerMC_xsec_exc_exp'], options.saved_params['taggerMC_xsec_exc_obs']))
+        print("Reg. Exp. (Obs.) : %.2f (%.2f)"  % (options.saved_params['xsec_exc_exp_sys'], options.saved_params['xsec_exc_obs_sys']))
+
+
 
 
     write_params(options.output + "saved_params.json", options.saved_params)

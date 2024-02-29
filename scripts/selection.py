@@ -60,7 +60,11 @@ def selection(options):
         sig_only_data = load_signal_file(options)
 
     Y = data['label'].reshape(-1)
+    j1_feats = data['j1_features']
+    j2_feats = data['j2_features']
     mjj = data['mjj']
+
+    save_feats = True
 
     event_num = data['event_info'][:,0]
 
@@ -204,6 +208,8 @@ def selection(options):
 
         mjj_output = mjj[mask]
         is_sig_output = Y[mask]
+        j1_feats_output = j1_feats[mask]
+        j2_feats_output = j2_feats[mask]
         event_num_output = event_num[mask]
         print("Selected %i events" % mjj_output.shape[0])
         eps = 1e-8
@@ -405,6 +411,11 @@ def selection(options):
                 f.create_dataset("mjj", data=mjj_output, chunks = True, maxshape = mjj_shape)
                 f.create_dataset("truth_label", data=is_sig_output, chunks = True, maxshape = is_sig_shape)
                 f.create_dataset("event_num", data=event_num_output, chunks = True, maxshape = event_num_shape)
+                if(save_feats):
+                    feats_shape = list(j1_feats_output.shape)
+                    feats_shape[0] = None
+                    f.create_dataset("j1_feats", data=j1_feats_output, chunks = True, maxshape = feats_shape)
+                    f.create_dataset("j2_feats", data=j2_feats_output, chunks = True, maxshape = feats_shape)
 
 
         if(options.do_roc):
