@@ -121,7 +121,8 @@ def train_cwola_hunting_network(options):
     seed = options.seed + batch_sum
     print("Seed is %i" % seed)
     np.random.seed(seed)
-    tf.set_random_seed(seed)
+    #tf.set_random_seed(seed)
+    tf.random.set_seed(seed)
     os.environ['PYTHONHASHSEED']=str(seed)
     random.seed(seed)
 
@@ -197,7 +198,7 @@ def train_cwola_hunting_network(options):
 
     if(do_val and np.sum(val_data['label'] > 0) > 10):
         msg = "End of training. "
-        y_pred_val = best_model.predict_proba(val_data[x_key])
+        y_pred_val = best_model.predict(val_data[x_key])
         roc_val = roc_auc_score(np.clip(val_data['label'], 0, 1), y_pred_val)
         phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data['label'] > 0))
         msg += phrase

@@ -4,8 +4,9 @@ from sklearn.metrics import roc_curve, auc, roc_auc_score
 from scipy.special import erf
 import argparse
 import sys
+import matplotlib
+import matplotlib.pyplot as plt
 sys.path.append('..')
-from utils.TrainingUtils import *
 import mplhep as hep
 
 
@@ -87,7 +88,7 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], 
     ax.tick_params(axis='both', which = 'major', labelsize = 24)
     plt.xlim(-0.25*xmax, xmax * 1.08)
     #hep.cms.text(" Preliminary")
-    hep.cms.label( data = False)
+    hep.cms.label( paper = True, data = False)
     plt.legend(entries, leg_labels, loc = 'center left', title = title, fontsize = 22)
     plt.savefig(fout , bbox_inches="tight")
     print("Saving " + fout)
@@ -150,8 +151,7 @@ linestyles[7] = 'dashed'
 linestyles[8] = 'dashed'
 linestyles[9] = 'dashed'
 
-#remove CATHODE-b
-#excludes = [5,7] 
+#excludes = [5,7]  # remove cathode-b and QUAK model-specific 
 excludes = [] 
 leg_order = [1,2,3,4,5,6,7,8,9,0]
 
@@ -216,7 +216,7 @@ no_taus = False
 #fs_Wp[8] = [0.024, 2.98e-6, 2.37e-9, 9.836e-11, 1.48e-11, 7.07e-17]
 
 fs = [fs_Wp, fs_X]
-fouts = ["Wp_pvals.png", "XYYp_pvals.png"]
+fouts = ["Wp_pvals.pdf", "XYYp_pvals.pdf"]
 
 
 for l_idx,flist  in enumerate(fs):

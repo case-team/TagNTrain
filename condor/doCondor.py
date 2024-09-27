@@ -47,6 +47,8 @@ def condor_options():
     parser.add_argument("-y", "--year", dest='year', type=int, default = 2016,  help="Year for output file location")
 
     parser.add_argument("--output_transfer", default = "ON_EXIT_OR_EVICT",  help="condor_transfer")
+    parser.add_argument("--sl7", dest='sl7', default = False, action='store_true',  help="sl7 container")
+    parser.add_argument("--tfexec", dest='tfexec', default = False, action='store_true',  help="tensorflow container")
 
     parser.add_argument("--tar", dest='tar', default = False, action='store_true',  help="Create tarball of current directory")
     parser.add_argument("--tarname", dest='tarname', default = "CASE", help="Name of directory to tar (relative to cmssw_base)")
@@ -65,9 +67,13 @@ def condor_options():
 def doCondor(options):
     cwd = os.getcwd()
     #if len(args) < 1 and (not options.monitor or not options.tar) : sys.exit('Error -- must specify ANALYZER')
-    cmssw_ver = os.getenv('CMSSW_VERSION', 'CMSSW_10_6_5')
+    #cmssw_ver = os.getenv('CMSSW_VERSION', 'CMSSW_10_6_5')
+    #cmssw_ver = 'CMSSW_13_2_10'
+    #cmssw_ver = 'CMSSW_10_6_5'
+    cmssw_ver = 'CMSSW_12_5_0'
     cmssw_base = os.getenv('CMSSW_BASE')
     xrd_base = 'root://cmseos.fnal.gov/'
+    local_eos = '/eos/uscms/'
     EOS_home = '/store/user/oamram/'
     EOS_base = xrd_base + EOS_home
     scram_arch = 'slc7_amd64_gcc700'
@@ -86,16 +92,10 @@ def doCondor(options):
         #sub_file.write('set -x \n')
         sub_file.write('source /cvmfs/cms.cern.ch/cmsset_default.sh\n')
         sub_file.write('pwd\n')
-        sub_file.write('export SCRAM_ARCH=%s\n' % scram_arch)
+        #sub_file.write('export SCRAM_ARCH=%s\n' % scram_arch)
 
-        if(not options.cmssw):
-            sub_file.write('eval `scramv1 project CMSSW %s`\n'% (cmssw_ver))
-            sub_file.write('cat my_script.sh \n')
-            sub_file.write('mv my_script.sh %s/src/ \n'% (cmssw_ver))
-            sub_file.write('cd %s/src\n'%(cmssw_ver))
-            sub_file.write('eval `scramv1 runtime -sh`\n')
+        if(options.cmssw):
 
-        else:
             sub_file.write('xrdcp %s CASE_CMSSW.tgz \n' % eos_cmssw_file) 
             sub_file.write('cat my_script.sh \n')
             sub_file.write('tar -xzf CASE_CMSSW.tgz \n')
@@ -104,11 +104,20 @@ def doCondor(options):
             sub_file.write('cd %s/src \n' % cmssw_name)
             sub_file.write('eval `scramv1 runtime -sh`\n')
 
+        elif(not options.tfexec):
+            sub_file.write('eval `scramv1 project CMSSW %s`\n'% (cmssw_ver))
+            sub_file.write('cat my_script.sh \n')
+            sub_file.write('mv my_script.sh %s/src/ \n'% (cmssw_ver))
+            sub_file.write('cd %s/src\n'%(cmssw_ver))
+            sub_file.write('eval `scramv1 runtime -sh`\n')
+
         sub_file.write('xrdcp %s tarDir.tgz\n' %eos_an_file)
         sub_file.write('tar -xzf tarDir.tgz \n')
-        sub_file.write('eval `scramv1 runtime -sh`\n')
-        sub_file.write('scram b ProjectRename \n')
-        sub_file.write('scram b -j \n')
+
+        if(not options.tfexec):
+            sub_file.write('eval `scramv1 runtime -sh`\n')
+            sub_file.write('scram b ProjectRename \n')
+            sub_file.write('scram b -j \n')
         sub_file.write('./my_script.sh %s %i \n' % (eosout,iJob))
         sub_file.write('cd ${_CONDOR_SCRATCH_DIR} \n')
         sub_file.write('rm -rf %s\n' % cmssw_name)
@@ -127,7 +136,8 @@ def doCondor(options):
             condor_file.write('universe = vanilla\n')
             condor_file.write('Executable = %s\n'% sub_file)
             condor_file.write('Requirements = OpSys == "LINUX"&& (Arch != "DUMMY" )\n')
-            #condor_file.write('request_disk = 500000\n') # modify these requirements depending on job
+            if(options.sl7): condor_file.write('+ApptainerImage = "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel7" \n')
+            elif(options.tfexec): condor_file.write('+ApptainerImage = "/cvmfs/unpacked.cern.ch/registry.hub.docker.com/fnallpc/fnallpc-docker:tensorflow-latest-gpu-singularity" \n')
             if(options.mem > 0. ): condor_file.write('request_memory = %i \n' % options.mem)
             condor_file.write('Should_Transfer_Files = YES\n')
             input_files = "Transfer_Input_Files = %s, %s " %(script_location, sub_file)
@@ -155,7 +165,7 @@ def doCondor(options):
             print("Using CASE tarball options")
             excludeList = ["CASE/CASEUtils/*.h5",  "CASE/CASEUtils/*.root", "CASE/TagNTrain/data",  "CASE/TagNTrain/runs", "CASE/TagNTrain/plots", "CASE/TagNTrain/combo_plots",
                     "CASE/TagNTrain/condor",
-                    "CASE/CASEUtils/H5_maker", "CASE/CASEUtils/fitting/fit_inputs", "CASE/TagNTrain/models/BB*", "CASE/TagNTrain/models/old", "CASE/*/DReader*.h5"]
+                    "CASE/CASEUtils/H5_maker", "CASE/CASEUtils/fitting/fit_inputs", "CASE/TagNTrain/models/BB*", "CASE/LundReweighting/plots", "CASE/TagNTrain/models/old", "CASE/*/DReader*.h5"]
 
             options.tarname = "CASE"
             for item in excludeList:
@@ -229,7 +239,6 @@ def doCondor(options):
                 #os.system('rm -r %s' % (options.outdir + options.name))
         print("Dir is %s" %( options.outdir + options.name))
         eos_dir_name = EOS_base + 'Condor_outputs/' + options.name
-        #os.system("eosrm -r %s" % eos_dir_name)
         os.system('mkdir -p %s' % (options.outdir + options.name))
         os.system('cp %s %s/my_script.sh' %(options.script, options.outdir + options.name))
         for f in options.input:
@@ -247,7 +256,13 @@ def doCondor(options):
         odir = options.outdir + options.name
 
         # pick up job scripts in output directory (ends in .sh)
-        os.system('xrdfs %s mkdir %s' % (xrd_base, EOS_home + 'Condor_outputs/' + options.name))
+        #os.system('xrdfs %s mkdir %s' % (xrd_base, EOS_home + 'Condor_outputs/' + options.name))
+        eos_outdir = local_eos + EOS_home + 'Condor_outputs/' + options.name
+        if(options.overwrite): 
+            print("Cleaning EOS output dir %s" % eos_outdir)
+            os.system("eosrm -r %s" % eos_outdir)
+        os.system('mkdir %s' % (eos_outdir))
+
         lofjobs = []
         for root, dirs, files in os.walk(odir):
             for f in fnmatch.filter(files, '%s_*.sh' %options.name):

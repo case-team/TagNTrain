@@ -37,7 +37,7 @@ def plot_biases(sig_masses, mean_pulls, err_mean_pulls, outfile):
     #draw_mbins(plt, ymin = -1.5, ymax = 1.5, colors = ('gray', 'gray'))
     xmax = np.amax(sig_masses)
     plt.xlim(1400, xmax + 150.)
-    hep.cms.text(" Preliminary")
+    hep.cms.text(" ")
     plt.savefig(outfile, dpi=300, bbox_inches="tight")
     print("Wrote out %s" % outfile)
     plt.close()
@@ -61,7 +61,7 @@ def plot_stitched_mjj(options, mbins, outfile):
     plt.sca(a1)
     #hep.cms.label(llabel = " Preliminary", lumi = 138)
 
-    hep.cms.text("Preliminary")
+    hep.cms.text("")
     hep.cms.lumitext("138 fb$^{-1}$ (13 TeV)")
 
     for mbin in mbins:
@@ -188,7 +188,7 @@ def plot_stitched_mjj(options, mbins, outfile):
     legend.get_frame().set_linewidth(0)
 
     method_label = "Tag N' Train: " if options.do_TNT else "CWoLa Hunting: "
-    sr_label = "A Signal Regions" if mbins[0] < 10 else "B Signal Regions"
+    sr_label = r"$\alpha$ Signal Regions" if mbins[0] < 10 else r"$\beta$ Signal Regions"
     plt.text(0.05, 0.9, method_label + sr_label, transform = a1.transAxes)
 
 
@@ -285,7 +285,7 @@ def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True)
     plt.style.use(hep.style.CMS)
     a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
     plt.sca(a1)
-    hep.cms.label(llabel = " Preliminary", lumi = 138)
+    hep.cms.label(llabel = "", lumi = 138)
 
     plt.scatter(mass_list, pval_list, s = 40.0, c = colors)
     plt.scatter(mass_pval_overflow_list, pval_overflow_list, marker = "v", s = 80.0, c = colors_overflow)
@@ -316,7 +316,7 @@ def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True)
     plt.style.use(hep.style.CMS)
     a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
     plt.sca(a1)
-    hep.cms.label(llabel = " Preliminary", lumi = 138)
+    hep.cms.label(llabel = " ", lumi = 138)
     plt.scatter(mass_list, signif_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel(r"Significance [$\sigma$]")
@@ -331,7 +331,7 @@ def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True)
     plt.style.use(hep.style.CMS)
     a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
     plt.sca(a1)
-    hep.cms.label(llabel = " Preliminary", lumi = 138)
+    hep.cms.label(llabel = " ", lumi = 138)
     plt.scatter(mass_list, nPar_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel("nPars")
@@ -346,7 +346,7 @@ def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True)
     plt.style.use(hep.style.CMS)
     a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
     plt.sca(a1)
-    hep.cms.label(llabel = " Preliminary", lumi = 138)
+    hep.cms.label(llabel = " ", lumi = 138)
     plt.scatter(mass_list, fit_prob_list, s = 40.0, c = colors)
     plt.xlabel(r"$m_{jj}$ [GeV]")
     plt.ylabel("Chi2/ndof Prob.")
@@ -363,7 +363,7 @@ def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True)
     plt.style.use(hep.style.CMS)
     a1 = plt.axes([0.0, 0.0, 1.0, 0.9])
     plt.sca(a1)
-    hep.cms.label(llabel = " Preliminary", lumi = 138)
+    hep.cms.label(llabel = " ", lumi = 138)
     for i in range(len(mass_list)):
         plt.plot([mass_list[i], mass_list[i]], fit_range_list[i], linewidth = 6, c = colors[i])
 

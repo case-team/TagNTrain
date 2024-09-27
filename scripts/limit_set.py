@@ -118,8 +118,9 @@ def get_fit_nosel_params(options):
     if(not os.path.exists(options.sig_file)): sig_file = options.sig_file.replace("data", "data/LundRW")
     else: sig_file = options.sig_file
 
-    if(options.refit or not os.path.exists(fit_file)):
-        options.refit = False
+    #if(not os.path.exists(fit_file) or options.refit):
+    if(not os.path.exists(fit_file)):
+        #options.refit = False
         print("Running fit with no selection \n")
         f_sig = h5py.File(sig_file, "r")
         mjj = f_sig['jet_kinematics'][:,0]
@@ -141,17 +142,20 @@ def get_fit_nosel_params(options):
 
         sig_fit_cmd = "python fit_signalshapes.py -i %s -o %s -M %i --dcb-model --fitRange 1.0 >& %s/sig_fit_log.txt" % (base_path + sig_nosel_fname, plot_dir , options.mjj_sig, plot_dir)
         print(sig_fit_cmd)
-        fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
-        fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
+        #fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
+        #fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
+        #fit_cmd_setup = "cd ../fitting; sl7;  eval `scramv1 runtime -sh`"  
+        #fit_cmd_after = "exit; cd -;"
         full_sig_fit_cmd = fit_cmd_setup + sig_fit_cmd + "; "  + fit_cmd_after
 
-        subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
+        do_sl7(full_sig_fit_cmd)
+        #subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
         sig_shape_file = plot_dir + 'sig_fit_%i.root' % options.mjj_sig
 
         run_dijetfit(options, fit_start = -1, input_file = nosel_fname, output_dir = plot_dir, sig_shape_file = sig_shape_file, sig_norm = options.sig_norm, loop = True)
 
     with open(fit_file, 'r') as f:
-        fit_params = json.load(f, encoding="latin-1")
+        fit_params = json.load(f )
         n_evts_exc_nosel = fit_params['obs_lim_events'] 
 
     print("No selection num events lim %.0f "  % n_evts_exc_nosel)
@@ -205,7 +209,7 @@ def find_expected_signifs(options, asimov_signifs, spbs):
     asimov_signifs = signifs_new
 
 
-    if(np.amax(asimov_signifs) < 4.5):
+    if(np.amax(asimov_signifs) < 4.0):
         print("No injection yielded more than 4.5-sigma! No attempting to compute crossing")
         return
 
@@ -289,7 +293,7 @@ def get_excluded_xsecs(options, nevts_exc, sig_effs):
 def output_json(options):
     sig_name = options.sig_file.split("/")[-1]
 
-    outfile = options.output + sig_name.replace("_Lund.h5", ".json")
+    outfile = options.output + sig_name.replace("_Lundv2.h5", ".json")
     #if("XToYY" in outfile): outfile += "_narrow"
     #outfile += "_TuneCP5_13TeV-madgraph-pythia8_TIMBER.json"
     results = dict()
@@ -427,14 +431,16 @@ def make_limit_plot(options, sig_effs, spbs):
         obs_lim = max(x_inj, x_exc_obs)
         exp_lim = max(x_inj, x_exc_exp)
 
-        if(obs_lim < best_lim_obs):
+        #prefer higher injection if limits are close, because will degrade with sys
+        if(obs_lim < best_lim_obs or (obs_lim == x_inj and obs_lim < 1.1 * best_lim_obs)):
             best_lim_obs = obs_lim
             best_i_obs = i
-        if(exp_lim < best_lim_exp):
+        #if(exp_lim < best_lim_exp):
+        if(exp_lim < best_lim_exp or (exp_lim == x_inj and exp_lim < 1.1 * best_lim_exp)):
             best_lim_exp = exp_lim
             best_i_exp = i
 
-        print(spbs[i], x_inj, x_exc_obs, x_exc_exp)
+        print("%.1f %.2f %.2f %.2f" % (spbs[i], x_inj, x_exc_obs, x_exc_exp))
 
 
     best_i = best_i_exp
@@ -469,7 +475,7 @@ def make_limit_plot(options, sig_effs, spbs):
 
     best_lim_label = "Best Limit %.1f (obs)" % best_lim_obs
     print("Limit without NN selection: %.1f (obs) %.1f (exp)" % (nosel_limit, nosel_limit_exp))
-    print("Best Limit %.2f (obs) %.2f (exp)" % (best_lim_obs, best_lim_exp))
+    print("Best Limit Obs: %.2f (%.1f inj) Exp: %.2f (%.1f inj)" % (best_lim_obs, spbs[best_i_obs], best_lim_exp, spbs[best_i_exp]))
 
     x_stop = max(np.max(xs), nosel_limit)
     xline = np.arange(0,x_stop,x_stop/10)
@@ -595,7 +601,7 @@ def get_data_fit_results(options, sig_norm_unc = -1.0, update = False):
     get_fit_nosel_params(options)
     fname = options.output + "data_fit_results.json" if sig_norm_unc < 0. else options.output + "data_fit_results_sys.json"
 
-    if(os.path.exists(fname) and (sig_norm_unc < 0 or abs(get_options_from_json(fname).script_options['sig_norm_unc'] - sig_norm_unc) < 0.01)):
+    if(os.path.exists(fname) and (sig_norm_unc < 0 or abs(get_options_from_json(fname).script_options['sig_norm_unc'] - sig_norm_unc) < 0.01) and not options.refit):
         #if fit file already exists, with same signal normalization unc, don't rerun
         fit_res = get_options_from_json(fname)
     else:
@@ -678,6 +684,7 @@ def limit_set(options):
             rel_opts.refit = options.refit
             rel_opts.sig_norm = options.sig_norm
             rel_opts.recover = options.recover
+            rel_opts.sys_notrain = options.sys_notrain
             if(len(options.effs) >0): rel_opts.effs = options.effs
             if('generic_sig_shape' in options.__dict__.keys()): rel_opts.generic_sig_shape = options.generic_sig_shape
             rel_opts.sig_shape = options.__dict__.get('sig_shape', "")
@@ -697,6 +704,20 @@ def limit_set(options):
         spbs_to_run = sorted(options.spbs)
 
 
+    #Refresh for Lundv2
+    if(options.step == "Lundv2"):
+
+        os.system("cp " + options.output + "saved_params.json " + options.output + "saved_params_v1.json")
+        os.system("cp " + options.output + "run_opts.json " + options.output + "run_opts_v1.json")
+        os.system("mv " + options.output + "data_fit_results_sys.json " + options.output + "data_fit_results_sys_v1.json")
+        options.sig_file = options.sig_file.replace("Lund.h5", "Lundv2.h5")
+        options.spbs = []
+        spbs_to_run = []
+
+
+
+
+
     #save options
     options.spbs = sorted(options.spbs)
     options_dict = options.__dict__
@@ -706,11 +727,15 @@ def limit_set(options):
     #read saved parameters
     if(os.path.exists(options.output + "saved_params.json")):
         with open(options.output + "saved_params.json", 'r') as f:
-            options.saved_params = json.load(f, encoding="latin-1")
+            options.saved_params = json.load(f)
 
         #options.saved_params = get_options_from_json(options.output + "saved_params.json")
     else:
         options.saved_params = dict()
+
+
+
+
 
 
     #parse what to do 
@@ -736,10 +761,10 @@ def limit_set(options):
     do_sys_train = "sys_train" in options.step
     do_sys_merge = options.step == "sys_merge"
     do_sys_selection = options.step == "sys_select"
-    do_sys_get = "sys_get" in options.step or do_sys_selection
+    do_sys_get = "sys_get" in options.step #or do_sys_selection
     do_sys_plot = options.step == "sys_plot"
 
-    get_condor = get_condor or do_selection
+    #get_condor = get_condor or do_selection
     f_sig_effs = options.output + "sig_effs.npz"
 
     if(len(options.effs) == 0):
@@ -754,9 +779,25 @@ def limit_set(options):
     print(options.spbs)
     print("To run", spbs_to_run)
 
+    if(options.step == "Lundv2"):
+
+        keys = list(options.saved_params.keys())
+        for key in keys:
+            if('sys' in key or 'xsec' in key):
+                del options.saved_params[key]
+
+
+        options.saved_params['signifs'] = []
+        options.saved_params['pvals'] = []
+        options.saved_params['sig_effs'] = []
+
+        write_params(options.output + "saved_params.json", options.saved_params)
+
 
     #Do trainings
     if(do_train):
+
+        if(options.mbin == 13): options.condor_mem = max(options.condor_mem, 4000)
         for spb in spbs_to_run:
             t_opts = spb_opts(options, spb)
             t_opts.step = "train"
@@ -779,6 +820,7 @@ def limit_set(options):
     if(do_selection):
 
         print("Selecting with eff %.03f based on mbin %i" % (options.effs[0], options.mbin))
+        options.condor_mem = max(options.condor_mem, 4000)
 
         for spb in spbs_to_run:
             print(spb)
@@ -912,14 +954,16 @@ def limit_set(options):
 
 
     if(do_sys_train):
+        if(options.mbin == 13): options.condor_mem = max(options.condor_mem, 4000)
         if(len(spbs_to_run) == 1):
             inj_spb = spbs_to_run[0]
             print("Using spb %i" % inj_spb)
         else:
             inj_spb = get_optimal_spb(options)
 
-        if(options.saved_params['xsec_exc_exp'] > options.saved_params['inc_xsec_exc_exp']): #don't retrain systematics if worse than inclusive
-            print("Expected limit (%.2f) is worse than inclusive (%.2f), skipping systematics training" % ( options.saved_params['xsec_exc_exp'], options.saved_params['inc_xsec_exc_exp']))
+        if(options.saved_params['xsec_exc_exp'] > options.saved_params['inc_xsec_exc_exp'] or options.sys_notrain): #don't retrain systematics if worse than inclusive
+            print("Expected limit (%.2f) is worse than inclusive (%.2f) (or notrain option), skipping systematics training" 
+                    % ( options.saved_params['xsec_exc_exp'], options.saved_params['inc_xsec_exc_exp']))
             sys_train_list = []
             options.saved_params['sys_train_list'] = []
 
@@ -961,7 +1005,7 @@ def limit_set(options):
 
     if(do_sys_get):
         inj_spb = get_optimal_spb(options)
-        trained = options.saved_params['sys_train_list']  
+        trained = copy.copy(options.saved_params['sys_train_list']  )
         if(os.path.exists(options.output + "rand0/")): trained += ['rand%i' %i for i in range(num_rand)]
         for sys in trained:
             t_opts = spb_opts(options, inj_spb, sys = sys)
@@ -973,6 +1017,8 @@ def limit_set(options):
 
     if(do_sys_selection): #compute eff for systematics
 
+        options.condor_mem = max(options.condor_mem, 4000)
+
         if(len(spbs_to_run) == 1):
             inj_spb = spbs_to_run[0]
             print("Using spb %i" % inj_spb)
@@ -981,6 +1027,7 @@ def limit_set(options):
 
         #add JME vars but remove duplicates
         sys_select_list = list(set(options.saved_params['sys_train_list'] + list(JME_vars)))
+        print(sys_select_list)
 
         options.saved_params['sys_select_list'] = sys_select_list
 
@@ -988,9 +1035,11 @@ def limit_set(options):
 
         t_opts_orig = spb_opts(options, inj_spb)
         for sys in sys_select_list:
+            print(sys)
             t_opts = spb_opts(options, inj_spb, sys = sys)
             if(sys in options.saved_params['sys_train_list']):
                 t_opts.reload = True
+                t_opts.step = "select"
                 #continue
             else:
                 t_opts.reload = False
@@ -998,8 +1047,8 @@ def limit_set(options):
                 t_opts.condor_mem = options.condor_mem
                 #for now copy everything, TODO make more memory efficienct using sym links for models
                 print_and_do("rm -r %s; cp -r %s %s" % (t_opts.output, t_opts_orig.output, t_opts.output))
+                t_opts.step = "select,noget"
                 
-            t_opts.step = "select"
             t_opts.eff_only = True
             t_opts.condor = True
             full_run(t_opts)
@@ -1070,7 +1119,7 @@ def limit_set(options):
             diffs_dict_fixed[sys_clean] = [0., 0.] 
 
         #random variation
-        if(options.saved_params['xsec_exc_exp'] < options.saved_params['inc_xsec_exc_exp']): #systematics not trained if worse than inclusive
+        if(options.saved_params['xsec_exc_exp'] < options.saved_params['inc_xsec_exc_exp'] and len(options.saved_params['sys_train_list']) > 0): #systematics not trained if worse than inclusive
             rand_effs = [sig_eff_nom]
             #rand_effs = []
             for seed in range(num_rand):
@@ -1123,7 +1172,6 @@ def limit_set(options):
             else: print("Sys is %s ? " % sys)
 
         #do special lund uncs
-        lund_match_unc = get_matching_unc(options.sig_file)
         lund_stat_var_effs = get_sig_eff(sig_eff_file, eff = options.effs[0], sys = 'lund_stat')
         lund_pt_var_effs = get_sig_eff(sig_eff_file, eff = options.effs[0], sys = 'lund_pt')
         
@@ -1134,8 +1182,6 @@ def limit_set(options):
 
         lund_stat_unc = (abs(lund_stat_mean - sig_eff_nom_fixed)  + lund_stat_std)
         lund_pt_unc = (abs(lund_pt_mean - sig_eff_nom_fixed) + lund_pt_std)
-        diffs_dict_fixed['lund_match'][0] =  lund_match_unc * sig_eff_nom
-        diffs_dict_fixed['lund_match'][1] = -lund_match_unc * sig_eff_nom
 
         diffs_dict_fixed['lund_stat'][0] =  lund_stat_unc
         diffs_dict_fixed['lund_stat'][1] = -lund_stat_unc
@@ -1191,7 +1237,9 @@ def limit_set(options):
 
         up_tot = up_tot ** 0.5
         down_tot = down_tot ** 0.5
-        frac_unc = (up_tot + down_tot) / (2. * sig_eff_nom)
+        #frac_unc = (up_tot + down_tot) / (2. * sig_eff_nom)
+        #Only unc in negative direction will affect limit
+        frac_unc = down_tot / sig_eff_nom
 
         print(" \n Eff final %.3f + %.3f - %.3f \n" % (sig_eff_nom, up_tot, down_tot))
         options.saved_params['sig_eff_nom'] = float(sig_eff_nom)
@@ -1234,8 +1282,12 @@ def limit_set(options):
             inj_obs = options.saved_params['best_obs_spb']*options.numBatches / options.lumi / options.preselection_eff / options.hadronic_only_eff
 
 
-        obs_excluded_xsec = max(inj_obs, convert_to_xsec(options, options.saved_params['n_evts_exc_obs_sys'], sig_eff_nom_obs))
-        exp_excluded_xsec = max(inj_exp, convert_to_xsec(options, options.saved_params['n_evts_exc_exp_sys'], sig_eff_nom_exp))
+        obs_excluded_xsec = convert_to_xsec(options, options.saved_params['n_evts_exc_obs_sys'], sig_eff_nom_obs)
+        print("Obs: inj %.2f exc %.2f" % (inj_obs, obs_excluded_xsec))
+        obs_excluded_xsec = max(inj_obs, obs_excluded_xsec)
+        exp_excluded_xsec = convert_to_xsec(options, options.saved_params['n_evts_exc_exp_sys'], sig_eff_nom_exp)
+        print("Exp: inj %.2f exc %.2f" % (inj_exp, exp_excluded_xsec))
+        exp_excluded_xsec = max(inj_exp, exp_excluded_xsec)
         exp_excluded_xsec_1sig_high = max(inj_exp, convert_to_xsec(options, options.saved_params['n_evts_exc_exp_1sig_high_sys'], sig_eff_nom_exp))
         exp_excluded_xsec_1sig_low = max(inj_exp, convert_to_xsec(options, options.saved_params['n_evts_exc_exp_1sig_low_sys'], sig_eff_nom_exp))
 
@@ -1343,6 +1395,7 @@ if(__name__ == "__main__"):
     parser.add_argument("--counting_fit", default = False,  action = 'store_true', help = 'Do counting version of dijet fit')
     parser.add_argument("--num_events", default = False, action = 'store_true', help = "Make limit plot in terms of num events (removes common prefactors)")
     parser.add_argument("--sys_train_all", default = False, action = 'store_true', help = "Perform re-training for all systematics")
+    parser.add_argument("--sys_notrain", default = False, action = 'store_true', help = "Dont re-train for any systematics")
     parser.add_argument("--reload", action = 'store_true', help = "Reload based on previously saved options")
     parser.add_argument("--new", dest='reload', action = 'store_false', help = "Reload based on previously saved options")
     parser.add_argument("--sig_shape", default = "", help='signal shape file')

@@ -61,8 +61,8 @@ deepB_mask = (deepB_more > deepB_thresh) | (deepB_less > deepB_thresh)
 
 
 
-#mask = (j1_tau32 < 0.65) & ( j2_tau32 < 0.65) & msd_mask #
-mask = (j1_msd > 0)
+mask = (j1_tau32 < 0.65) & ( j2_tau32 < 0.65) & msd_mask #
+#mask = (j1_msd > 0)
 #mask = (j1_tau21 < 0.4) & ( j2_tau21 < 0.4) & msd_mask #XYY
 #mask = (j1_tau32 < 0.6) &  msd_mask & deepB_mask # Wp
 #mask = (((j1_msd > 200.) & (j1_tau32 < 0.5)) | (j1_LSF  > 0.8)) & (

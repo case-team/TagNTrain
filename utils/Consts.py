@@ -133,9 +133,14 @@ JME_vars_map = {
         'm_JMR_up' : 10,
         'm_JMR_down' : 11
         }
-lund_vars = {"lund_sys_up", "lund_sys_down", "lund_bquark_up", "lund_bquark_down"}
 
-lund_vars_map = { "lund_sys_up" : 0, "lund_sys_down" : 1, "lund_bquark_up": 2, "lund_bquark_down":3}
+lund_vars_map = { "lund_sys_up" : 0, "lund_sys_down" : 1, 
+                  "lund_bquark_up": 2, "lund_bquark_down":  3, 
+                  "lund_prongs_up": 4, "lund_prongs_down":  5, 
+                  "lund_unclust_up": 6, "lund_unclust_down":  7, 
+                  "lund_distortion_up": 8, "lund_distortion_down":  9, 
+                  }
+lund_vars = set(lund_vars_map.keys())
 
 sys_base = set(filter(lambda x: 'PS' not in x, sys_weights_map.keys())) #remove parton shower uncs
 sys_base.remove('nom_weight')
@@ -146,7 +151,7 @@ sys_weight_list = sys_base
 sys_list_clean = { sys.replace("_up", "").replace("_down", "") for sys in sys_list}
 sys_weight_list_clean = { sys.replace("_up", "").replace("_down", "") for sys in sys_weight_list}
 all_sys_list_clean = copy.copy(sys_list_clean)
-all_sys_list_clean.update({'lund_match', 'lund_pt', 'lund_stat'})
+all_sys_list_clean.update({'lund_pt', 'lund_stat'})
 
 JME_vars_clean = { sys.replace("_up", "").replace("_down", "") for sys in JME_vars}
 

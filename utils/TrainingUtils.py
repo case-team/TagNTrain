@@ -121,14 +121,14 @@ class RocCallback(tf.keras.callbacks.Callback):
         roc_train = roc_val = 0.
         msg = "\r%s" % self.extra_label
         if(not self.skip_train):
-            y_pred_train = self.model.predict_proba(self.x)
+            y_pred_train = self.model.predict(self.x)
             mask = ~np.isnan(y_pred_train)
             if(y_pred_train[mask].shape[0] > 1000):
                 roc_train = roc_auc_score(self.y[mask], y_pred_train[mask])
                 phrase = " roc-auc_train: %s" % str(round(roc_train,4))
                 msg += phrase
         if(not self.skip_val):
-            y_pred_val = self.model.predict_proba(self.x_val)
+            y_pred_val = self.model.predict(self.x_val)
             mask = ~np.isnan(y_pred_val)
             if(y_pred_val[mask].shape[0] > 1000):
                 roc_val = roc_auc_score(self.y_val[mask], y_pred_val[mask])

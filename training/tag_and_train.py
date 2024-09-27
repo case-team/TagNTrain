@@ -209,7 +209,8 @@ def tag_and_train(options):
     seed = options.seed + batch_sum
     print("Seed is %i" % seed)
     np.random.seed(seed)
-    tf.set_random_seed(seed)
+    #tf.set_random_seed(seed)
+    tf.random.set_seed(seed)
     os.environ['PYTHONHASHSEED']=str(seed)
     random.seed(seed)
 
@@ -267,7 +268,7 @@ def tag_and_train(options):
         model_list.append(model)
         os.system("rm %s" % checkpoint_loc)
 
-        preds = model.predict_proba(data[x_key][:10])
+        preds = model.predict(data[x_key][:10])
         if np.any(np.isnan(preds)): 
             print("Got output Nan for idx %i. Should rerun with a different seed" % model_idx )
             #sys.exit(1)
@@ -310,7 +311,7 @@ def tag_and_train(options):
 
     if(do_val and np.sum(val_data_plain[1] > 0) > 10):
         msg = "End of training. "
-        y_pred_val = best_model.predict_proba(val_data_plain[0])
+        y_pred_val = best_model.predict(val_data_plain[0])
         roc_val = roc_auc_score(val_data_plain[1], y_pred_val)
         phrase = " roc-auc_val: %s (based on %i signal validation events)" % (str(round(roc_val,4)), np.sum(val_data_plain[1] > 0))
         msg += phrase

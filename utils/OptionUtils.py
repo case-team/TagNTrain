@@ -234,7 +234,7 @@ def get_options_from_pkl(fname):
 def get_options_from_json(fname):
 
     with open(fname, "rb") as f:
-        options_dict = json.load(f, encoding = 'latin-1')
+        options_dict = json.load(f )
     options = OptStruct(**options_dict)
 
     return options

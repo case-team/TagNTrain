@@ -5,13 +5,6 @@ from optparse import OptionParser
 from optparse import OptionGroup
 
 
-
-
-
-
-
-
-
 def draw_sys_variations(options, frac_const = 5):
     #frac_const = 10
 
@@ -112,7 +105,7 @@ def draw_sys_variations(options, frac_const = 5):
 
 
 
-            if(any(diff > frac_unc )):
+            if(frac_unc is not None and any(diff > frac_unc )):
                 print(jme_var, JS, ratios[0])
                 relevant_uncs.add(jme_var)
 
@@ -142,7 +135,7 @@ def draw_sys_variations(options, frac_const = 5):
                 diff = abs(ratios[0] - 1.0)
                 JS = (JSD(ns[0], ns[1])  + JSD(ns[0], ns[2])) / 2. 
 
-                if(any(diff > frac_unc)):
+                if(frac_unc is not None and any(diff > frac_unc)):
                     print(jme_var, JS, ratios[0])
                     relevant_uncs.add(jme_var)
 
@@ -195,7 +188,7 @@ def draw_sys_variations(options, frac_const = 5):
                 diff = abs(ratios[0] - 1.0)
                 JS = (JSD(ns[0], ns[1])  + JSD(ns[0], ns[2])) / 2. 
 
-                if(any(diff > frac_unc)):
+                if(frac_unc is not None and any(diff > frac_unc)):
                     print(sys, JS, ratios[0])
                     relevant_uncs.add(sys)
 

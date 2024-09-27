@@ -9,8 +9,33 @@ import subprocess
 import h5py
 import time
 
-fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
-fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
+#fit_cmd_setup = "cd ../fitting; source deactivate; eval `scramv1 runtime -sh`;"  
+#fit_cmd_after = "cd -; source deactivate; source activate mlenv0"
+fit_cmd_setup = "cd ../fitting \n"  
+fit_cmd_after = " \n cd - "
+
+def do_sl7(cmd, before_cmd = '', after_cmd = ''):
+    #workaround to an sl7 command (eg a fit) using container
+    #one dummy script for the sl7 command, one to call the aptainer (python doesn't like calling apptainer directly)
+    sl7exec='apptainer exec -p --bind `readlink $HOME` --bind `readlink -f ${HOME}/nobackup/` --bind /cvmfs /cvmfs/unpacked.cern.ch/registry.hub.docker.com/cmssw/el7:x86_64' 
+    dummy1 = open("dummy1.sh", "w")
+    dummy2 = open("dummy2.sh", "w")
+
+    setup_cmd = "source /cvmfs/cms.cern.ch/cmsset_default.sh \n"
+    cmsenv_cmd = "eval `scramv1 runtime -sh` \n"
+    dummy2.write(setup_cmd)
+    dummy2.write(cmsenv_cmd)
+    dummy2.write(cmd + "\n")
+
+    dummy1.write(sl7exec + " bash dummy2.sh")
+    dummy1.close()
+    dummy2.close()
+    subprocess.call("bash dummy1.sh", shell = True, executable='/bin/bash')
+
+    os.system("rm dummy1.sh dummy2.sh")
+
+
+
 
 def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", input_file = "", label = "", output_dir = "", loop = False, dcb_model = True, sig_norm = -1, no_sig = False):
     print("dijet fit MJJ sig %.1f"  % options.mjj_sig)
@@ -67,7 +92,8 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
         dijet_cmd_iter += " >& %s/fit_log_%s%.1f.txt " % (output_dir, label, options.mjj_sig)
         fit_cmd = fit_cmd_setup +  dijet_cmd_iter + "; " + fit_cmd_after
         print(fit_cmd)
-        subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
+        do_sl7(fit_cmd)
+        #subprocess.call(fit_cmd,  shell = True, executable = '/bin/bash')
 
         run_fit = False
         no_results = False
@@ -79,7 +105,7 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
                 run_fit = True
             else:
                 with open(fit_file, 'r') as f:
-                    fit_params = json.load(f, encoding="latin-1")
+                    fit_params = json.load(f )
 
                 if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > err_thresh):
                 #if((fit_params['bkgfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > err_thresh):
@@ -301,7 +327,7 @@ def full_run(options):
     get_condor = do_train = do_merge = do_selection = do_fit = False
     do_train = options.step == "train"
     get_condor = options.step == "get"
-    do_selection = options.step == "select"
+    do_selection = "select" in options.step
     do_merge = options.step == "merge"
     do_fit = options.step == "fit"
     do_roc = options.step == "roc"
@@ -315,7 +341,7 @@ def full_run(options):
     if(options.step == "roc" and options.condor):
         do_merge = True
 
-    get_condor = get_condor or (do_selection and options.condor)
+    get_condor = get_condor or (do_selection and options.condor and 'noget' not in options.step)
     do_merge = do_merge 
 
 
@@ -404,6 +430,7 @@ def full_run(options):
                 c_opts.name = options.label + "_j1_kfold%i" % k
                 c_opts.outdir = options.output + "j1_kfold%i/" % k
                 if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
+                os.system("rm %s/model*.h5" % c_opts.outdir)
                 doCondor(c_opts)
                 #c_opts.name = "j2_kfold%i" % k
                 c_opts.name = options.label + "_j2_kfold%i" % k
@@ -413,7 +440,9 @@ def full_run(options):
             else:
                 c_opts.name = options.label + "_jrand_kfold%i" % k
                 c_opts.outdir = options.output + "jrand_kfold%i/" % k
+                os.system("rm %s/model*.h5" % c_opts.outdir)
                 if( not os.path.exists(c_opts.outdir)): os.system("mkdir %s" % c_opts.outdir)
+                os.system("rm %s/model*.h5" % c_opts.outdir)
                 doCondor(c_opts)
 
                 
@@ -517,7 +546,7 @@ def full_run(options):
 
                 #tar models together
                 tarname = options.output + "models.tar"
-                os.system("tar -cf %s %s --exclude=*/condor_jobs/*" %(tarname, options.output + "j*/"))
+                os.system(""" find %s -name "model*.h5" | tar -cf %s -T -""" %(options.output, tarname))
 
                 inputs_list = [selection_opts_fname, tarname]
                 c_opts.input = inputs_list
@@ -608,7 +637,7 @@ def full_run(options):
 
             #print(options.__dict__)
             if('eff_only' in options.__dict__.keys() and not options.eff_only): #merge fit inputs
-                merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs_merge
+                merge_cmd = "python3 ../../CASEUtils/H5_maker/H5_merge.py %s "  % fit_inputs_merge
 
                 do_merge = False
                 for k,k_options in enumerate(kfold_options):
@@ -616,9 +645,12 @@ def full_run(options):
 
                     if(not os.path.exists(fit_inputs)):
                         fit_inputs = options.output + "fit_inputs_kfold{k}.h5".format(k = k)
-                    if(os.path.exists(fit_inputs)): 
+
+                    if(os.path.exists(fit_inputs) and os.path.getsize(fit_inputs) > 10 ): 
                         do_merge = True
                         merge_cmd += fit_inputs + " " 
+                    else:
+                        print("MISSING %s, skipping  this kfold" % fit_inputs)
 
                 if(do_merge):
                     print("Merge cmd: " + merge_cmd)
@@ -634,7 +666,9 @@ def full_run(options):
                 if(not os.path.exists(fit_inputs)):
                     fit_inputs = options.output + "fit_inputs_kfold{k}.h5".format(k = k)
 
-                if(os.path.exists(fit_inputs)): avg_inputs.append(fit_inputs)
+                if(os.path.exists(fit_inputs) and os.path.getsize(fit_inputs) > 10 ): 
+                    avg_inputs.append(fit_inputs)
+                
 
             avg_eff(fit_inputs_merge, avg_inputs)
 
@@ -644,7 +678,7 @@ def full_run(options):
 
                 #print(options.__dict__)
                 if('eff_only' in options.__dict__.keys() and not options.eff_only): #merge fit inputs
-                    merge_cmd = "python ../../CASEUtils/H5_maker/H5_merge.py %s "  % sig_shape_merge
+                    merge_cmd = "python3 ../../CASEUtils/H5_maker/H5_merge.py %s "  % sig_shape_merge
 
                     do_merge = False
                     for k,k_options in enumerate(kfold_options):
@@ -684,7 +718,8 @@ def full_run(options):
             print(sig_fit_cmd)
             full_sig_fit_cmd = fit_cmd_setup + sig_fit_cmd + "; "  + fit_cmd_after
 
-            subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
+            do_sl7(full_sig_fit_cmd)
+            #subprocess.call(full_sig_fit_cmd,  shell = True, executable = '/bin/bash')
             sig_shape_file = base_path + options.output + 'sig_fit_%i.root' % options.mjj_sig
         elif( 'mjj_sig' in options.__dict__.keys() and options.mjj_sig > 0):
             sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
@@ -703,7 +738,7 @@ def full_run(options):
             print("Fit results file not found. Run regular fit before bias test!")
             exit(1)
         with open(fit_file, 'r') as f:
-            fit_params = json.load(f, encoding="latin-1")
+            fit_params = json.load(f )
             exp_lim = fit_params['exp_lim_events']
 
         sig_shape_file = base_path + "../fitting/interpolated_signal_shapes/case_interpolation_M%.1f.root" % options.mjj_sig
@@ -732,7 +767,7 @@ def full_run(options):
             dijet_cmd_iter += " >& %s/bias_test_log%.0f_nsig%i.txt " % (base_path + outdir, options.mjj_sig, num_sig)
             full_fit_cmd = fit_cmd_setup +  dijet_cmd_iter + "; " + fit_cmd_after
             print(full_fit_cmd)
-            subprocess.call(full_fit_cmd,  shell = True, executable = '/bin/bash')
+            do_sl7(full_fit_cmd)
 
 
 
