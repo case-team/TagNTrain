@@ -10,13 +10,13 @@ time_start = time.time()
 
 parser = input_options()
 options = parser.parse_args([])
-options.fin = "../data/BB_UL_MC_small_v2/"
+options.fin = "../data/BB_UL_MC_v4_deta_images/"
 options.batch_start = 20
 options.batch_stop = 39
 options.sig_idx = 1
 options.sig_per_batch = 0
-roc_plot_name = "top_cr_ptcut_roc_mar18.png" 
-sic_plot_name = "top_cr_ptcut_sic_mar18.png" 
+roc_plot_name = "top_cr_ptcut_roc_oct28.png" 
+sic_plot_name = "top_cr_ptcut_sic_oct28.png" 
 #options.keep_mlow = 1400.
 #options.keep_mhigh = 2000.
 options.ptsort = True
@@ -26,8 +26,8 @@ options.hadronic_only = True
 options.no_minor_bkgs = False
 
 #options.deta = 1.5
-options.deta = 2.5
-options.deta_min = 2.0
+#options.deta = 2.5
+#options.deta_min = 2.0
 
 
 single_file = True

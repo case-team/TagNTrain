@@ -97,7 +97,7 @@ def train_ttbar_control_region(options):
     v_data = None
 
     cbs = [tf.keras.callbacks.History()]
-    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
+    early_stop = tf.keras.callbacks.EarlyStopping(monitor='loss', min_delta=1e-6, patience=5, verbose=1, mode='min')
     cbs.append(early_stop)
 
     nVal = 0
@@ -165,7 +165,7 @@ def train_ttbar_control_region(options):
 
         history = model.fit(x = x, y = Y, sample_weight = weights,
                 epochs = options.num_epoch,
-                validation_data = (v_x, v_Y, v_weights),
+                validation_data = v_data,
                 batch_size = 256,
                 callbacks = cbs,
                 verbose = 2)
@@ -220,8 +220,8 @@ def train_ttbar_control_region(options):
 if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--supervised", default = False, action = 'store_true', help = "Supervised")
-    parser.add_argument("--tau32_cut", default = 0.75, type = float, help = "What tau32 cut to use on tag side")
-    parser.add_argument("--deepcsv_cut", default = 0.16, type = float, help = "What deepcsv cut to use on tag side")
+    parser.add_argument("--tau32_cut", default = 999., type = float, help = "What tau32 cut to use on tag side")
+    parser.add_argument("--deepcsv_cut", default = -999., type = float, help = "What deepcsv cut to use on tag side")
     options = parser.parse_args()
     train_ttbar_control_region(options)
 

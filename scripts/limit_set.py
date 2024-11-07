@@ -155,7 +155,7 @@ def get_fit_nosel_params(options):
         run_dijetfit(options, fit_start = -1, input_file = nosel_fname, output_dir = plot_dir, sig_shape_file = sig_shape_file, sig_norm = options.sig_norm, loop = True)
 
     with open(fit_file, 'r') as f:
-        fit_params = json.load(f )
+        fit_params = json.load(f)
         n_evts_exc_nosel = fit_params['obs_lim_events'] 
 
     print("No selection num events lim %.0f "  % n_evts_exc_nosel)
@@ -893,6 +893,7 @@ def limit_set(options):
         sig_effs = []
         signifs = []
         asimov_signifs = []
+        asimov_pvals = []
         pvals = []
         get_signal_params(options)
 
@@ -901,8 +902,12 @@ def limit_set(options):
             fit_res = get_fit_results(outdir = options.output + "spb" + str(float(spb)) + "/",  m = options.mjj_sig)
             if(fit_res is not None): 
                 signif = float(fit_res.signif)
-                if('asimov_signif' in fit_res.__dict__.keys()): asimov_signif = float(fit_res.asimov_signif)
-                else:asimov_signif = 0.
+                if('asimov_signif' in fit_res.__dict__.keys()): 
+                    asimov_signif = float(fit_res.asimov_signif)
+                    asimov_pval = float(fit_res.asimov_pval)
+                else:
+                    asimov_signif = 0.
+                    asimov_pval = 0.
                 pval = float(fit_res.pval)
             else: 
                 pval = signif = asimov_signif = 0.
@@ -911,11 +916,13 @@ def limit_set(options):
             sig_effs.append(sig_eff)
             signifs.append(signif)
             asimov_signifs.append(asimov_signif)
+            asimov_pvals.append(asimov_pval)
             pvals.append(pval)
 
         print("Sig Effs: ",  sig_effs)
         print("Significances " , signifs)
         print("Asimov Significances " , asimov_signifs)
+        print("Asimov pvals " , asimov_pvals)
 
         if(not options.data):
             #Use expected limit from b-only fit

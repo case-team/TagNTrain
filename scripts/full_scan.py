@@ -222,6 +222,23 @@ def plot_stitched_mjj(options, mbins, outfile):
 
 
 
+def output_event_lims(input_files, sig_masses, out_dir):
+
+    keys = ['obs_lim_events', 'exp_lim_events', 'exp_lim_1sig_low', 'exp_lim_1sig_high']
+
+    for i,f in enumerate(input_files):
+        with open(f) as json_file:
+            results = json.load(json_file)
+
+        out_dict = dict()
+        for key in keys:
+            out_dict[key] = results[key]
+
+        fname = out_dir + "M%i.json" %sig_masses[i]
+        write_params(fname, out_dict)
+
+
+
 def plot_significances(input_files, out_dir, sig_masses = None, SR_lines = True):
 
     # build arrays of variables to plot
@@ -451,7 +468,7 @@ def full_scan(options):
     #read saved parameters
     if(os.path.exists(options.output + "saved_params.json")):
         with open(options.output + "saved_params.json", 'r') as f:
-            options.saved_params = json.load(f, encoding="latin-1")
+            options.saved_params = json.load(f)
 
         #options.saved_params = get_options_from_json(options.output + "saved_params.json")
     else:
@@ -627,6 +644,9 @@ def full_scan(options):
             os.system('cp ' + bkg_fit_plot + ' %s/plots/bkgfit_mbin%i.png' % (options.output, mbin))
 
         print(list(zip(sig_masses, signifs)))
+        os.system("mkdir %s" % (options.output + "limits/"))
+        output_event_lims(file_list, sig_masses, options.output + "limits/")
+
         plot_significances(file_list, options.output + "plots/", sig_masses = sig_masses)
 
         plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin < 10] , options.output + "plots/mjj_stitched_binsA.pdf")

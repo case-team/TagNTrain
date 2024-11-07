@@ -249,6 +249,7 @@ class DataReader:
         self.clip_feats = kwargs.get('clip_feats', True)
         self.nsubj_ratios = kwargs.get('nsubj_ratios', True)
         self.clip_pts = kwargs.get('clip_pts', True)
+        self.cathode_feats = kwargs.get('cathode_feats', False)
 
         self.verbose = kwargs.get('verbose', True)
 
@@ -369,6 +370,24 @@ class DataReader:
 
         return rfeats
 
+    def process_feats_cathode(self, feats):
+        #Features are tau1, tau2, tau3, tau4, LSF, DeepB, nPF
+        b_idx = -2
+        rfeats = np.copy(feats)
+        
+        if(self.clip_feats):
+            rfeats[:,b_idx] = np.clip(feats[:,b_idx], 0., None)
+
+        keep_idxs = [0,5] # just tau41 and deepB
+        rfeats = rfeats [:,keep_idxs]
+
+        #Make tau41
+        eps = 1e-6
+        rfeats[:,0] = feats[:,3] / (feats[:,0] + eps)
+
+        return rfeats
+
+
 
     def read(self):
         self.loading_images = False
@@ -450,12 +469,18 @@ class DataReader:
 
         elif(key == 'j1_features'):
             j1_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,5], axis=-1)
-            j1_feats = self.process_feats(f['jet1_extraInfo'][cstart:cstop][mask])
+            if(not self.cathode_feats):
+                j1_feats = self.process_feats(f['jet1_extraInfo'][cstart:cstop][mask])
+            else:
+                j1_feats = self.process_feats_cathode(f['jet1_extraInfo'][cstart:cstop][mask])
             data = np.append(j1_m, j1_feats, axis = 1)
             
         elif(key == 'j2_features'):
             j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
-            j2_feats = self.process_feats(f['jet2_extraInfo'][cstart:cstop][mask])
+            if(not self.cathode_feats):
+                j2_feats = self.process_feats(f['jet2_extraInfo'][cstart:cstop][mask])
+            else:
+                j2_feats = self.process_feats_cathode(f['jet2_extraInfo'][cstart:cstop][mask])
             data = np.append(j2_m, j2_feats, axis = 1)
 
 
@@ -876,7 +901,7 @@ class DataReader:
 
         j_m = jet_features[:,0]
         j_tau32 = jet_features[:,3]
-        j_deepcsv = jet_features[:,6]
+        j_deepcsv = jet_features[:,-2]
 
 
         ptcut_mask = (self.f_storage['jet_kinematics'][:,2] > ptcut) & ( self.f_storage['jet_kinematics'][:,6] > ptcut)

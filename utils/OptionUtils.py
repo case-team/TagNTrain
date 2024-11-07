@@ -75,6 +75,7 @@ def input_options():
     parser.add_argument("--no_mjj_cut", default = False, action = "store_true", help="Don't require a mass window")
     parser.add_argument("--save_mem", default = False, action = "store_true", help="Delete BB files in condor jobs after reading them")
 
+    parser.add_argument("--cathode_feats",  action = "store_true", help="Use CATHODE features (tau41) for comparison study")
     parser.add_argument("--keep_LSF",  action = "store_true", help="Keep LSF for dense inputs")
     parser.add_argument("--no_LSF", dest = 'keep_LSF', action = "store_false", help="Dont Keep LSF for dense inputs")
     parser.set_defaults(keep_LSF=True)

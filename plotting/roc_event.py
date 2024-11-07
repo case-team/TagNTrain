@@ -21,33 +21,18 @@ options.deta = 1.3
 
 sic_max = 10
 
-#model_dir = "../models/batch_size_test/"
-#model_dir = "../models/AEs/"
+model_dir = "../plots/supervised_classifiers/"
 
-model_dir = ""
-plot_dir = "../plots/supervised_XYY_test/"
+if(not os.path.exists(options.output)): os.system("mkdir %s" % options.output)
 
-#model_dir = "../runs/TNT_XYY_model1_test_mar6/"
-#plot_dir = "../runs/TNT_XYY_model1_test_mar6/"
 
 f_models = [
-'../runs/limits/TNT_XToYYprimeTo4Q_MX3000_MY400_MYprime400/spb10.0/jrand_kfold0/',
-'../models/supervised/{j_label}_XToYYprimeTo4Q_MX3000_MY400_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5',
+'YtoHH_5TeV_{j_label}.h5'
 
 ]
 
 
-labels = [
-        #'AE old',
-        #'AE new',
-        #'supervised 30k params',
-        #'supervised 3k params',
-        #'supervised',
-        #'supervised clip tau1',
-        #'supervised no tau1',
-        'TNT',
-        'Supervised',
-        ]
+labels = [ 'Supervised', ]
 
 
 
@@ -55,10 +40,10 @@ labels = [
 #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
 model_type = [2,2,2,2,2,2]
 #model_type = [2,2,2,2,2,2]
-num_models = [4,1,4,4,4,4]
+#num_models = [4,1,4,4,4,4]
 rand_sort = [False, False, False, False, False, False]
-quantile = [True, False]
-#rand_sort = [True]*6
+num_models = [1]
+quantile = [True]
 
 #f_models = ["autoencoder_m3500.h5",  "mar2/dense_sig10_TNT1_s%i.h5", "mar2/cwola_hunting_dense_sig10_s%i.h5"]
 #f_models = ["autoencoder_m3500.h5",  "mar15_deta/dense_deta_sig025_TNT1_s%i.h5", "mar15_deta/cwola_hunting_dense_deta_sig025_s%i.h5"]
@@ -84,16 +69,33 @@ else:
 
 
 data, _ = load_dataset_from_options(options)
+
+sig_only_data = load_signal_file(options)
+
 j1_dense_inputs = data['j1_features']
 j2_dense_inputs = data['j2_features']
 jj_dense_inputs = data['jj_features']
+
+j1_sig_inputs = sig_only_data['j1_features']
+j2_sig_inputs = sig_only_data['j2_features']
+jj_sig_inputs = sig_only_data['jj_features']
+sig_weights = sig_only_data['sys_weights'][:,0]
+sig_weights *= sig_only_data['lund_weights'][:]
+
+nbkg = j1_dense_inputs.shape[0]
+nsig = j1_sig_inputs.shape[0]
+
+j1_dense_inputs = np.concatenate([j1_sig_inputs, j1_dense_inputs])
+j2_dense_inputs = np.concatenate([j2_sig_inputs, j2_dense_inputs])
 
 j1_images = j2_images = jj_images = None
 if(need_images):
     j1_images = data['j1_images']
     j2_images = data['j2_images']
     jj_images = data['jj_images']
-Y = data['label'].reshape(-1)
+
+Y = np.concatenate([np.ones(nsig), np.zeros(nbkg)]).reshape(-1,1)
+weights = np.concatenate([sig_weights, np.ones(nbkg)])
 
 
 j1rand_images = j2rand_images = j1rand_dense_inputs = j2rand_dense_inputs = None
@@ -119,6 +121,7 @@ sig_effs = []
 bkg_effs = []
 aucs = []
 sics = []
+
 for idx,f in enumerate(f_models):
     if('sig_idx' in f): 
         f = f.format(sig_idx = sig_idx)
@@ -166,7 +169,7 @@ for idx,f in enumerate(f_models):
     else:
         jj_scores = get_jj_scores(model_dir, model_name[idx], model_type[idx], jj_images, jj_dense_inputs)
 
-    bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, jj_scores)
+    bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, jj_scores, sample_weight = weights)
     bkg_eff = np.clip(bkg_eff, 1e-8, 1.)
     sig_eff = np.clip(sig_eff, 1e-8, 1.)
     sig_effs.append(sig_eff)
@@ -219,7 +222,14 @@ plt.figure(figsize=fig_size)
 for i in range(len(labels)):
     mask_ = bkg_effs[i] > eff_min
     print(labels[i], aucs[i], np.amax(sics[i][mask_]))
+    sic_10 = np.interp(0.1, bkg_effs[idx], sics[idx])
+    sic_2p5 = np.interp(0.025, bkg_effs[idx], sics[idx])
+    sic_01 = np.interp(0.01, bkg_effs[idx], sics[idx])
+    print("SICs at 0.1, 0.025, and 0.01 bkg eff: %.2f %.2f %.2f" % (sic_10, sic_2p5, sic_01))
+    print("AUC %.3f" % aucs[i])
+
     plt.plot(bkg_effs[i][mask_], sics[i][mask_], lw=2, color=colors[i], label=labels[i] + (" (AUC = %.3f)" % aucs[i]))
+
 #plt.plot(fpr_cwola, tpr_cwola, lw=2, color="purple", label="CWOLA = %.3f" %(auc_cwola))
 #plt.plot(tnt_bkg_eff, tnt_sig_eff, lw=2, color="r", label="TNT Dense = %.3f"%(auc(tnt_bkg_eff,tnt_sig_eff)))
 #plt.plot(sup_bkg_eff, sup_sig_eff, lw=2, color="g", label="Sup. Dense = %.3f"%(auc(sup_bkg_eff,sup_sig_eff)))

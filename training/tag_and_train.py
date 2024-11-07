@@ -171,7 +171,7 @@ def tag_and_train(options):
             val_data.make_ptrw('Y_TNT', save_plots = False)
             if(options.randsort): val_data2.make_ptrw('Y_TNT2', save_plots = False, extra_str = '2')
 
-    myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
+    myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08 )
 
     
     #batch_size_scale = 1./(( (100. - options.sig_cut) + options.bkg_cut)/200.)
@@ -210,7 +210,7 @@ def tag_and_train(options):
     print("Seed is %i" % seed)
     np.random.seed(seed)
     #tf.set_random_seed(seed)
-    tf.random.set_seed(seed)
+    tf.random.set_random_seed(seed)
     os.environ['PYTHONHASHSEED']=str(seed)
     random.seed(seed)
 

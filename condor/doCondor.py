@@ -70,7 +70,8 @@ def doCondor(options):
     #cmssw_ver = os.getenv('CMSSW_VERSION', 'CMSSW_10_6_5')
     #cmssw_ver = 'CMSSW_13_2_10'
     #cmssw_ver = 'CMSSW_10_6_5'
-    cmssw_ver = 'CMSSW_12_5_0'
+    #cmssw_ver = 'CMSSW_12_5_0'
+    cmssw_ver = 'CMSSW_14_1_0'
     cmssw_base = os.getenv('CMSSW_BASE')
     xrd_base = 'root://cmseos.fnal.gov/'
     local_eos = '/eos/uscms/'

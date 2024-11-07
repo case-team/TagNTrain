@@ -93,10 +93,15 @@ class RocCallback(tf.keras.callbacks.Callback):
     def __init__(self,training_data,validation_data, extra_label = "", freq = 5):
         self.extra_label = extra_label
         self.freq = freq
+
         self.x = training_data[0]
         self.y = np.clip(training_data[1], 0, 1)
+        self.weights = None if len(training_data) <3 else training_data[2]
+
         self.x_val = validation_data[0]
         self.y_val = np.clip(validation_data[1], 0, 1)
+        self.val_weights = None if len(validation_data) <3 else validation_data[2]
+
         self.skip_val = self.skip_train = False
         if(np.mean(self.y_val > 0) < 1e-5):
             print("Not enough signal in validation set, will skip auc")
@@ -123,15 +128,17 @@ class RocCallback(tf.keras.callbacks.Callback):
         if(not self.skip_train):
             y_pred_train = self.model.predict(self.x)
             mask = ~np.isnan(y_pred_train)
+            weights = self.weights[mask] if self.weights is not None else None
             if(y_pred_train[mask].shape[0] > 1000):
-                roc_train = roc_auc_score(self.y[mask], y_pred_train[mask])
+                roc_train = roc_auc_score(self.y[mask], y_pred_train[mask], sample_weight=weights )
                 phrase = " roc-auc_train: %s" % str(round(roc_train,4))
                 msg += phrase
         if(not self.skip_val):
             y_pred_val = self.model.predict(self.x_val)
             mask = ~np.isnan(y_pred_val)
+            val_weights = self.val_weights[mask] if self.val_weights is not None else None
             if(y_pred_val[mask].shape[0] > 1000):
-                roc_val = roc_auc_score(self.y_val[mask], y_pred_val[mask])
+                roc_val = roc_auc_score(self.y_val[mask], y_pred_val[mask], sample_weight=val_weights)
                 phrase = " roc-auc_val: %s" % str(round(roc_val,4))
                 msg += phrase
         print(msg, end =100*' ' + '\n')

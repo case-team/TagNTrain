@@ -107,7 +107,7 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
                 with open(fit_file, 'r') as f:
                     fit_params = json.load(f )
 
-                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > err_thresh):
+                if((fit_params['bkgfit_prob'] < 0.05 and fit_params['sbfit_prob'] < 0.01) or fit_params['bkgfit_frac_err'] > err_thresh):
                 #if((fit_params['bkgfit_prob'] < 0.05) or fit_params['bkgfit_frac_err'] > err_thresh):
                     run_fit = True
                     print("\nPOOR Fit quality (bkg pval %.2e, s+b pval %.2e, fit unc %.2f)!" % 

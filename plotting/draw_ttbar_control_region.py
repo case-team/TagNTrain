@@ -46,11 +46,11 @@ j2_m = data['j2_features'][:,0]
 
 j1_tau21 = data['j1_features'][:,2]
 j1_tau32 = data['j1_features'][:,3]
-j1_deepcsv = data['j1_features'][:,6]
+j1_deepcsv = data['j1_features'][:,-2]
 
 j2_tau21 = data['j2_features'][:,2]
 j2_tau32 = data['j2_features'][:,3]
-j2_deepcsv = data['j2_features'][:,6]
+j2_deepcsv = data['j2_features'][:,-2]
 
 #QCD: 0 Single Top: -1, ttbar: -2, V+jets: -3
 
@@ -66,12 +66,12 @@ pt_cut = (j1_pt > 400.) & (j2_pt > 400.)
 #proper cuts are UL16preVFP 0.2027, UL16PostVFP 0.1918, UL17 0.1355, UL18 0.1208
 #https://twiki.cern.ch/twiki/bin/viewauth/CMS/BtagRecommendation
 # use an average
-deepcsv_cut = 0.16
-#deepcsv_cut = -999.
+#deepcsv_cut = 0.16
+deepcsv_cut = -999.
 
 #lower pt side is used to 'tag'
-tag_tau32 = 0.75
-#tag_tau32 = 999.
+#tag_tau32 = 0.75
+tag_tau32 = 999.
 tag_selection = (j2_tau32 < tag_tau32) & (j2_deepcsv > deepcsv_cut)
 if(options.deta_min > 0): 
     tag_selection = tag_selection & (data['jet_kinematics'][:,1] > options.deta_min)

@@ -8,7 +8,6 @@ from sklearn.metrics import roc_curve,auc
 from .Consts import *
 import scipy.stats
 import numpy as np
-import mplhep as hep
 
 fig_size = (12,9)
 
@@ -279,6 +278,7 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
     alpha = 1.
     n_stacks = len(stacks)
 
+    import mplhep as hep
     plt.style.use(hep.style.CMS)
     fig = plt.figure(figsize=fig_size)
     if(n_stacks > 0):
@@ -543,6 +543,7 @@ def make_scatter_plot(x, y, color, axis_names, fname= ""  ):
 
 def horizontal_bar_chart(vals, labels, fname = "", xaxis_label = ""):
 
+    import mplhep as hep
     plt.style.use(hep.style.CMS)
     fig, ax = plt.subplots()
 

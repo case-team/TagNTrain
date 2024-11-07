@@ -13,22 +13,16 @@ def train_supervised_network(options):
 
     if(not options.use_one):
         j_label = "jj_"
-        img_key = 'jj_images'
         feat_key = 'jj_features'
-        cnn_shape = (32,32,2)
         print("training classifier for both jets")
     elif(options.training_j == 1):
         j_label = "j1_"
-        img_key = 'j1_images'
         feat_key = 'j1_features'
-        cnn_shape = (32,32,1)
         print("training classifier for j1")
 
     elif (options.training_j ==2):
         j_label = "j2_"
-        img_key = 'j2_images'
         feat_key = 'j2_features'
-        cnn_shape = (32,32,1)
         print("training classifier for j2")
     else:
         print("Training jet not 1 or 2! Exiting")
@@ -53,52 +47,72 @@ def train_supervised_network(options):
     print("Enforcing no minor bkgs for supervised training")
     options.no_minor_bkgs = True
     data, val_data = load_dataset_from_options(options)
-    do_val = val_data is not None
+
+    sig_only_data = load_signal_file(options)
+
+
+    sig_inputs_train = sig_only_data[feat_key]
+
+    sig_weights_train = sig_only_data['sys_weights'][:,0]
+    sig_weights_train *= sig_only_data['lund_weights'][:]
+
+    bkg_inputs_train = data[feat_key][:]
+
+    nsig = sig_inputs_train.shape[0]
+    nbkg = bkg_inputs_train.shape[0]
+    sig_weights_train *= nbkg/nsig
+
+    if(options.val_batch_start > 0):
+        do_val = True
+        val_batch_list = list(range(options.val_batch_start, options.val_batch_stop+1))
+        options.data_batch_list = val_batch_list
+
+        sig_only_val = load_signal_file(options)
+        sig_inputs_val = sig_only_val[feat_key]
+
+        sig_weights_val = sig_only_val['sys_weights'][:,0]
+        sig_weights_val *= sig_only_val['lund_weights'][:]
+
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
 
 
-    mjjs  = data['mjj'][()]
-    sig_events = data['label'].reshape(-1) > 0.9
+    print('nsig nbkg', nsig, nbkg)
+    
+    train_inputs = np.concatenate([sig_inputs_train, bkg_inputs_train], axis=0)
+    train_labels = np.concatenate([np.ones(nsig), np.zeros(nbkg)]).reshape(-1,1)
+    train_weights = np.concatenate([sig_weights_train, np.ones(nbkg)])
 
-    if(options.preprocess != ""):
-        print("\n Doing preprocess %s \n" % options.preprocess)
-        feats = data[x_key]
-        qts = create_transforms(feats, dist = options.preprocess)
-        data.make_preprocessed_feats(x_key, qts)
-        if(do_val): val_data.make_preprocessed_feats(x_key, qts)
-        x_key = x_key + "_normed"
+    print(train_inputs.shape)
 
-
-
-    #print(mjjs[sig_events] [:10])
-
-
-    t_data = data.gen(x_key,'label', key3 = None, batch_size = options.batch_size)
-    v_data = None
 
     cbs = [tf.keras.callbacks.History()]
     early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=1e-6, patience=5 + options.num_epoch/20, verbose=1, mode='min')
     cbs.append(early_stop)
 
     nVal = 0
+    v_data = None
     if(do_val): 
-        nVal = val_data.nTrain
-        v_data = val_data.gen(x_key,'label', key3 = None, batch_size = options.batch_size) 
+        bkg_inputs_val = val_data[feat_key][:]
 
-        roc = RocCallback(training_data=(np.zeros(100), np.zeros(100)), validation_data=(val_data[x_key], val_data['label']), extra_label = "true: ")
+        nsig_val = sig_inputs_val.shape[0]
+        nbkg_val = bkg_inputs_val.shape[0]
+        sig_weights_val *= nbkg_val/nsig_val
+
+        val_inputs = np.concatenate([sig_inputs_val, bkg_inputs_val], axis=0)
+        val_labels = np.concatenate([np.ones(nsig_val), np.zeros(nbkg_val)]).reshape(-1,1)
+        val_weights = np.concatenate([sig_weights_val, np.ones(nbkg_val)])
+
+        v_data = (val_inputs, val_labels,  val_weights)
+
+        roc = RocCallback(training_data=(np.zeros(100), np.zeros(100)), validation_data=(val_inputs, val_labels), extra_label = "true: ")
         cbs.append(roc)
 
 
-
-
-    myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08, decay=0.0005)
+    myoptimizer = tf.keras.optimizers.Adam(lr=0.001, beta_1=0.8, beta_2=0.99, epsilon=1e-08)
 
 
 
-    print("Will train on %i events, validate on %i events" % (data.nTrain, nVal))
-    print(data[x_key][0].shape)
-    
     #vary seed for different k-folds
     batch_sum = np.sum(data.batch_list)
 
@@ -130,7 +144,8 @@ def train_supervised_network(options):
         model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'])
         if(model_idx == 0): model.summary()
 
-        history = model.fit(t_data, 
+        history = model.fit(train_inputs, train_labels, 
+                sample_weight = train_weights,
                 epochs = options.num_epoch, 
                 validation_data = v_data,
                 callbacks = cbs,
