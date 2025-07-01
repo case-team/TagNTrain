@@ -21,27 +21,31 @@ options.deta = 1.3
 
 sic_max = 10
 
-model_dir = "../plots/supervised_classifiers/"
+model_dir = ""
 
 if(not os.path.exists(options.output)): os.system("mkdir %s" % options.output)
 
 
-f_models = [
-'YtoHH_5TeV_{j_label}.h5'
+f_models = [options.labeler_name]
 
-]
+#f_models = [
+#'XYY_5TeV_{j_label}.h5'
+#
+#]
 
 
-labels = [ 'Supervised', ]
+#labels = [ 'Supervised', ]
+labels = [ 'AE', ]
 
 
 
 
 #model types: 0 CNN (one jet), 1 auto encoder, 2 dense (one jet), 3 CNN (both jets), 4 dense (both jets), 5 is VAE 
-model_type = [2,2,2,2,2,2]
 #model_type = [2,2,2,2,2,2]
-#num_models = [4,1,4,4,4,4]
-rand_sort = [False, False, False, False, False, False]
+#model_type = [4,4,4,4]
+#rand_sort = [False, False, False, False, False, False]
+model_type = [1]
+rand_sort = [True]
 num_models = [1]
 quantile = [True]
 
@@ -63,7 +67,7 @@ logy= True
 need_images = 1 in model_type
 
 if(need_images):
-    options.keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'jet_kinematics']
+    options.keys = ["j1_images", "j2_images", "j1_features", "j2_features", "jj_features", 'jet_kinematics']
 else:
     options.keys = ["j1_features", "j2_features", "jj_features", 'jet_kinematics']
 
@@ -79,6 +83,7 @@ jj_dense_inputs = data['jj_features']
 j1_sig_inputs = sig_only_data['j1_features']
 j2_sig_inputs = sig_only_data['j2_features']
 jj_sig_inputs = sig_only_data['jj_features']
+
 sig_weights = sig_only_data['sys_weights'][:,0]
 sig_weights *= sig_only_data['lund_weights'][:]
 
@@ -87,12 +92,18 @@ nsig = j1_sig_inputs.shape[0]
 
 j1_dense_inputs = np.concatenate([j1_sig_inputs, j1_dense_inputs])
 j2_dense_inputs = np.concatenate([j2_sig_inputs, j2_dense_inputs])
+jj_dense_inputs = np.concatenate([jj_sig_inputs, jj_dense_inputs])
 
 j1_images = j2_images = jj_images = None
 if(need_images):
     j1_images = data['j1_images']
     j2_images = data['j2_images']
-    jj_images = data['jj_images']
+
+    j1_sig_images = sig_only_data['j1_images']
+    j2_sig_images = sig_only_data['j2_images']
+
+    j1_images = np.concatenate([j1_sig_images, j1_images], axis = 0)
+    j2_images = np.concatenate([j2_sig_images, j2_images], axis = 0)
 
 Y = np.concatenate([np.ones(nsig), np.zeros(nbkg)]).reshape(-1,1)
 weights = np.concatenate([sig_weights, np.ones(nbkg)])
@@ -121,6 +132,7 @@ sig_effs = []
 bkg_effs = []
 aucs = []
 sics = []
+bces = []
 
 for idx,f in enumerate(f_models):
     if('sig_idx' in f): 
@@ -149,6 +161,20 @@ for idx,f in enumerate(f_models):
         Y = Y.reshape(-1)
 
         if(quantile[idx]):
+            class_weights = np.ones_like(Y)
+            sigs = Y > 0.5
+            bkgs = ~sigs
+            sig_weight = np.sum(bkgs) /np.sum(sigs)
+            class_weights[sigs] = sig_weight
+            bce1 = log_loss(Y, j1_score, sample_weight = class_weights)
+            bce2 = log_loss(Y, j2_score, sample_weight = class_weights)
+            print(bce1, bce2)
+            bce = (bce1 + bce2) / 2.0
+            #bce = log_loss(Y, j1_score * j2_score, sample_weight = class_weights)
+
+
+            bces.append(bce)
+
             j1_QT = QuantileTransformer(copy = True)
             j1_qs = j1_QT.fit_transform(j1_score.reshape(-1,1)).reshape(-1)
             j2_QT = QuantileTransformer(copy = True)
@@ -167,8 +193,11 @@ for idx,f in enumerate(f_models):
 
 
     else:
-        jj_scores = get_jj_scores(model_dir, model_name[idx], model_type[idx], jj_images, jj_dense_inputs)
+        jj_scores = get_jj_scores(model_dir, f, model_type[idx], jj_images, jj_dense_inputs)
+        bce = log_loss(Y, jj_scores)
+        bces.append(bce)
 
+    print(Y.shape, jj_scores.shape, weights.shape)
     bkg_eff, sig_eff, thresholds_cwola = roc_curve(Y, jj_scores, sample_weight = weights)
     bkg_eff = np.clip(bkg_eff, 1e-8, 1.)
     sig_eff = np.clip(sig_eff, 1e-8, 1.)
@@ -227,6 +256,20 @@ for i in range(len(labels)):
     sic_01 = np.interp(0.01, bkg_effs[idx], sics[idx])
     print("SICs at 0.1, 0.025, and 0.01 bkg eff: %.2f %.2f %.2f" % (sic_10, sic_2p5, sic_01))
     print("AUC %.3f" % aucs[i])
+    print("BCE %.3f" % bces[i])
+
+    if(i==0):
+        out = dict()
+        sig_name = options.sig_file.replace("../data/LundRW/", "").replace("_Lundv2", "")
+        print(sig_name)
+        out[sig_name] = out2 = dict()
+        out2['AUC'] = aucs[i]
+        out2['BCE'] = bces[i]
+        out2['SIC-1%'] = sic_01
+        out2['SIC-2.5%'] = sic_2p5
+        out2['SIC-10%'] = sic_10
+        write_params(options.output + "metrics.json", out)
+
 
     plt.plot(bkg_effs[i][mask_], sics[i][mask_], lw=2, color=colors[i], label=labels[i] + (" (AUC = %.3f)" % aucs[i]))
 

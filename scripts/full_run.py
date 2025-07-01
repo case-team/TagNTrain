@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append('..')
 from utils.TrainingUtils import *
-from plotting.model_interpretation import model_interp
+from plotting.model_interpretation import model_interp, multi_model_interp
 from create_model_ensemble import *
 from selection import *
 import subprocess
@@ -72,6 +72,7 @@ def run_dijetfit(options, fit_start = -1, fit_stop = -1, sig_shape_file = "", in
     if(options.mjj_sig > 4500 and sig_norm < 0):
         sig_norm = 10
     sig_norm = 1000 if sig_norm < 0 else sig_norm
+    #sig_norm = 1 if sig_norm < 0 else sig_norm
 
     dijet_cmd += " --sig_norm %i" % sig_norm
 
@@ -563,6 +564,7 @@ def full_run(options):
         os.system("rm %s/higgsCombine*.root" % options.output)
         os.system("rm %s/fitDiagnostics*.root" % options.output)
         os.system("rm %s/workspace*.root" % options.output)
+        os.system("rm %s/sig_fit_log.txt" % options.output)
         #for systematic, ok to remove all fit inputs
         #if(len(options.sig_sys) > 0): os.system("rm %s/fit_inputs*.h5" % options.output)
 
@@ -587,6 +589,8 @@ def full_run(options):
 
 
     if(do_interp):
+        all_interp_options = []
+        os.system("mkdir " + options.output + "interp/")
         for k,k_options in enumerate(kfold_options):
             interp_options = copy.deepcopy(k_options)
             interp_options.data_batch_list = k_options.holdouts
@@ -597,10 +601,15 @@ def full_run(options):
 
             if(not options.randsort): interp_options.labeler_name = k_options.output + "{j_label}_kfold%i/" % k
             else: interp_options.labeler_name = k_options.output + "jrand_kfold%i/" % k
-            interp_options.output = interp_options.output + "interp/"
-            os.system("mkdir " + interp_options.output)
+            interp_options.output += "interp/kfold%i/" %k
+            interp_options.label = options.fit_label
+            os.system("mkdir -p" + interp_options.output)
+
             model_interp(interp_options)
-            break
+            all_interp_options.append(interp_options)
+        
+        
+        multi_model_interp(all_interp_options, outdir = options.output + "interp/combined/")
 
 
     if(do_merge):

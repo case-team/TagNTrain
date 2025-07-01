@@ -121,8 +121,9 @@ def train_cwola_hunting_network(options):
     seed = options.seed + batch_sum
     print("Seed is %i" % seed)
     np.random.seed(seed)
-    tf.set_random_seed(seed)
-    #tf.random.set_seed(seed)
+    #tf.set_random_seed(seed)
+    #tf.random.set_random_seed(seed)
+    tf.random.set_seed(seed)
     os.environ['PYTHONHASHSEED']=str(seed)
     random.seed(seed)
 

@@ -28,11 +28,19 @@ print("First mass bins: ")
 for i in range(1, len(mass_bins1)):
     mask = (mjj > mass_bins1[i-1] ) & (mjj < mass_bins2[i])
     n = mjj[mask].shape[0]
+    n_ttbar = mjj[mask & (Y == -2)].shape[0]
+    n_singlet = mjj[mask & (Y == -1)].shape[0]
+    n_vjets = mjj[mask & (Y == -3)].shape[0]
     print("%.0f-%.0f : %i" % (mass_bins1[i-1] , mass_bins1[i], n))
+    print("Fracs: single top %.4f ttbar %.4f, vjets %.4f" % (n_singlet/n, n_ttbar/n, n_vjets/n))
 
 print("2nd mass bins: ")
 for i in range(1, len(mass_bins2)):
     mask = (mjj > mass_bins2[i-1] ) & (mjj < mass_bins2[i])
     n = mjj[mask].shape[0]
-    print("%.0f-%.0f : %i" % (mass_bins2[i-1] , mass_bins2[i], n))
+    n_ttbar = mjj[mask & (Y == -2)].shape[0]
+    n_singlet = mjj[mask & (Y == -1)].shape[0]
+    n_vjets = mjj[mask & (Y == -3)].shape[0]
+    print("%.0f-%.0f : %i" % (mass_bins1[i-1] , mass_bins1[i], n))
+    print("Fracs: single top %.4f ttbar %.4f, vjets %.4f" % (n_singlet/n, n_ttbar/n, n_vjets/n))
 

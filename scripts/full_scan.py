@@ -188,7 +188,7 @@ def plot_stitched_mjj(options, mbins, outfile):
     legend.get_frame().set_linewidth(0)
 
     method_label = "Tag N' Train: " if options.do_TNT else "CWoLa Hunting: "
-    sr_label = r"$\alpha$ Signal Regions" if mbins[0] < 10 else r"$\beta$ Signal Regions"
+    sr_label = r"$\alpha$ signal regions" if mbins[0] < 10 else r"$\beta$ signal regions"
     plt.text(0.05, 0.9, method_label + sr_label, transform = a1.transAxes)
 
 
@@ -485,6 +485,7 @@ def full_scan(options):
     do_plot = options.step == "plot"
     do_bias_test = options.step == "bias"
     do_bias_plot = options.step == "bias_plot"
+    do_clean = options.step == 'clean'
 
     get_condor = get_condor or do_selection
     
@@ -652,6 +653,14 @@ def full_scan(options):
         plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin < 10] , options.output + "plots/mjj_stitched_binsA.pdf")
         plot_stitched_mjj( options, [mbin for mbin in added_mbins if mbin > 10] , options.output + "plots/mjj_stitched_binsB.pdf")
         
+    #Clean 
+    if(do_clean):
+        for mbin in mass_bin_idxs:
+            if(len(options.mbins) > 0 and mbin not in options.mbins): continue
+            if(options.sideband and mbin in sb_excluded_mbins): continue
+            t_opts = mbin_opts(options, mbin)
+            t_opts.step = "clean"
+            full_run(t_opts)
 
 
 

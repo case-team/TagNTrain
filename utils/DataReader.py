@@ -250,6 +250,7 @@ class DataReader:
         self.nsubj_ratios = kwargs.get('nsubj_ratios', True)
         self.clip_pts = kwargs.get('clip_pts', True)
         self.cathode_feats = kwargs.get('cathode_feats', False)
+        self.m_only_feats = kwargs.get('m_only_feats', False)
 
         self.verbose = kwargs.get('verbose', True)
 
@@ -489,7 +490,10 @@ class DataReader:
             j1_feats = self.process_feats(f['jet1_extraInfo'][cstart:cstop][mask])
             j2_m = np.expand_dims(f['jet_kinematics'][cstart:cstop][mask,9], axis=-1)
             j2_feats = self.process_feats(f['jet2_extraInfo'][cstart:cstop][mask])
-            data = np.concatenate((j1_m, j1_feats, j2_m, j2_feats), axis = 1)
+
+            if(self.m_only_feats): data = np.concatenate((j1_m, j2_m), axis = 1)
+            else: data = np.concatenate((j1_m, j1_feats, j2_m, j2_feats), axis = 1)
+
 
 
         elif(key == 'j1_images' or key == 'j2_images'):
@@ -896,7 +900,7 @@ class DataReader:
         return scaler
 
 
-    def make_Y_ttbar(self, jet_features, ptcut = 400., tau32_cut = 0.54,  deepcsv_cut = 0.16, extra_str = ''):
+    def make_Y_ttbar(self, jet_features, m_cut = 25., ptcut = 400., tau32_cut = 0.54,  deepcsv_cut = 0.16, mlow = 105, mhigh=220, extra_str = ''):
 
 
         j_m = jet_features[:,0]
@@ -906,16 +910,17 @@ class DataReader:
 
         ptcut_mask = (self.f_storage['jet_kinematics'][:,2] > ptcut) & ( self.f_storage['jet_kinematics'][:,6] > ptcut)
 
-        tag_selection = (j_tau32 < tau32_cut) & (j_deepcsv > deepcsv_cut) & ptcut_mask
+        tag_selection = (j_tau32 < tau32_cut) & (j_deepcsv > deepcsv_cut) & ptcut_mask & (j_m > m_cut)
 
 
-        SR = tag_selection & (j_m > 105) & (j_m < 220)
-        bkg_high = tag_selection & (j_m > 220)
-        bkg_low = tag_selection & (j_m < 105)
+        SR = tag_selection & (j_m > mlow) & (j_m < mhigh)
+        bkg_high = tag_selection & (j_m > mhigh)
+        bkg_low = tag_selection & (j_m < mlow)
 
         n_bkg_high = np.sum(bkg_high)
         n_bkg_low = np.sum(bkg_low)
         n_sig = np.sum(SR)
+        print(n_bkg_low, n_bkg_high, n_sig)
 
         #reweight everything to have same weight as low mass bkg
         bkg_high_weight = n_bkg_low/n_bkg_high
@@ -995,6 +1000,8 @@ class DataReader:
             elif(bkg_cut_type ==3): #bkg cut from AE OR sidebands
                 mjj_bkg_window = ((mjj < mjj_low) | (mjj > mjj_high))
                 bkg_cut = bkg_cut | mjj_bkg_window
+            elif(bkg_cut_type ==-1): #bkg cut from AE only
+                print("AE only cut")
             else:
                 print("Invalid bkg cut type %i ? (0-3 allowed)")
                 sys.exit(1)

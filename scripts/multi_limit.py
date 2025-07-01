@@ -9,7 +9,8 @@ do_TNT = True
 #steps = ['sys_train', 'sys_select']
 #steps = ['sys_merge', 'sys_plot', 'output']
 #steps = ['plot', 'sys_plot']
-steps = ['output', 'clean']
+#steps = ['output', 'clean']
+steps = ['clean']
 #steps = ['output']
 sig_mass = 3000
 mbin = 13
@@ -39,9 +40,9 @@ sig_files = [
 #"WpToBpT_Wp3000_Bp80_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5",
 #"WpToBpT_Wp3000_Bp170_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5",
 #"WpToBpT_Wp3000_Bp400_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5",
-"ZpToTpTp_Zp3000_Tp400_TuneCP5_13TeV-madgraph-pythia8_FILTERED_TIMBER_Lund.h5",
+#"ZpToTpTp_Zp3000_Tp400_TuneCP5_13TeV-madgraph-pythia8_FILTERED_TIMBER_Lund.h5",
 #"YtoHH_Htott_Y3000_H400_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-
+#
 #"XToYYprimeTo4Q_MX3000_MY25_MYprime170_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
 #"XToYYprimeTo4Q_MX3000_MY25_MYprime25_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
 #"XToYYprimeTo4Q_MX3000_MY25_MYprime80_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
@@ -54,29 +55,29 @@ sig_files = [
 #"XToYYprimeTo4Q_MX3000_MY400_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
 
 
-#"QstarToQW_M_5000_mW_25_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
-#"QstarToQW_M_5000_mW_80_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
-#"QstarToQW_M_5000_mW_170_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
-#"QstarToQW_M_5000_mW_400_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
-#"WkkToWRadionToWWW_M5000_Mr170_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"WkkToWRadionToWWW_M5000_Mr400_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"WpToBpT_Wp5000_Bp25_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5",
-#"WpToBpT_Wp5000_Bp80_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5", 
-#"WpToBpT_Wp5000_Bp170_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5", 
-#"WpToBpT_Wp5000_Bp400_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5",
-#"YtoHH_Htott_Y5000_H400_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-##"ZpToTpTp_Zp5000_Tp400_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#
-#"XToYYprimeTo4Q_MX5000_MY25_MYprime25_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY25_MYprime80_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY25_MYprime170_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY25_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY80_MYprime170_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY80_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY80_MYprime80_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY170_MYprime170_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY170_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
-#"XToYYprimeTo4Q_MX5000_MY400_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"QstarToQW_M_5000_mW_25_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
+"QstarToQW_M_5000_mW_80_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
+"QstarToQW_M_5000_mW_170_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
+"QstarToQW_M_5000_mW_400_TuneCP2_13TeV-pythia8_TIMBER_Lund.h5",
+"WkkToWRadionToWWW_M5000_Mr170_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"WkkToWRadionToWWW_M5000_Mr400_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"WpToBpT_Wp5000_Bp25_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5",
+"WpToBpT_Wp5000_Bp80_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5", 
+"WpToBpT_Wp5000_Bp170_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5", 
+"WpToBpT_Wp5000_Bp400_Top170_Zbt_TuneCP5_13TeV-madgraphMLM-pythia8_TIMBER_Lund.h5",
+"YtoHH_Htott_Y5000_H400_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+#"ZpToTpTp_Zp5000_Tp400_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+
+"XToYYprimeTo4Q_MX5000_MY25_MYprime25_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY25_MYprime80_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY25_MYprime170_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY25_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY80_MYprime170_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY80_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY80_MYprime80_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY170_MYprime170_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY170_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
+"XToYYprimeTo4Q_MX5000_MY400_MYprime400_narrow_TuneCP5_13TeV-madgraph-pythia8_TIMBER_Lund.h5",
 ]
 
 method = 'TNT' if do_TNT else 'cwola'

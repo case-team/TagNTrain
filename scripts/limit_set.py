@@ -853,6 +853,7 @@ def limit_set(options):
         print(options.saved_params.keys())
         if('sys_select_list' in options.saved_params.keys()):
             trained = options.saved_params['sys_select_list'] + ['rand%i' %i for i in range(num_rand)]
+            trained = sys_list
             for sys in trained:
                 print(sys)
                 s_opts = spb_opts(options, spb, sys = sys)

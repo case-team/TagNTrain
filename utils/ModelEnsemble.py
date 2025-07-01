@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import os
 from sklearn.preprocessing import quantile_transform
 
 
@@ -20,7 +21,10 @@ class ModelEnsemble:
             else: #inputed a directory
                 for i in range(num_models):
                     model_name = "model%i.h5" % i
-                    self.model_names.append(location + model_name)
+                    if(os.path.exists(location + model_name)):
+                        self.model_names.append(location + model_name)
+                    else:
+                        self.model_names.append(location)
 
             for model_fname in self.model_names:
                 model = tf.keras.models.load_model(model_fname)

@@ -54,7 +54,7 @@ def train_supervised_network(options):
     sig_inputs_train = sig_only_data[feat_key]
 
     sig_weights_train = sig_only_data['sys_weights'][:,0]
-    sig_weights_train *= sig_only_data['lund_weights'][:]
+    if(options.lund_weights): sig_weights_train *= sig_only_data['lund_weights'][:]
 
     bkg_inputs_train = data[feat_key][:]
 
@@ -71,7 +71,7 @@ def train_supervised_network(options):
         sig_inputs_val = sig_only_val[feat_key]
 
         sig_weights_val = sig_only_val['sys_weights'][:,0]
-        sig_weights_val *= sig_only_val['lund_weights'][:]
+        if(options.lund_weights): sig_weights_val *= sig_only_val['lund_weights'][:]
 
     t2 = time.time()
     print("load time  %s " % (t2 -t1))
@@ -119,7 +119,8 @@ def train_supervised_network(options):
     seed = options.seed + batch_sum
     print("Seed is %i" % seed)
     np.random.seed(seed)
-    tf.set_random_seed(seed)
+    #tf.set_random_seed(seed)
+    tf.random.set_seed(seed)
     os.environ['PYTHONHASHSEED']=str(seed)
     random.seed(seed)
 
@@ -141,7 +142,7 @@ def train_supervised_network(options):
             else:
                 model = dense_net(dense_shape)
 
-        model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'])
+        model.compile(optimizer=myoptimizer,loss='binary_crossentropy', metrics = ['accuracy'], weighted_metrics =[])
         if(model_idx == 0): model.summary()
 
         history = model.fit(train_inputs, train_labels, 

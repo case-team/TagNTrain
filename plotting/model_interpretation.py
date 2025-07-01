@@ -35,12 +35,138 @@ def permutation_weights(model, x_eval, x_rand):
     
     return p_weights
 
+def multi_model_interp(opts_list, outdir = ""):
+
+    include_bkg_like = False #look at change in scores for most bkg like samples too
+    num_top = 100
+    num_rand = 100
+    top_frac = 0.005
+    preliminary = False
+
+    if(not os.path.exists(outdir)):
+        subprocess.call("mkdir %s" % outdir, shell = True)
+
+    j1_top_feats = j2_top_feats = j1_comb_perm_weights = j2_comb_perm_weights = None
+
+    n_folds = len(opts_list)
+
+    for options in opts_list:
+    
+        if('j_label' in options.labeler_name):
+            j1_fname = options.labeler_name.format(j_label = "j1")
+            j2_fname = options.labeler_name.format(j_label = "j2")
+        else:
+            j1_fname = j2_fname = options.labeler_name
+
+
+        options.keys = ['mjj', 'event_info']
+        if(options.model_type == 0 or options.model_type == 1):
+            options.keys += ['j1_images', 'j2_images']
+        if(options.model_type == 3 ):
+            options.keys.append('jj_images' )
+        if(options.model_type == 2):
+            options.keys += ['j1_features', 'j2_features']
+        if(options.model_type == 4):
+            options.keys.append('jj_features' )
+        #keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'mjj']
+
+        compute_mjj_window(options)
+        options.keep_mlow = options.mjj_low
+        options.keep_mhigh = options.mjj_high
+        options.verbose = False
+        data, _ = load_dataset_from_options(options)
+
+        if(options.model_type != 2):
+            print("Model type %i not supported" % options.model_type)
+            sys.exit(1)
+
+
+        j1_model = ModelEnsemble(location = j1_fname, num_models = options.num_models)
+        j2_model = ModelEnsemble(location = j2_fname, num_models = options.num_models)
+
+        Y = data['label']
+        j1_feats = data['j1_features']
+        j2_feats = data['j2_features']
+
+        batch_size = 512
+        j1_scores = j1_model.predict(j1_feats, batch_size = batch_size).reshape(-1)
+        j2_scores = j2_model.predict(j2_feats, batch_size = batch_size).reshape(-1)
+
+        num_top = int(round(top_frac * j1_scores.shape[0]))
+        top_j1_scores_idxs = np.argpartition(j1_scores, -num_top)[-num_top:]
+        top_j2_scores_idxs = np.argpartition(j2_scores, -num_top)[-num_top:]
+
+
+        j1_top = j1_feats[top_j1_scores_idxs]
+        j2_top = j2_feats[top_j2_scores_idxs]
+
+        if(j1_top_feats is not None):
+            j1_top_feats = np.concatenate((j1_top_feats, j1_top), axis=0)
+            j2_top_feats = np.concatenate((j2_top_feats, j2_top), axis=0)
+        else:
+            j1_top_feats = j1_top
+            j2_top_feats = j2_top
+
+
+        j1_perm_weights = permutation_weights(j1_model, j1_top, j1_feats[:num_rand])
+        j2_perm_weights = permutation_weights(j2_model, j2_top, j2_feats[:num_rand])
+
+        if(j1_comb_perm_weights is None):
+            j1_comb_perm_weights = j1_perm_weights
+            j2_comb_perm_weights = j2_perm_weights
+        else:
+            j1_comb_perm_weights += j1_perm_weights
+            j2_comb_perm_weights += j2_perm_weights
+
+
+
+    #plot combined results
+    plot_colors = ("r", "b")
+    num_bins = 20
+    title = options.label
+
+
+    feature_names = [("jet_mass", r" $m_{SD}$ (GeV) "), 
+            ("tau21", r" $\tau_{21}$ "), 
+            ("tau32", r" $\tau_{32}$ "), 
+            ("tau43", r" $\tau_{43}$ "), 
+            ("LSF", "$\mathrm{LSF}_3$"), 
+            ("DeepB", "DeepCSV score"), 
+            ("nPF", "Number of PF candidates")]
+
+
+    plot_labels = ("Top 1% most anomalous", "All jets")
+    for idx,(feat,axis_title) in enumerate(feature_names):
+        make_outline_hist( [], ( j1_top_feats[:,idx], j1_feats[:,idx]), plot_labels, plot_colors, axis_title, title, num_bins, normalize = True, 
+                        save = True, fname = outdir + "j1_" + feat + "_topsig_cmp.pdf", preliminary=preliminary)
+
+    print("J2: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j2_scores_idxs] > 0)))
+    for idx,(feat,axis_title) in enumerate(feature_names):
+        make_outline_hist( [], ( j2_top_feats[:,idx],  j2_feats[:,idx] ), plot_labels, plot_colors, axis_title, title, num_bins, normalize = True, 
+                        save = True, fname = outdir + "j2_" + feat + "_topsig_cmp.pdf", preliminary=preliminary)
+
+
+    print("Var: j1 perm weight, j2 perm weight")
+    for idx, feat in enumerate(feature_names):
+        print("%s: %.3f %.3f" % (feat[0], j1_perm_weights[idx], j2_perm_weights[idx]))
+    feat_labels = [feat[1] for feat in feature_names]
+
+    #normalize
+    j1_comb_perm_weights /= n_folds
+    j2_comb_perm_weights /= n_folds
+
+    feat_labels[-1] = "Num. PF cands."
+
+    horizontal_bar_chart(j1_comb_perm_weights, feat_labels, fname = outdir + "j1_feature_importance.pdf", xaxis_label = "Permutation score", title=title, preliminary=preliminary)
+    horizontal_bar_chart(j2_comb_perm_weights, feat_labels, fname = outdir + "j2_feature_importance.pdf", xaxis_label = "Permutation score", title=title, preliminary=preliminary)
 
 def model_interp(options):
 
     include_bkg_like = False #look at change in scores for most bkg like samples too
     num_top = 100
     num_rand = 100
+    top_frac = 0.03
+    preliminary = False
 
     if(not os.path.exists(options.output)):
         subprocess.call("mkdir %s" % options.output, shell = True)
@@ -52,7 +178,7 @@ def model_interp(options):
         j1_fname = j2_fname = options.labeler_name
 
 
-    options.keys = ['mjj', 'event_info']
+    options.keys = ['mjj', 'event_info', 'jet_kinematics']
     if(options.model_type == 0 or options.model_type == 1):
         options.keys += ['j1_images', 'j2_images']
     if(options.model_type == 3 ):
@@ -69,6 +195,7 @@ def model_interp(options):
     options.verbose = False
     data, _ = load_dataset_from_options(options)
 
+
     if(options.model_type != 2):
         print("Model type %i not supported" % options.model_type)
         sys.exit(1)
@@ -82,13 +209,30 @@ def model_interp(options):
     #j1_model = tf.keras.models.load_model(j1_model_name)
     #j2_model = tf.keras.models.load_model(j2_model_name)
 
+    if(options.ttbar):
+        j1_m = data['j1_features'][:,0]
+        j2_m = data['j2_features'][:,0]
+
+        ptcut = 400.
+        ptcut_mask = (data['jet_kinematics'][:,2] > ptcut) & ( data['jet_kinematics'][:,6] > ptcut)
+
+        j1_cut = (j1_m > 105) & (j1_m < 220)
+        j2_cut = (j2_m > 105) & (j2_m < 220)
+
+        mask = ptcut_mask & j1_cut & j2_cut
+        print("Applying ttbar preselection, %.2f eff" % np.mean(mask))
+
+        data.apply_mask(mask)
+
+
+
     feature_names = [("jet_mass", r" $m_{SD}$ "), 
             ("tau21", r" $\tau_{21}$ "), 
             ("tau32", r" $\tau_{32}$ "), 
             ("tau43", r" $\tau_{43}$ "), 
             ("LSF", "LSF"), 
-            ("DeepB", "DeepB Score"), 
-            ("nPF", "Num. PF Cands.")]
+            ("DeepB", "DeepCSV score"), 
+            ("nPF", "Num. PF cands.")]
 
 
     Y = data['label']
@@ -104,7 +248,6 @@ def model_interp(options):
     j1_scores = j1_model.predict(j1_feats, batch_size = batch_size).reshape(-1)
     j2_scores = j2_model.predict(j2_feats, batch_size = batch_size).reshape(-1)
 
-    top_frac = 0.01
     num_top = int(round(top_frac * j1_scores.shape[0]))
     top_j1_scores_idxs = np.argpartition(j1_scores, -num_top)[-num_top:]
     top_j2_scores_idxs = np.argpartition(j2_scores, -num_top)[-num_top:]
@@ -143,19 +286,19 @@ def model_interp(options):
     mean_top_j2_nsubj, std_top_j2_nsubj = avg_nsubj_ratios(options, j2_feats[top_j2_scores_idxs])
 
     print("J1: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j1_scores_idxs] > 0)))
-    plot_colors = ("b", "r")
+    plot_colors = ("r", "b")
     num_bins = 20
-    title = ""
+    title = options.label
 
     plot_labels = ("Top 1% most anomalous", "All jets")
     for idx,(feat,axis_title) in enumerate(feature_names):
         make_outline_hist( [], ( j1_feats[top_j1_scores_idxs][:,idx], j1_feats[:,idx]), plot_labels, plot_colors, axis_title, title, num_bins, normalize = True, 
-                        save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.png")
+                        save = True, fname = options.output + "j1_" + feat + "_topsig_cmp.pdf", preliminary=preliminary)
 
     print("J2: Evaluating based on top %i jets (%.2f signal)"% (num_top, np.mean(Y[top_j2_scores_idxs] > 0)))
     for idx,(feat,axis_title) in enumerate(feature_names):
         make_outline_hist( [], ( j2_feats[top_j2_scores_idxs][:,idx],  j2_feats[:,idx] ), plot_labels, plot_colors, axis_title, title, num_bins, normalize = True, 
-                        save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.png")
+                        save = True, fname = options.output + "j2_" + feat + "_topsig_cmp.pdf", preliminary=preliminary)
 
 
     if(include_bkg_like):
@@ -172,8 +315,8 @@ def model_interp(options):
         print("%s: %.3f %.3f" % (feat[0], j1_perm_weights[idx], j2_perm_weights[idx]))
     feat_labels = [feat[1] for feat in feature_names]
 
-    horizontal_bar_chart(j1_perm_weights, feat_labels, fname = options.output + "j1_feature_importance.png", xaxis_label = "Permutation Score")
-    horizontal_bar_chart(j2_perm_weights, feat_labels, fname = options.output + "j2_feature_importance.png", xaxis_label = "Permutation Score")
+    horizontal_bar_chart(j1_perm_weights, feat_labels, fname = options.output + "j1_feature_importance.pdf", xaxis_label = "Permutation Score", title=title, preliminary=preliminary)
+    horizontal_bar_chart(j2_perm_weights, feat_labels, fname = options.output + "j2_feature_importance.pdf", xaxis_label = "Permutation Score", title=title, preliminary=preliminary)
 
 
 
@@ -181,5 +324,6 @@ def model_interp(options):
 
 if(__name__ == "__main__"):
     parser = input_options()
+    parser.add_argument("--ttbar", default = False, action='store_true', help = "Model interp for ttbar")
     options = parser.parse_args()
     model_interp(options)

@@ -36,6 +36,7 @@ def input_options():
     parser.add_argument("--keep_tau1", default = False, action = 'store_true',  help="Use tau1 feature")
 
     parser.add_argument("--use_one", type = bool, default = True, help="Make a classifier for one jet instead of both")
+    parser.add_argument("--use_both", dest='use_one', action='store_false', help="Make a classifier for both")
     parser.add_argument("-j", "--training_j", type =int, default = 1, help="Which jet to make a classifier for (1 or 2)")
     parser.add_argument("--use_images", default = False, action = "store_true", help="Make a classifier using jet images as inputs")
 
@@ -76,6 +77,7 @@ def input_options():
     parser.add_argument("--save_mem", default = False, action = "store_true", help="Delete BB files in condor jobs after reading them")
 
     parser.add_argument("--cathode_feats",  action = "store_true", help="Use CATHODE features (tau41) for comparison study")
+    parser.add_argument("--m_only_feats",  action = "store_true", help="Use only softdrop mass for comparison study")
     parser.add_argument("--keep_LSF",  action = "store_true", help="Keep LSF for dense inputs")
     parser.add_argument("--no_LSF", dest = 'keep_LSF', action = "store_false", help="Dont Keep LSF for dense inputs")
     parser.set_defaults(keep_LSF=True)
@@ -169,6 +171,8 @@ def load_signal_file(options):
         data_batch_list = None
         if(options.batch_start >=0 and options.batch_stop >= 0): 
             data_batch_list = list(range(options.batch_start, options.batch_stop + 1))
+        else: 
+            data_batch_list = list(range(0, 40))
 
     else:
         data_batch_list = options.data_batch_list

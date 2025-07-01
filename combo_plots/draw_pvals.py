@@ -75,7 +75,7 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], 
 
 
     #plt.text(0.05, 0.9, title, fontsize = 18, transform = plt.gca().transAxes)
-    plt.xlabel(r"Cross Section (fb)", fontsize = 26)
+    plt.xlabel(r"Cross section (fb)", fontsize = 26)
     plt.ylabel("p-value", fontsize = 26)
     plt.yscale("log")
     plt.ylim(overflow_thresh, 1)
@@ -136,27 +136,29 @@ titles = [r"$W' \rightarrow B't  \rightarrow bZt$", r"$X \rightarrow YY' \righta
 odir = "pvals/"
 
 
-labels = ['Inclusive', 'VAE-QR',  'CWoLa Hunting', 'TNT', 'CATHODE', 'CATHODE-b',  'QUAK', 
-'QUAK: Model Specific', 
-r'2-prong $(\tau_{21}, m_\mathrm{SD})$', r'3-prong $(\tau_{32}, m_\mathrm{SD})$']
+labels = ['Inclusive', 'VAE-QR',  'CWoLa Hunting', 'TNT', 'CATHODE', 'CATHODE-b',  'QUAK: generic', 
+'QUAK: model specific', 
+r'2-prong $(\tau_{21}, m_\mathrm{SD})$', r'3-prong $(\tau_{32}, m_\mathrm{SD})$', '2D CWoLa Hunting 1%', '2D CWoLa Hunting 10%']
 
 #                   pink       purple   dark green     blue      red       orange     #gray
-colors = ['black', '#F739F2', '#702963', '#228B22', '#0271BB', '#E2001A', '#FCB40C', '#949494', 'sienna','tan' ]
+colors = ['black', '#F739F2', '#702963', '#228B22', '#0271BB', '#E2001A', '#FCB40C', '#949494', 'sienna','tan', 'cyan', 'deepskyblue' ]
 
-markers = ['o', 's', 'P', 'p', '*', 'X', 'D', 'd', 'x', 'h']
-linestyles = ['solid',] * 10
+markers = ['o', 's', 'P', 'p', '*', 'X', 'D', 'd', 'x', 'h', 'x', 'o']
+linestyles = ['solid',] * 12
 
 linestyles[0] = 'dashed'
 linestyles[7] = 'dashed'
 linestyles[8] = 'dashed'
 linestyles[9] = 'dashed'
+linestyles[10] = 'dashed'
+linestyles[11] = 'dashed'
 
 #excludes = [5,7]  # remove cathode-b and QUAK model-specific 
 excludes = [] 
-leg_order = [1,2,3,4,5,6,7,8,9,0]
+leg_order = [1,2,3,4,5,6,7,8,9,10,11,0]
 
-fs_Wp = [[]]*10
-fs_X = [[]]*10
+fs_Wp = [[]]*12
+fs_X = [[]]*12
 
 #XYY spbs 1.25 2.0 3.0 4.5 6.0
 #Wp spbs 3.75, 6.25, 8.75, 11.25, 13.75, 16.25
@@ -209,6 +211,16 @@ fs_Wp[8] = [0.4, 0.34, 0.29, 0.24, 0.19, 0.15]
 fs_X[9]  = [0.36, 0.283, 0.195, 0.098, 0.042]
 fs_Wp[9] = [0.052, 0.0208, 0.0027, 5.8e-5, 1.07e-6, 1.33e-7]
 
+
+#ATLAS CWOLA 1%
+fs_X[10]  = [0.5, 0.5, 0.5, 0.5, 0.5]
+fs_Wp[10] = [0.3174475433204569, 0.235227986453863, 0.08004250261679968, 0.030015531374040227, 0.02914940323633486, 0.02846255843281653] 
+
+
+#ATLAS CWOLA 10%
+fs_X[11]  = [0.5, 0.5, 0.5, 0.4382741582236733, 0.21112940983081052]
+fs_Wp[11] = [0.16227781278799913, 0.18648966331445815, 0.07755090300361389, 0.028604464081520398, 0.010740113793144879, 0.0021128956596574433]
+
 no_taus = False
 
 #supervised + DISCO
@@ -216,7 +228,8 @@ no_taus = False
 #fs_Wp[8] = [0.024, 2.98e-6, 2.37e-9, 9.836e-11, 1.48e-11, 7.07e-17]
 
 fs = [fs_Wp, fs_X]
-fouts = ["Wp_pvals.pdf", "XYYp_pvals.pdf"]
+#fouts = ["Wp_pvals_ATLAS.pdf", "XYYp_pvals_ATLAS.pdf"]
+fouts = ["Wp_pvals_ATLAS.png", "XYYp_pvals_ATLAS.png"]
 
 
 for l_idx,flist  in enumerate(fs):

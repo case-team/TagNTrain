@@ -9,6 +9,25 @@ from .Consts import *
 import scipy.stats
 import numpy as np
 
+
+#Colors from CAT
+c_lightblue = "#5790fc"
+c_orange = "#f89c20"
+c_red = "#e42536"
+c_purple = "#964a8b"
+c_grey = "#9c9ca1"
+c_indigo = "#7a21dd"
+c_brown = "#a96b59"
+
+#from ROOT import *
+#kBlue = TColor.GetColor("#5790fc")
+#kYellow = TColor.GetColor("#f89c20")
+#kRed = TColor.GetColor("#e42536")
+#kGrape = TColor.GetColor("#964a8b")
+#kGray = TColor.GetColor("#9c9ca1")
+#kViolet = TColor.GetColor("#7a21dd")
+
+
 fig_size = (12,9)
 
 def draw_mbins(plot, ymin = 0., ymax = 0., colors = ('blue', 'green')):
@@ -166,40 +185,48 @@ def make_sic_plot(sig_effs, bkg_effs, colors = None, labels = None, eff_min = 1e
         print("Saving file to %s " % fname)
 
 
-def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None, eff_min = 1e-3, ymax = -1, fname=""):
+def make_sic_curve(classifiers, y_true, colors = None, linestyles=None, heading=None, heading_pos=-1, logy=False, labels = None, eff_min = 1e-3, ymax = -1, fname="", cms=True):
+    print('eff_min', eff_min)
 
     y_true = np.clip(y_true, 0,1)
+    if(cms):
+        import mplhep as hep
+        plt.style.use(hep.style.CMS)
+
     plt.figure(figsize=fig_size)
 
-    fs = 18
+    if(cms):
+        hep.cms.text(" Preliminary")
+        hep.cms.lumitext("138 fb$^{-1}$ (13 TeV)")
+
+    fs = 26
     fs_leg = 16
 
     sic_max = 10.
-
-
 
     for idx,scores in enumerate(classifiers):
         fpr, tpr, thresholds = roc_curve(y_true, scores)
         fpr= np.clip(fpr, 1e-8, 1.)
         tpr = np.clip(tpr, 1e-8, 1.)
 
-        mask = tpr > eff_min
+        mask = fpr > eff_min
 
         xs = fpr[mask]
         ys = tpr[mask]/np.sqrt(xs)
 
         sic_max = max(np.amax(ys), sic_max)
 
-
-        
-
-
         lbl = 'auc'
         clr = 'navy'
+        linestyle='solid'
         if(labels != None): lbl = labels[idx]
         if(colors != None): clr = colors[idx]
+        if(linestyles != None): linestyle = linestyles[idx]
         print(lbl, "max sic: ", np.amax(ys))
-        plt.plot(xs, ys, lw=2, color=clr, label='%s' % lbl)
+        if(heading is not None and heading_pos==idx):
+            plt.plot([], [], ' ', label=heading) 
+
+        plt.plot(xs, ys, lw=2, color=clr, linestyle=linestyle, label='%s' % lbl)
 
 
     
@@ -209,11 +236,11 @@ def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None
         
     plt.ylim([0,ymax])
     plt.xscale('log')
-    plt.xlabel('Background Efficiency', fontsize = fs)
-    plt.ylabel('Significance Improvement', fontsize = fs)
+    plt.xlabel('Background efficiency', fontsize = fs)
+    plt.ylabel('Significance improvement', fontsize = fs)
     plt.tick_params(axis='x', labelsize=fs_leg)
     plt.tick_params(axis='y', labelsize=fs_leg)
-    plt.grid(axis = 'y', linestyle='--', linewidth = 0.5)
+    #plt.grid(axis = 'y', linestyle='--', linewidth = 0.5)
     plt.legend(loc="best", fontsize= fs_leg)
     if(fname != ""):
         plt.savefig(fname)
@@ -222,9 +249,6 @@ def make_sic_curve(classifiers, y_true, colors = None, logy=False, labels = None
 def make_histogram(entries, labels, colors, xaxis_label="", title ="", num_bins = 10, logy = False, normalize = False, stacked = False, h_type = 'step', 
         h_range = None, fontsize = 16, fname="", yaxis_label = "", ymax = -1):
     alpha = 1.
-    if(stacked): 
-        h_type = 'barstacked'
-        alpha = 0.2
     fig = plt.figure(figsize=fig_size)
     ns, bins, patches = plt.hist(entries, bins=num_bins, range=h_range, color=colors, alpha=alpha,label=labels, density = normalize, histtype=h_type, linewidth=3)
     plt.xlabel(xaxis_label, fontsize =fontsize * 1.5)
@@ -274,7 +298,7 @@ def make_profile_hist(x,y, x_bins, xaxis_label="", yaxis_label="", fname = "", f
 
 
 def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_bins, logy = False,  normalize = False, save=False, h_type = 'step', 
-        h_range = None, fontsize = 24, fname="", yaxis_label = ""):
+        h_range = None, fontsize = 24, fname="", yaxis_label = "", preliminary=False):
     alpha = 1.
     n_stacks = len(stacks)
 
@@ -285,22 +309,32 @@ def make_outline_hist(stacks,outlines, labels, colors, xaxis_label, title, num_b
         plt.hist(stacks, bins=num_bins, range=h_range, color=colors[:n_stacks], alpha=0.2,label=labels[:n_stacks], density = normalize, histtype='barstacked')
     if(len(outlines) > 0):
         plt.hist(outlines, bins=num_bins, range=h_range, color=colors[n_stacks:], alpha=1.,label=labels[n_stacks:], density = normalize, histtype='step', linewidth = 2)
-    xlabel_fontsize  = fontsize *1.5 if "_" in xaxis_label else fontsize
+    xlabel_fontsize  = fontsize *2.0 if "_" in xaxis_label else 1.5*fontsize
     plt.xlabel(xaxis_label, fontsize =xlabel_fontsize)
+    plt.ylabel("Arbitrary units", fontsize =1.5*fontsize)
+
+    plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+    t = plt.gca().yaxis.get_offset_text().set(visible=False)
+    #t.set_x(-0.06)
+
     plt.tick_params(axis='x', labelsize=fontsize)
     plt.tick_params(axis='y', labelsize=fontsize)
     if(logy): plt.yscale('log')
     if(yaxis_label != ""):
         plt.ylabel(yaxis_label, fontsize=fontsize)
-    plt.title(title, fontsize=fontsize)
     _, high = plt.gca().get_ylim()
-    plt.ylim (0., high * 1.2)
-    plt.legend(loc='upper center', fontsize = fontsize * 0.8)
-    hep.cms.label( data = False)
+    plt.ylim (0., high * 1.5)
+
+
+    plt.legend(loc='upper center', fontsize = fontsize, title = title)
+    #plt.title(title, fontsize=fontsize)
+    text = "Preliminary" if preliminary else ""
+    hep.cms.label(text, data = False)
+    fig.tight_layout()
+
     if(save): 
         print("saving fig %s" %fname)
         plt.savefig(fname)
-    #else: plt.show(block=False)
     return fig
 
 
@@ -416,6 +450,7 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
     gs = gridspec.GridSpec(2,1, height_ratios = [3,1])
     ax0 =  plt.subplot(gs[0])
 
+
     low = np.amin([np.amin(entries[0]), np.amin(entries[1])])
     high = np.amax([np.amax(entries[0]), np.amax(entries[1])])
     if(h_range is None):
@@ -468,7 +503,7 @@ def make_ratio_histogram(entries, labels, colors, axis_label, title, num_bins, n
     bincenters = 0.5*(bins[1:]+bins[:-1]) 
     ax1 = plt.subplot(gs[1])
 
-    ax1.errorbar(bincenters, ratio, yerr = ratio_err, alpha=alpha, fmt='ko')
+    ax1.errorbar(bincenters, ratio, yerr = ratio_err, alpha=alpha, fmt='ko', color = colors[1])
 
     #plt.xlim([np.amin(entries[0]), np.amax(entries[0])])
     plt.xlim([low,high])
@@ -541,26 +576,129 @@ def make_scatter_plot(x, y, color, axis_names, fname= ""  ):
         print("saving %s" % fname)
         plt.savefig(fname)
 
-def horizontal_bar_chart(vals, labels, fname = "", xaxis_label = ""):
+def horizontal_bar_chart(vals, labels, fname = "", xaxis_label = "", title = "", preliminary=False):
 
     import mplhep as hep
     plt.style.use(hep.style.CMS)
     fig, ax = plt.subplots()
 
-    order = np.flip(vals.argsort())
+    order = vals.argsort()
+
+    #hacky fix
+    labels = [lab.replace("(GeV)", "") for lab in labels]
     labels = np.array(labels)
 
-    y_pos = np.arange(len(vals))
-    ax.barh(y_pos, vals[order], align = 'center')
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels[order])
-    ax.invert_yaxis()
-    ax.set_xlabel(xaxis_label)
+    y_positions = np.arange(len(vals))
+    ax.barh(y_positions, vals[order], align = 'center')
 
-    hep.cms.label( data = False)
+    tick_labels = labels[order]
+    ax.set_yticks(y_positions)
+
+    ax.set_yticklabels(tick_labels, fontsize=26)
+    
+    plt.ylim([None, len(vals) + 0.9])
+
+
+    ax.set_xlabel(xaxis_label)
+    text = "Preliminary" if preliminary else ""
+    hep.cms.label(text, data = False)
+
+
+    title = title.replace(",", "\n")
+
+    ax.legend(title=title, loc = "upper center")
+
     fig.tight_layout()
 
     if(fname != ""):
         print("saving %s" % fname)
         plt.savefig(fname)
+
+
+
+def plot_hist_stack(bkg_list, labels, colors, data_vals = None, h_range=(0,100), nbins=10, xlabel = "", title="", fname="", logy=False):
+
+    hist_list = []
+    tot_mc = 0
+    for i,vals in enumerate(bkg_list):
+        h = np.histogram(vals, bins=nbins, range=h_range)
+        tot_mc += np.sum(h[0])
+        hist_list.append(h)
+
+
+    if(data_vals is not None):
+        h_data = np.histogram(data_vals, bins=nbins, range=h_range)
+        tot_data = np.sum(h_data[0])
+
+        #rescale MC to data norm
+        scaling = tot_data / tot_mc
+        print('data, mc, norm', tot_data, tot_mc, scaling)
+
+        hist_list = [ (h[0] * scaling, h[1]) for h in hist_list]
+
+    fontsize = 26
+
+    import mplhep as hep
+    plt.style.use(hep.style.CMS)
+
+    fig, ax = plt.subplots()
+
+    hep.histplot(hist_list, stack=True, histtype="fill", color = colors, label = labels, ax=ax)
+
+    if(data_vals is not None):
+        hep.histplot(h_data,  histtype="errorbar", color = 'black', label = 'data', ax=ax)
+
+
+    if(logy): plt.yscale('log')
+    plt.xlim(h_range)
+
+    _, high = plt.gca().get_ylim()
+    plt.ylim (0., high * 1.3)
+
+    plt.ylabel("Events / bin", fontsize = fontsize*1.5)
+    plt.xlabel(xlabel, fontsize = fontsize*1.5)
+    #plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+
+    plt.legend(loc = 'best', fontsize = fontsize, facecolor='w', framealpha = 0.5, title = title)
+
+    text = "Preliminary"
+    hep.cms.label(text, loc=2, data=True)
+
+    if(len(fname) > 0): 
+        print("Saving %s" % fname)
+        plt.savefig(fname, bbox_inches='tight')
+
+    return
+
+
+
+def make_root_stack(outname, bkg_list, labels, colors, data_vals = [], h_range=(0,100), nbins=10, xlabel = "", title=""):
+
+    def make_hist(name, vals ):
+        h = TH1F(name, name, nbins, h_range[0], h_range[1])
+        for x in vals: h.Fill(x)
+        return h
+
+    hist_list = []
+    h_tot = None
+    for i,vals in enumerate(bkg_list):
+        h = make_hist(labels[i], vals)
+        h.Print()
+        hist_list.append(h)
+        if(h_tot is None): h_tot = h.Clone("h_tot")
+        else: h_tot.Add(h)
+
+
+    datastyle = "pe0x0"
+    ratio_range = (0.5, 1.5)
+    NDiv = 405
+
+    makeCan(outname, "", [h_tot], bkglist=[hist_list], totlist=[h_tot], dataOff = True, colors = colors, bkgNames = labels, 
+            titles = [title], xtitle = xlabel, year = -1, datastyle=datastyle, ratio_range = ratio_range, NDiv = NDiv, prelim = True)
+    return
+
+
+
+
+
 

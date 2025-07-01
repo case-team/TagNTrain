@@ -65,8 +65,7 @@ def draw_ttbar_tagged(options):
             num_models = options.num_models, batch_size = 512)
 
 
-    eff = 1.0
-    percentile_cut = 100. - eff
+    percentile_cut = 100. - options.eff
     thresh = np.percentile(probe_scores, percentile_cut)
 
     nn_cut = np.copy(pre_tag_selection)
@@ -111,40 +110,14 @@ def draw_ttbar_tagged(options):
     n_feat_bins = 10
     feat_range = (0., 1.)
 
-    def hist_list(var, cut, masks):
-        return [var[cut & mask] for mask in masks]
-
-    make_histogram(hist_list(j1_m, pre_tag_selection, masks), labels, colors, logy=True, xaxis_label = 'J1 Jet Mass', title = "Pre-Selection", 
-        num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_presel_tag.png")
-
-    make_histogram(j2_m[pass_cut & ttbar], ['ttbar'], ['r'], xaxis_label = 'J2 Jet Mass', title = "Selected ttbar", 
-        num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_ttbar.png")
-
-    make_histogram(j2_m[pre_tag_selection & ttbar], ['ttbar'], ['r'], xaxis_label = 'J2 Jet Mass', title = "Pre-sel ttbar", 
-        num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_presel_ttbar.png")
-
-    make_histogram(j2_m[pass_cut & other], ['other'], ['g'], xaxis_label = 'J2 Jet Mass', title = "Selected Z+jets and other", 
-        num_bins = n_m_bins*2, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_z.png")
-
-    make_histogram(hist_list(j2_m, pass_cut, masks), labels, colors, xaxis_label = 'J2 Jet Mass', title = " Pass J1 Top-Tag", 
-        num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_probe.png")
-
-
-    make_histogram(hist_list(j2_m, pass_cut, masks), labels, colors, logy=True, xaxis_label = 'J2 Jet Mass', title = " Pass J1 Top-Tag", 
-        num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_probe.png")
-
-    make_histogram(hist_list(j2_m, fail_cut, masks), labels, colors, logy=True, xaxis_label = 'J2 Jet Mass', title = " 'Fail J1 Top-Tag' ", 
-        num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_fail_probe.png")
-
-    make_histogram(hist_list(j1_m, pass_cut, masks), labels, colors, logy=True, xaxis_label = 'J1 Jet Mass', title = "Pass J1 Top-Tag", 
-        num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_tag.png")
-
-
-
+    f_all_out = options.output + "all_masses.h5"
     f_tagged_out = options.output + "tagged_masses.h5"
     f_raw_out = options.output + "masses.h5"
     f_top_out = options.output + "top_only_masses.h5"
     print("Creating %s %s %s" % (f_raw_out, f_tagged_out, f_top_out))
+
+    with h5py.File(f_all_out, "w") as f:
+        f.create_dataset('mass', data=j2_m)
 
     with h5py.File(f_tagged_out, "w") as f:
         f.create_dataset('mass_pass', data=j2_m[pass_cut])
@@ -158,9 +131,44 @@ def draw_ttbar_tagged(options):
     with h5py.File(f_top_out, "w") as f:
         f.create_dataset('mass', data=j2_m[pre_tag_selection & ttbar])
 
+    plot = False
+    if(plot):
+        def hist_list(var, cut, masks):
+            return [var[cut & mask] for mask in masks]
+
+        make_histogram(hist_list(j1_m, pre_tag_selection, masks), labels, colors, logy=True, xaxis_label = 'J1 Jet Mass', title = "Pre-Selection", 
+            num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_presel_tag.png")
+
+        make_histogram(j2_m[pass_cut & ttbar], ['ttbar'], ['r'], xaxis_label = 'J2 Jet Mass', title = "Selected ttbar", 
+            num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_ttbar.png")
+
+        make_histogram(j2_m[pre_tag_selection & ttbar], ['ttbar'], ['r'], xaxis_label = 'J2 Jet Mass', title = "Pre-sel ttbar", 
+            num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_presel_ttbar.png")
+
+        make_histogram(j2_m[pass_cut & other], ['other'], ['g'], xaxis_label = 'J2 Jet Mass', title = "Selected Z+jets and other", 
+            num_bins = n_m_bins*2, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_z.png")
+
+        make_histogram(hist_list(j2_m, pass_cut, masks), labels, colors, xaxis_label = 'J2 Jet Mass', title = " Pass J1 Top-Tag", 
+            num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_probe.png")
+
+
+        make_histogram(hist_list(j2_m, pass_cut, masks), labels, colors, logy=True, xaxis_label = 'J2 Jet Mass', title = " Pass J1 Top-Tag", 
+            num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_probe.png")
+
+        make_histogram(hist_list(j2_m, fail_cut, masks), labels, colors, logy=True, xaxis_label = 'J2 Jet Mass', title = " 'Fail J1 Top-Tag' ", 
+            num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_fail_probe.png")
+
+        make_histogram(hist_list(j1_m, pass_cut, masks), labels, colors, logy=True, xaxis_label = 'J1 Jet Mass', title = "Pass J1 Top-Tag", 
+            num_bins = n_m_bins, h_range = m_range, stacked = True, fname = options.output + "jet_mass_pass_tag.png")
+
+
+
+
+
 if(__name__ == "__main__"):
     parser = input_options()
     parser.add_argument("--tau32_cut", default = 999., type = float, help = "What tau32 cut to use on tag side")
     parser.add_argument("--deepcsv_cut", default = -999., type = float, help = "What deepcsv cut to use on tag side")
+    parser.add_argument("--eff", default = 1.0, type = float, help = "Efficiency of the cut (in percentage)")
     options = parser.parse_args()
     draw_ttbar_tagged(options)

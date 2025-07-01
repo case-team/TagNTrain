@@ -130,6 +130,7 @@ def tag_and_train(options):
 
     filter_frac = data.make_Y_TNT(sig_region_cut = sig_region_cut, bkg_region_cut = bkg_region_cut, cut_var = labeler_scores, mjj_low = options.mjj_low, mjj_high = options.mjj_high, 
             bkg_cut_type = options.TNT_bkg_cut)
+    print("n minor out", np.sum(data['label'] < 0))
     print_signal_fractions(data['label'], data['Y_TNT'])
     print('Total number of signal events is %i' % np.sum(data['label'] > 0.5))
 
@@ -210,7 +211,8 @@ def tag_and_train(options):
     print("Seed is %i" % seed)
     np.random.seed(seed)
     #tf.set_random_seed(seed)
-    tf.random.set_random_seed(seed)
+    #tf.random.set_random_seed(seed)
+    tf.random.set_seed(seed)
     os.environ['PYTHONHASHSEED']=str(seed)
     random.seed(seed)
 

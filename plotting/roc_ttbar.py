@@ -11,16 +11,17 @@ time_start = time.time()
 parser = input_options()
 options = parser.parse_args([])
 options.fin = "../data/BB_UL_MC_v4_deta_images/"
-options.batch_start = 20
-options.batch_stop = 39
+options.batch_start = 40
+options.batch_stop = 79
 options.sig_idx = 1
 options.sig_per_batch = 0
-roc_plot_name = "top_cr_ptcut_roc_oct28.png" 
-sic_plot_name = "top_cr_ptcut_sic_oct28.png" 
+roc_plot_name = "roc.pdf" 
+sic_plot_name = "sic.pdf" 
+eff_min = 1e-4
 #options.keep_mlow = 1400.
 #options.keep_mhigh = 2000.
-options.ptsort = True
-#options.randsort = True
+#options.ptsort = True
+options.randsort = True
 
 options.hadronic_only = True
 options.no_minor_bkgs = False
@@ -31,36 +32,37 @@ options.no_minor_bkgs = False
 
 
 single_file = True
-qcd_bkg_only = True
 
 sic_max = 10
 
-plot_dir = "../plots/jan20_ttbar_CR/"
-model_dir = "../models/ttbar_test/"
-
-#plot_dir = "../runs/cwola_40spb_fullrun/"
-#model_dir = "../runs/cwola_40spb_fullrun/"
+plot_dir = "../plots/ttbar_control_region_data_june2/"
+model_dir = ""
 
 pt_cut = 400.
 
 
 f_models = [
-        "ttbar_supervised.h5",
-        #"ttbar_notau_nodeepcsv.h5",
-        "mar17/ttbar_eta20_tau75.h5",
-        "mar17/ttbar_eta20_notau.h5",
-        #"ttbar_eta20_tau75.h5",
-        "mar17/ttbar_eta20_notau_nodeepcsv.h5",
-        #"ttbar_eta20_tau75_bstar_inj.h5",
+        "../plots/ttbar_control_region_mar4/mc_models/supervised.h5",
+        #"../plots/ttbar_control_region_mar4/mc_models/model_1st_half.h5",
+        #"../plots/ttbar_control_region_mar4/mc_models/model_1st_half_btag.h5",
+        "../plots/ttbar_control_region_mar4/data_models/model_1st_half.h5",
+        "../plots/ttbar_control_region_mar4/data_models/model_1st_half_btag.h5",
+        "../plots/ttbar_control_region_data_june2/145_250_part1/",
+        "../plots/ttbar_control_region_data_june2/btag_145_250_part1/",
 ]
 
 labels = [
-         "Supervised",
-         "Weak Supervision (tag: mtop & btag & tau32 < 0.75)",
-         "Weak Supervision (tag: mtop & btag)",
-         "Weak Supervision (tag: mtop)",
+         "MC, full supervision",
+         #"MC Training: Weak Supervision",
+         #"MC Training: Weak Supervision (btag preselection)",
+         "$m_{SD}$ 105-220 GeV",
+         "$m_{SD}$ 105-220 GeV, b tag",
+         "$m_{SD}$ 145-250 GeV",
+         "$m_{SD}$ 145-250 GeV, b tag",
          #"Weak Supervision w/ b* inj. (tag: mtop & btag & tau32 < 0.75)",
         ]
+
+heading = "Data, weak supervision"
 
 
 
@@ -70,20 +72,16 @@ model_type = [2,2,2,2,2,2,2,2,2,2]
 num_models = [1,1,1,1,1,1,1,1,1,1]
 #model_type = [1,1,1,1,1,1]
 #num_models = [1,1,1,1,1,1]
-rand_sort = [False, False, False, False, False, False]
 
-colors = ["g", "b", "r", "gray", "purple", "pink", "orange", "m", "skyblue", "yellow"]
+#colors = ["g", "b", "r", "gray", "purple", "pink", "orange", "m", "skyblue", "yellow"]
+colors = [c_grey, c_purple, c_lightblue, c_red, c_orange]
+linestyles=['solid', 'dashed', 'dashdot', 'dotted', (0, (1,1))]
 
 n_points = 200.
 
 logy= True
 
-need_images = 1 in model_type
-
-if(need_images):
-    options.keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'jet_kinematics']
-else:
-    options.keys = ["j1_features", "j2_features", "jj_features", 'jet_kinematics']
+options.keys = ["j1_features", "j2_features", "jj_features", 'jet_kinematics']
 
 
 if(single_file):
@@ -93,10 +91,6 @@ if(single_file):
     jj_dense_inputs = data['jj_features']
 
     j1_images = j2_images = jj_images = None
-    if(need_images):
-        j1_images = data['j1_images']
-        j2_images = data['j2_images']
-        jj_images = data['jj_images']
     Y = data['label'].reshape(-1)
 
 else:
@@ -106,12 +100,12 @@ else:
 #filter signal
 
 
+#ttbar label is -2
 sig_events = Y == -2
 bkg_events = ~sig_events
 Y_ttbar = np.zeros_like(Y)
 Y_ttbar[sig_events] = 1
 
-#if(qcd_bkg_only):
 
 
 j_label = "j1"
@@ -138,6 +132,6 @@ for idx,f in enumerate(f_models):
 
 
 
-make_roc_curve(model_scores, Y_ttbar[pt_cut_mask], labels = labels, colors = colors,  logy = True, fname=plot_dir + roc_plot_name)
-make_sic_curve(model_scores, Y_ttbar[pt_cut_mask], labels = labels, colors = colors, ymax = 10.,  fname=plot_dir + sic_plot_name)
+make_roc_curve(model_scores, Y_ttbar[pt_cut_mask], labels = labels, colors = colors, logy = True, fname=plot_dir + roc_plot_name)
+make_sic_curve(model_scores, Y_ttbar[pt_cut_mask], labels = labels, linestyles=linestyles, heading=heading, heading_pos = 1, colors = colors, ymax = 10.,  eff_min = eff_min, fname=plot_dir + sic_plot_name)
 del data

@@ -39,7 +39,8 @@ if(options.do_ttbar):
     do_both_js = False
     options.keep_mlow = 1400.
     options.keep_mhigh = 9999.
-    options.ptsort = True
+    options.ptsort = False
+    options.randsort = True
 
     j_label = "j1_"
     opp_j_label = "j2_"

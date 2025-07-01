@@ -26,7 +26,7 @@ def get_features(data, systematic = ""):
             j2_dense_inputs[:, 0] = j2_m_corr
 
 
-    if('jj_dense_inputs' in data.keys):
+    if('jj_features' in data.keys):
         jj_dense_inputs = data['jj_features']
 
     return j1_images, j2_images, j1_dense_inputs, j2_dense_inputs, jj_images, jj_dense_inputs
@@ -52,6 +52,7 @@ def selection(options):
         options.keys += ['j1_features', 'j2_features']
     if(options.model_type == 4):
         options.keys.append('jj_features' )
+
     #keys = ["j1_images", "j2_images", "jj_images", "j1_features", "j2_features", "jj_features", 'mjj']
 
     data, _ = load_dataset_from_options(options)
@@ -60,11 +61,10 @@ def selection(options):
         sig_only_data = load_signal_file(options)
 
     Y = data['label'].reshape(-1)
-    j1_feats = data['j1_features']
-    j2_feats = data['j2_features']
     mjj = data['mjj']
 
-    save_feats = True
+    save_feats = False
+
 
     event_num = data['event_info'][:,0]
 
@@ -108,6 +108,11 @@ def selection(options):
 
         else:
             jj_scores = get_jj_scores("", f, options.model_type, jj_images, jj_dense_inputs, num_models = options.num_models)
+            j1_qs = j2_qs = jj_scores
+
+            if(sig_only_data is not None):
+                jj_sig_scores = get_jj_scores("", f, options.model_type, jj_sig_images, jj_dense_sig_inputs, num_models = options.num_models)
+                j1_sig_qs = j2_sig_qs = jj_sig_scores
 
         if(options.do_roc):
             in_window_and_nominor_bkg = (mjj > options.mjj_low) & (mjj < options.mjj_high) & (Y > -0.1) 
@@ -208,8 +213,6 @@ def selection(options):
 
         mjj_output = mjj[mask]
         is_sig_output = Y[mask]
-        j1_feats_output = j1_feats[mask]
-        j2_feats_output = j2_feats[mask]
         event_num_output = event_num[mask]
         print("Selected %i events" % mjj_output.shape[0])
         eps = 1e-8
@@ -412,6 +415,13 @@ def selection(options):
                 f.create_dataset("truth_label", data=is_sig_output, chunks = True, maxshape = is_sig_shape)
                 f.create_dataset("event_num", data=event_num_output, chunks = True, maxshape = event_num_shape)
                 if(save_feats):
+
+                    j1_feats = data['j1_features']
+                    j2_feats = data['j2_features']
+
+                    j1_feats_output = j1_feats[mask]
+                    j2_feats_output = j2_feats[mask]
+
                     feats_shape = list(j1_feats_output.shape)
                     feats_shape[0] = None
                     f.create_dataset("j1_feats", data=j1_feats_output, chunks = True, maxshape = feats_shape)

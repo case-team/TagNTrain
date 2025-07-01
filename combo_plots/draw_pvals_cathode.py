@@ -75,7 +75,7 @@ def make_pval_plot(xsecs, pval_lists, labels, colors, title = "", markers = [], 
 
 
     #plt.text(0.05, 0.9, title, fontsize = 18, transform = plt.gca().transAxes)
-    plt.xlabel(r"Cross Section (fb)", fontsize = 26)
+    plt.xlabel(r"Cross section (fb)", fontsize = 26)
     plt.ylabel("p-value", fontsize = 26)
     plt.yscale("log")
     plt.ylim(overflow_thresh, 1)
@@ -211,7 +211,7 @@ no_taus = False
 
 
 fs = [fs_Wp, fs_X]
-fouts = ["Wp_cathode_vars_pvals.png", "XYYp_cathode_vars_pvals.png"]
+fouts = ["Wp_cathode_vars_pvals.pdf", "XYYp_cathode_vars_pvals.pdf"]
 
 
 for l_idx,flist  in enumerate(fs):

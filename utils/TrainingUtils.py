@@ -9,7 +9,7 @@ from .Consts import *
 import time
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_curve, auc, roc_auc_score
+from sklearn.metrics import roc_curve, auc, roc_auc_score, log_loss
 from scipy.stats import entropy
 from numpy.linalg import norm
 from sklearn.utils import shuffle as sk_shuffle
@@ -184,16 +184,27 @@ def make_selection(j1_scores, j2_scores, percentile, mask = None):
 
 def print_signal_fractions(y_true, y):
     #compute true signal fraction in signal-rich region
+    minor_bkgs = (y_true < 0).reshape(-1)
+    #minor_bkgs = (y_true == -2).reshape(-1)
     y_true = np.clip(y_true, 0, 1).reshape(-1)
+
+    print("Total events %i" % y.shape[0])
+    print("n minor", np.sum(minor_bkgs))
+    minor_bkgs_SR = minor_bkgs & (y > 0.9)
+    minor_bkgs_outside = minor_bkgs & (y < 0.1)
+
     y = y.reshape(-1)
     true_sigs = (y_true > 0.9 ) & (y > 0.9)
     lost_sigs = (y_true > 0.9) & (y < 0.1 )
     #print(true_sigs.shape, lost_sigs.shape, y.shape)
     sig_frac = np.mean(true_sigs) / np.mean(y)
-    outside_frac = np.mean(lost_sigs)/np.mean(1-np.mean(y))
+    outside_frac = np.mean(lost_sigs)/(1-np.mean(y))
+    minor_bkg_SR_frac = np.sum(minor_bkgs_SR) / np.sum(y > 0.9)
+    minor_bkg_outside_frac = np.sum(minor_bkgs_outside) / np.sum( y < 0.1)
     SR_frac = np.mean(y)
     print("Signal-rich region as a fraction of total labeled events is %.4f. Sig frac in SR is %.4f \n" % (SR_frac, sig_frac))
     print("Sig frac in bkg_region is %.4f \n" %outside_frac)
+    print("Minor bkg frac in signal region %.4f in bkg_region is %.4f \n" % (minor_bkg_SR_frac, minor_bkg_outside_frac))
     #print("Overall signal fraction is %.4f \n" %(mass_frac * frac + (1-mass_frac)*outside_frac))
 
 
@@ -427,12 +438,15 @@ def get_jet_scores(model_dir, model_name, model_type, j1_images=None, j2_images=
     return j1_score.reshape(-1), j2_score.reshape(-1)
 
 def get_jj_scores(model_dir, model_name, model_type, jj_images = None, jj_dense_inputs = None, batch_size = 512, num_models = 1):
+    if('j_label' in model_name):
+        model_name = model_name.format(j_label = "j1")
+
+    jj_model = ModelEnsemble(location = model_dir + model_name, num_models = num_models)
+
     if(model_type == 3): #CNN both jets
-        jj_model = tf.keras.models.load_model(model_dir + model_name)
         scores = jj_model.predict(jj_images, batch_size = batch_size).reshape(-1)
 
     elif(model_type == 4): #Dense both jets
-        jj_model = tf.keras.models.load_model(model_dir + model_name)
         scores = jj_model.predict(jj_dense_inputs, batch_size = batch_size).reshape(-1)
     else:
         print("Wrong model type for jj scores!")
